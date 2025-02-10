@@ -6,7 +6,7 @@ import pandas as pd
 import pandera as pa
 from pandera import DateTime
 
-from opndb.validator.df_model import OPNDFModel
+from src.opndb.validator.df_model import OPNDFModel
 from pandera.typing import Series
 
 VALID_ZIP_CODE_REGEX: Final[re] = r"^\d{5}(-\d{4})?$"

@@ -1,14 +1,19 @@
 [project]
 name = "opndb"
 version = "0.1.0"
-description = "Add your description here"
+description = "Open Property Network Database - A tool for standardizing property ownership data workflows"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pandera>=0.22.1",
+    "click==8.1.8",
+    "rich==13.9.4",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.9.6",
 ]
+
+[project.scripts]
+opndb = "opndb.main:cli"
