@@ -4,9 +4,9 @@ Open Property Network DB
 Very WIP!!
 
 # Todo:
-- init uv environment - should be easy for data scientists to start project and get good environment
-- Create directory for data schema v0.1 (pydantic?)
-- Create example script that takes a
+- [x] init uv environment - should be easy for data scientists to start project and get good environment
+- [x] Create directory for data schema v0.1 (pydantic?)
+- [ ] ruff formatting / cicd / etc -- only need this when more than one contributor, maybe
 
 - Create gui / webapp repo
 

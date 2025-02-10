@@ -3,7 +3,15 @@
 *.pyo
 __pycache__/
 
+# build/packaging artifacts
+*.egg-info/
+dist/
+build/
+
 # Ignore environment files
 .env
 .venv/
+
+# ide stuff
+.idea/
 
