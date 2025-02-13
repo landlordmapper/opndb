@@ -5,7 +5,7 @@ description = "Open Property Network Database - A tool for standardizing propert
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pandera>=0.22.1",
+    "pandera[io]>=0.22.1",
     "click==8.1.8",
     "rich==13.9.4",
     "pandas==2.2.3",

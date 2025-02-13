@@ -6,15 +6,17 @@ import pandas as pd
 import pandera as pa
 from pandera import DateTime
 
-from src.opndb.validator.df_model import OPNDFModel
+from opndb.validator.df_model import OPNDFModel, OPNDFStrEnum
 from pandera.typing import Series
 
 VALID_ZIP_CODE_REGEX: Final[re] = r"^\d{5}(-\d{4})?$"
 
 
-class CodeViolationStatus(StrEnum):
+class CodeViolationStatus(OPNDFStrEnum):
     OPEN = "open"
     CLOSED = "closed"
+
+CodeViolationDType = CodeViolationStatus.to_categorical_dtype()
 
 
 class Building(OPNDFModel):
@@ -103,7 +105,7 @@ class PropertySale(OPNDFModel):
     buyer_name: Series[str] = pa.Field(description="Name of the buyer")
 
 
-class CodeViolations(OPNDFModel):
+class CodeViolation(OPNDFModel):
     date_opened: Series[DateTime] = pa.Field(
         description="Date the violation was opened"
     )
@@ -118,29 +120,6 @@ class CodeViolations(OPNDFModel):
         description="Whether the respondent was found liable for the violation",
         nullable=True,
     )
-    status: Series[CodeViolationStatus] = pa.Field(
+    status: Series[CodeViolationDType] = pa.Field(
         description="Status of the violation"
     )
-
-
-df = pd.DataFrame(
-    {
-        "pin": ["2001abc", "1232002", "qqqq3"],
-        "year_built": [1996, "1997", "2024"],
-    }
-)
-
-
-print(Building.validate(df))
-
-bad_df = pd.DataFrame(
-    {
-        "pin": ["2001abc", "1232002", "qqqq3"],
-        "year_built": ["3001", "1997", "2024"],
-    }
-)
-
-try:
-    print(Building.validate(bad_df))
-except pa.errors.SchemaError as e:
-    print(f"bad dataframe failed as expected: {e}")
