@@ -1,19 +1,19 @@
-import pandas as pd
+import os
+from pathlib import Path
+
+from opndb.constants.base import DATA_ROOT
+from opndb.workflows import WorkflowStage
+
 
 class UtilsBase(object):
 
     @classmethod
-    def print_cols(cls, df: pd.DataFrame) -> list[str]:
-        """Returns list of strings representing pandas dataframe columns."""
-        return [col for col in df.columns]
-
-    @classmethod
-    def rename_col(cls, df: pd.DataFrame, old_name: str, new_name: str) -> pd.DataFrame:
-        """Renames pandas dataframe column."""
-        df.rename(columns={old_name: new_name}, inplace=True)
-        return df
-
-    @classmethod
-    def generate_file_name(cls, name: str, stage: str, ext: str) -> str:
+    def generate_filename(cls, filename: str, stage: WorkflowStage, ext: str = "csv") -> str:
         """Returns file name with stage prefix."""
-        return f"{stage:02d}_{name}.{ext}"
+        return f"{stage:02d}_{filename}.{ext}"
+
+    @classmethod
+    def generate_path(cls, subdir: str, filename: str, stage: WorkflowStage, ext: str = "csv") -> Path:
+        """Returns file path for specified file name and subdirectory."""
+        filename: str = cls.generate_filename(filename, stage, ext)
+        return DATA_ROOT / subdir / filename
