@@ -1,11 +1,14 @@
 import string
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 import word2number as w2n
 
 import pandas as pd
 
-from opndb.string_cleaning_ops import CleanStringBase as clean
+from opndb.string_cleaning import CleanStringBase as clean_base
+from opndb.string_cleaning import CleanStringName as clean_name
+from opndb.string_cleaning import CleanStringAddress as clean_addr
+from opndb.string_cleaning import CleanStringAccuracy as clean_acc
 
 
 class DataFrameOpsBase(object):
@@ -30,56 +33,130 @@ class DataFrameOpsBase(object):
         df.to_csv(path, index=False)
         return path
 
-    # @classmethod
-    # def get_string_cols(cls, df: pd.DataFrame) -> list[str]:
-    #     """Returns names of all columns of a dataframe whose dtype is string."""
-    #     string_cols = []
-    #     for col in df.columns:
-    #         if col.dtype is str:
-    #             string_cols.append(col)
-    #     return string_cols
 
+class DataFrameCleaners(DataFrameOpsBase):
 
-class DataFrameOpsCols(DataFrameOpsBase):
+    """Base dataframe cleaning methods."""
 
     @classmethod
-    def trim_whitespace(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+    def apply_string_cleaner(
+            cls,
+            df: pd.DataFrame,
+            cleaner_func: Callable[[str], str],
+            cols: list[str] | None = None
+    ) -> pd.DataFrame:
+        """Generic method to apply any string cleaner function to specified columns"""
         cols = list(df.columns) if cols is None else cols
         for col in cols:
-            df[col] = df[col].apply(lambda x: clean.delete_symbols_spaces())
+            df[col] = df[col].apply(cleaner_func)
         return df
 
+
+class DataFrameBaseCleaners(DataFrameCleaners):
+
+    """
+    Methods that clean dataframe columns by applying string cleaning functions to specific columns. Default behavior
+    is to execute string cleaning on all columns. Each method corresponds to a single string cleaning method from the
+    CleanStringBase class.
+    """
+
+    @classmethod
+    def make_upper(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.make_upper, cols)
 
     @classmethod
     def remove_symbols_punctuation(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
-        cols = list(df.columns) if cols is None else cols
-        for col in cols:
-            df[col] = df[col].apply(lambda x: x.replace("&", "").replace(",", "").replace(".", ""))
-            df[col] = df[col].apply(
-                lambda x: x.translate(
-                    str.maketrans(string.punctuation.replace("/", "").replace("-", "")),
-                    " "*len(string.punctuation.replace('/','').replace('-',''))
-                )
-            )
-        return df
+        return cls.apply_string_cleaner(df, clean_base.remove_symbols_punctuation, cols)
 
+    @classmethod
+    def trim_whitespace(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.trim_whitespace, cols)
 
     @classmethod
     def remove_extra_spaces(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
-        cols = list(df.columns) if cols is None else cols
-        for col in cols:
-            df[col] = df[col].str.replace(r'\s+', ' ', regex=True)
-        return df
+        return cls.apply_string_cleaner(df, clean_base.remove_extra_spaces, cols)
 
+    @classmethod
+    def words_to_num(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.words_to_num, cols)
 
-    # @classmethod
-    # def switch_the(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
-    #     cols = list(df.columns) if cols is None else cols
-    #     for col in cols:
-    #         df[col] = df[col].str.replace(r'\s+', ' ', regex=True)
+    @classmethod
+    def deduplicate(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.deduplicate, cols)
 
     @classmethod
     def convert_ordinals(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
-        cols = list(df.columns) if cols is None else cols
-        for col in cols:
-            df[col] = pd.to_numeric
+        return cls.apply_string_cleaner(df, clean_base.convert_ordinals, cols)
+
+    @classmethod
+    def take_first(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.take_first, cols)
+
+    @classmethod
+    def combine_numbers(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.combine_numbers, cols)
+
+class DataFrameNameCleaners(DataFrameCleaners):
+
+    """
+    Methods that clean dataframe columns by applying string cleaning functions to specific columns. Default behavior
+    is to execute string cleaning on all columns. Each method corresponds to a single string cleaning method from the
+    CleanStringName class.
+    """
+
+    @classmethod
+    def switch_the(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_name.switch_the, cols)
+
+
+class DataFrameAddressCleaners(DataFrameCleaners):
+
+    """
+    Methods that clean dataframe columns by applying string cleaning functions to specific columns. Default behavior
+    is to execute string cleaning on all columns. Each method corresponds to a single string cleaning method from the
+    CleanStringAddress class.
+    """
+
+    @classmethod
+    def convert_nsew(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_addr.convert_nsew, cols)
+
+    @classmethod
+    def remove_secondary_designators(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_addr.remove_secondary_designators, cols)
+
+    @classmethod
+    def convert_street_suffixes(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_addr.convert_street_suffixes, cols)
+
+    @classmethod
+    def fix_zip(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_addr.fix_zip, cols)
+
+
+class DataFrameCleanersAccuracy(DataFrameCleaners):
+
+    """
+    Methods that clean dataframe columns by applying string cleaning functions to specific columns. Default behavior
+    is to execute string cleaning on all columns. Each method corresponds to a single string cleaning method from the
+    CleanStringAccuracy class.
+
+    NOTE - Applying these string cleaners could meaningfully impact accuracy during matching processes.
+    """
+
+    @classmethod
+    def drop_floors(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_acc.drop_floors, cols)
+
+    @classmethod
+    def drop_letters(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_acc.drop_letters, cols)
+
+    @classmethod
+    def convert_mixed(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_acc.convert_mixed, cols)
+
+    @classmethod
+    def remove_secondary_component(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_acc.remove_secondary_component, cols)
+
