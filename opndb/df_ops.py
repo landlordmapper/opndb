@@ -1,7 +1,11 @@
+import string
 from pathlib import Path
 from typing import Any
+import word2number as w2n
 
 import pandas as pd
+
+from opndb.string_cleaning_ops import CleanStringBase as clean
 
 
 class DataFrameOpsBase(object):
@@ -39,12 +43,43 @@ class DataFrameOpsBase(object):
 class DataFrameOpsCols(DataFrameOpsBase):
 
     @classmethod
-    def trim_whitespace(cls, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    def trim_whitespace(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        cols = list(df.columns) if cols is None else cols
         for col in cols:
-            df[col] = df[col].str.strip()
+            df[col] = df[col].apply(lambda x: clean.delete_symbols_spaces())
         return df
 
-    def remove_extra_spaces(self, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+
+    @classmethod
+    def remove_symbols_punctuation(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        cols = list(df.columns) if cols is None else cols
+        for col in cols:
+            df[col] = df[col].apply(lambda x: x.replace("&", "").replace(",", "").replace(".", ""))
+            df[col] = df[col].apply(
+                lambda x: x.translate(
+                    str.maketrans(string.punctuation.replace("/", "").replace("-", "")),
+                    " "*len(string.punctuation.replace('/','').replace('-',''))
+                )
+            )
+        return df
+
+
+    @classmethod
+    def remove_extra_spaces(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        cols = list(df.columns) if cols is None else cols
         for col in cols:
             df[col] = df[col].str.replace(r'\s+', ' ', regex=True)
         return df
+
+
+    # @classmethod
+    # def switch_the(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+    #     cols = list(df.columns) if cols is None else cols
+    #     for col in cols:
+    #         df[col] = df[col].str.replace(r'\s+', ' ', regex=True)
+
+    @classmethod
+    def convert_ordinals(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        cols = list(df.columns) if cols is None else cols
+        for col in cols:
+            df[col] = pd.to_numeric

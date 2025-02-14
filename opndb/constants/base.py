@@ -3,6 +3,40 @@ from pathlib import Path
 
 DATA_ROOT: Path = Path("")
 
+DIRECTIONS: dict[str, str] = {
+    "NORTH": "N",
+    "SOUTH": "S",
+    "EAST": "E",
+    "WEST": "W",
+    "NORTHEAST": "NE",
+    "SOUTHEAST": "SE",
+    "NORTHWEST": "NW",
+    "SOUTHWEST": "SW",
+}
+
+STREET_SUFFIXES: dict[str, str] = {
+    "STREET": "ST",
+    "AVENUE": "AVE",
+    "LANE": "LN",
+    "DRIVE": "DR",
+    "BOULEVARD": "BLVD",
+    "ROAD":"RD",
+    "COURT":"CT",
+    "PLACE": "PL",
+    "WAY": "WAY"
+}
+
+SECONDARY_KEYWORDS: set[str] = {
+    "#",
+    "UNIT",
+    "FLOOR",
+    "FL",
+    "SUITE",
+    "STE",
+    "APT",
+    "ROOM"
+}
+
 class FileNames:
     """Centralized file naming constants organized by directory structure."""
 

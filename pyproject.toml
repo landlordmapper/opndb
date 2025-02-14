@@ -9,6 +9,7 @@ dependencies = [
     "click==8.1.8",
     "rich==13.9.4",
     "pandas==2.2.3",
+    "word2number==1.1"
 ]
 
 [dependency-groups]
