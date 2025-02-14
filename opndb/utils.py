@@ -1,4 +1,4 @@
-import os
+from datetime import datetime
 from pathlib import Path
 
 from opndb.constants.base import DATA_ROOT
@@ -17,3 +17,7 @@ class UtilsBase(object):
         """Returns file path for specified file name and subdirectory."""
         filename: str = cls.generate_filename(filename, stage, ext)
         return DATA_ROOT / subdir / filename
+
+    @classmethod
+    def get_timestamp(cls):
+        return datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
