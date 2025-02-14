@@ -2,6 +2,7 @@ from typing import Any
 
 
 class Raw:
+    """Column name constants for datasets stored in 'raw' data directory."""
     class TaxpayerRecords:
 
         PIN: str = "pin"
@@ -69,3 +70,16 @@ class Raw:
         CATEGORY: str = "category"
         DESCRIPTION: str = "description"
         IS_RENTAL: str = "is_rental"
+
+
+class Processed:
+    """Column name constants for datasets stored in 'processed' data directory."""
+    class ValidatedAddrs:
+        pass
+
+    class UnvalidatedAddrs:
+        FULL_ADDRESS: str = "full_address"
+        STREET: str = "street"
+        CITY: str = "city"
+        STATE: str = "state"
+        ZIP: str = "zip"

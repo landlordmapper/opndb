@@ -1,6 +1,6 @@
 import string
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Type
 import word2number as w2n
 
 import pandas as pd
@@ -25,13 +25,13 @@ class DataFrameOpsBase(object):
         return df
 
     @classmethod
-    def load_df_csv(cls, filepath: Path, dtype: str | dict[str, Any]) -> pd.DataFrame:
+    def load_df_csv(cls, filepath: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame:
         return pd.read_csv(str(filepath), dtype=dtype)
 
     @classmethod
-    def save_df_csv(cls, df, path):
-        df.to_csv(path, index=False)
-        return path
+    def save_df_csv(cls, df: pd.DataFrame, path: Path) -> str:
+        df.to_csv(str(path), index=False)
+        return str(path)
 
 
 class DataFrameCleaners(DataFrameOpsBase):
