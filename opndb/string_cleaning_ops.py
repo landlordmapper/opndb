@@ -12,19 +12,6 @@ class CleanStringBase:
     """Functions that accept a single string as an argument and return the string cleaned."""
 
     @classmethod
-    def trim_whitespace(cls, text: str) -> str:
-        """
-        Removes leading and trailing whitespace from text.
-
-        Examples:
-            '  HELLO WORLD  ' -> 'HELLO WORLD'
-            'ABC   ' -> 'ABC'
-            '   XYZ' -> 'XYZ'
-            '  SMITH LLC  ' -> 'SMITH LLC'
-        """
-        return text.strip()
-
-    @classmethod
     def make_upper(cls, text: str) -> str:
         """
         Converts text to uppercase.
@@ -48,7 +35,7 @@ class CleanStringBase:
 
         Examples:
             'Smith & Sons, LLC.' -> 'SMITH AND SONS LLC'
-            'A.B.C. Corp.' -> 'A B C CORP'
+            'A.B.C. Corp.' -> 'A B C  CORP '
             'Fast-Food/Cafe' -> 'Fast-Food/Cafe'
             'Main St., #401' -> 'Main St  401'
         """
@@ -56,9 +43,24 @@ class CleanStringBase:
         text = text.replace(",", " ")
         text = text.replace(".", " ")
         return text.translate(
-            str.maketrans(string.punctuation.replace("/", "").replace("-", "")),
-            " "*len(string.punctuation.replace("/", "").replace("-", ""))
+            str.maketrans(
+                string.punctuation.replace("/", "").replace("-", ""),
+                " "*len(string.punctuation.replace("/", "").replace("-", ""))
+            )
         )
+
+    @classmethod
+    def trim_whitespace(cls, text: str) -> str:
+        """
+        Removes leading and trailing whitespace from text.
+
+        Examples:
+            '  HELLO WORLD  ' -> 'HELLO WORLD'
+            'ABC   ' -> 'ABC'
+            '   XYZ' -> 'XYZ'
+            '  SMITH LLC  ' -> 'SMITH LLC'
+        """
+        return text.strip()
 
     @classmethod
     def remove_extra_spaces(cls, text: str) -> str:
@@ -72,36 +74,6 @@ class CleanStringBase:
             'TOO   MANY    SPACES' -> 'TOO MANY SPACES'
         """
         return text.replace(r"\s+", " ", regex=True)
-
-    @classmethod
-    def switch_the(cls, text: str) -> str:
-        """
-        Moves 'THE' from end of string to beginning if it appears at the end.
-        Common in property/business names where 'THE' may be misplaced.
-
-        Examples:
-            'BUILDING THE' -> 'THE BUILDING'
-            'PROPERTY GROUP THE' -> 'THE PROPERTY GROUP'
-            'THE CORPORATION' -> 'THE CORPORATION'  (unchanged)
-            'SMITH LLC THE' -> 'THE SMITH LLC'
-        """
-        if text[-4:] == " THE":
-            return "THE " + text[:-4]
-        else:
-            return text
-
-    @classmethod
-    def deduplicate(cls, text: str) -> str:
-        """
-        Removes all duplicate words in text, reducing to single instances.
-
-        Examples:
-            'SMITH SMITH LLC' -> 'SMITH LLC'
-            'THE THE THE CORPORATION' -> 'THE CORPORATION'
-            'FIRST FIRST SECOND SECOND TRUST' -> 'FIRST SECOND TRUST'
-        """
-        text_list = text.split()
-        return ' '.join(dict.fromkeys(text_list))
 
     @classmethod
     def words_to_num(cls, text: str) -> str | int:
@@ -119,6 +91,19 @@ class CleanStringBase:
                 return w2n.word_to_num(text)
             except:
                 return text
+
+    @classmethod
+    def deduplicate(cls, text: str) -> str:
+        """
+        Removes all duplicate words in text, reducing to single instances.
+
+        Examples:
+            'SMITH SMITH LLC' -> 'SMITH LLC'
+            'THE THE THE CORPORATION' -> 'THE CORPORATION'
+            'FIRST FIRST SECOND SECOND TRUST' -> 'FIRST SECOND TRUST'
+        """
+        text_list = text.split()
+        return ' '.join(dict.fromkeys(text_list))
 
     @classmethod
     def convert_ordinals(cls, text: str) -> str:
@@ -170,7 +155,7 @@ class CleanStringBase:
         whole_list = []
         start = False
         end = False
-        text_list.append('JUNK')  # Sentinel value to process final group
+        text_list.append("JUNK")  # Sentinel value to process final group
         numbers = []
 
         for p in text_list:
@@ -189,18 +174,18 @@ class CleanStringBase:
                 if len(numbers) == 1:
                     whole_list.append(numbers[0])
                 elif len(numbers) == 2:
-                    if str(numbers[0])[-1:] == '0' and str(numbers[1])[-1:] != '0':
+                    if str(numbers[0])[-1:] == "0" and str(numbers[1])[-1:] != "0":
                         complete = str(str(numbers[0]) + str(numbers[1]))
                     else:
                         complete = str(numbers[0]) + str(numbers[1])
                     whole_list.append(complete)
                 else:
-                    if str(numbers[0])[-1:] == '0':
+                    if str(numbers[0])[-1:] == "0":
                         complete = str(numbers[0][:-1] + str(numbers[1]))
                     else:
                         complete = str(numbers[0]) + str(numbers[1])
                     for i in numbers[2:]:
-                        if complete[-1:] == '0':
+                        if complete[-1:] == "0":
                             complete = str(str(complete) + str(i))
                         else:
                             complete = complete + str(i)
@@ -212,9 +197,29 @@ class CleanStringBase:
 
         return " ".join(whole_list[:-1])  # Remove the 'JUNK' sentinel
 
-    # ------------------------
-    # ----ADDRESS CLEANERS----
-    # ------------------------
+
+class CleanStringName(CleanStringBase):
+
+    @classmethod
+    def switch_the(cls, text: str) -> str:
+        """
+        Moves 'THE' from end of string to beginning if it appears at the end.
+        Common in property/business names where 'THE' may be misplaced.
+
+        Examples:
+            'BUILDING THE' -> 'THE BUILDING'
+            'PROPERTY GROUP THE' -> 'THE PROPERTY GROUP'
+            'THE CORPORATION' -> 'THE CORPORATION'  (unchanged)
+            'SMITH LLC THE' -> 'THE SMITH LLC'
+        """
+        if text[-4:] == " THE":
+            return "THE " + text[:-4]
+        else:
+            return text
+
+
+class CleanStringAddress(CleanStringBase):
+
     @classmethod
     def convert_nsew(cls, text: str) -> str:
         """
@@ -262,12 +267,11 @@ class CleanStringBase:
             '789 PINE LN UNIT 2C' -> '789 PINE LN 2C'
             '321 MAPLE DR SUITE 5' -> '321 MAPLE DR 5'
         """
-        keywords = set(list(STREET_SUFFIXES.keys()) + list(STREET_SUFFIXES.values()))
         text_split = text.split()
         try:
-            if text_split[0].isdigit() and text_split[1] in keywords:
+            if text_split[0].isdigit() and text_split[1] in SECONDARY_KEYWORDS:
                 return text
-            for keyword in keywords:
+            for keyword in SECONDARY_KEYWORDS:
                 if keyword in text_split:
                     index = text_split.index(keyword)
                     text_split.pop(index)  # Remove the keyword itself
@@ -289,7 +293,7 @@ class CleanStringBase:
         """
         words = text.split()
         for i, word in enumerate(words):
-            if word in STREET_SUFFIXES:
+            if word in STREET_SUFFIXES.keys():
                 words[i] = STREET_SUFFIXES[word]
         return " ".join(words)
 
@@ -305,21 +309,23 @@ class CleanStringBase:
             '9876' -> '09876'
             '12A34' -> ''
         """
-        if len(text) == 5:
-            return text
-        elif len(text) == 9:
-            return f"{text[:5]}-{text[5:]}"
-        elif len(text) > 5:
-            return text[:5]
-        elif isdigit(text):
-            return str(int("".join(filter(str.isdigit, text)))).zfill(5)
+        if text.isdigit():
+            if len(text) == 5:
+                return text
+            elif len(text) == 9:
+                return f"{text[:5]}-{text[5:]}"
+            elif len(text) > 5:
+                return text[:5]
+            else:
+                return str(int("".join(filter(str.isdigit, text)))).zfill(5)
         else:
             return ""
 
 
-    # -----------------------------
-    # ----ACCURACY IMPLICATIONS----
-    # -----------------------------
+class CleanStringAccuracy(CleanStringBase):
+
+    """String cleaning functions that could meaningfully impact accuracy during matching processes."""
+
     @classmethod
     def drop_floors(cls, text: str) -> str:
         """
@@ -350,7 +356,6 @@ class CleanStringBase:
             '456B OAK AVE' -> '456 OAK AVE'
             '789C BUILDING' -> '789 BUILDING'
             'APT 101D' -> 'APT 101'
-            'NO NUMBERS HERE' -> 'NO NUMBERS HERE' (unchanged)
         """
         try:
             text = re.sub(r"\d+[a-zA-Z]", re.findall(r"\d+[a-zA-Z]", text)[0][:-1], text)

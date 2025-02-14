@@ -16,10 +16,15 @@ DIRECTIONS: dict[str, str] = {
 
 STREET_SUFFIXES: dict[str, str] = {
     "STREET": "ST",
+    "STREE": "ST",
     "AVENUE": "AVE",
+    "AVENU": "AVE",
+    "AV":"AVE",
     "LANE": "LN",
     "DRIVE": "DR",
     "BOULEVARD": "BLVD",
+    "BULEVARD": "BLVD",
+    "BOULEVAR": "BLVD",
     "ROAD":"RD",
     "COURT":"CT",
     "PLACE": "PL",
