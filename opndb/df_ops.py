@@ -9,6 +9,7 @@ from opndb.string_cleaning import CleanStringBase as clean_base
 from opndb.string_cleaning import CleanStringName as clean_name
 from opndb.string_cleaning import CleanStringAddress as clean_addr
 from opndb.string_cleaning import CleanStringAccuracy as clean_acc
+from opndb.types.base import FileExt
 
 
 class DataFrameOpsBase(object):
@@ -25,14 +26,49 @@ class DataFrameOpsBase(object):
         return df
 
     @classmethod
-    def load_df_csv(cls, filepath: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame:
-        return pd.read_csv(str(filepath), dtype=dtype)
+    def load_df(cls, path: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame:
+        """
+        Loads dataframes based on file format. Reads extension and loads dataframe using corresponding pd.read method.
+
+        :param filepath: Complete path to data file to be loaded into dataframe (UtilsBase.generate_file_path())
+        :param dtype: Specify data types for columns or entire dataset
+        :return: Dataframe containing data from specified file
+        """
+        format = path.suffix[1:].lower()
+        if format == "csv":
+            return pd.read_csv(str(path), dtype=dtype)
+        elif format == "parquet":
+            return pd.read_parquet(str(path), dtype=dtype)
+        elif format == "xlsx" or format == "xls":
+            return pd.read_excel(str(path), dtype=dtype)
+        elif format == "json":
+            return pd.read_json(str(path), dtype=dtype)
+        else:
+            raise ValueError(f"Unsupported file format: {format}")
 
     @classmethod
-    def save_df_csv(cls, df: pd.DataFrame, path: Path) -> str:
-        df.to_csv(str(path), index=False)
-        return str(path)
+    def save_df(cls, df: pd.DataFrame, path: Path) -> str:
+        """
+        Saves dataframe to file based on file format. Reads extension and saves dataframe using corresponding pd.save
+        method.
 
+        :param df: Dataframe to be saved
+        :param path: Path to save dataframe, including file extension (UtilsBase.generate_file_path())
+        :return: Path to saved dataframe
+        """
+        format = path.suffix[1:].lower()
+        if format == "csv":
+            df.to_csv(str(path), index=False)
+        elif format == "parquet":
+            df.to_parquet(str(path), index=False)
+        elif format == "xlsx":
+            df.to_excel(str(path), index=False)
+        elif format == "json":
+            df.to_json(str(path), orient='records', indent=4)
+        else:
+            raise ValueError(f"Unsupported file format: {format}")
+
+        return str(path)
 
 class DataFrameCleaners(DataFrameOpsBase):
 
