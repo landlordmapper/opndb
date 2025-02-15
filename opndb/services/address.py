@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import requests as req
 
-from opndb.constants.base import DATA_ROOT, FileNames, GEOCODIO_URL
+from opndb.constants.base import DATA_ROOT, FileNames, GEOCODIO_URL, DataDirs, Processed, Geocodio
 from opndb.services.dataframe import DataFrameOpsBase as df_ops, DataFrameBaseCleaners, DataFrameOpsBase
 from opndb.types.base import RawAddress, GeocodioResult, GeocodioResponse, GeocodioResultProcessed, GeocodioResultFlat
 from opndb.utils import UtilsBase as utils
@@ -15,18 +15,14 @@ from opndb.utils import UtilsBase as utils
 
 class AddressBase:
 
-    dirs = FileNames.DataDirs
-    proc = FileNames.Processed
-    gcd = FileNames.Geocodio
+    validated_addrs_path: Path = DATA_ROOT / DataDirs.PROCESSED / Processed.VALIDATED_ADDRS
+    unvalidated_addrs_path: Path = DATA_ROOT / DataDirs.PROCESSED / Processed.UNVALIDATED_ADDRS
 
-    validated_addrs_path: Path = DATA_ROOT / dirs.PROCESSED / proc.VALIDATED_ADDRS
-    unvalidated_addrs_path: Path = DATA_ROOT / dirs.PROCESSED / proc.UNVALIDATED_ADDRS
+    gcd_validated_path: Path = DATA_ROOT / DataDirs.GEOCODIO / Geocodio.GCD_VALIDATED
+    gcd_unvalidated_path: Path = DATA_ROOT / DataDirs.GEOCODIO / Geocodio.GCD_UNVALIDATED
+    gcd_failed_path: Path = DATA_ROOT / DataDirs.GEOCODIO / Geocodio.GCD_FAILED
 
-    gcd_validated_path: Path = DATA_ROOT / dirs.GEOCODIO / gcd.GCD_VALIDATED
-    gcd_unvalidated_path: Path = DATA_ROOT / dirs.GEOCODIO / gcd.GCD_UNVALIDATED
-    gcd_failed_path: Path = DATA_ROOT / dirs.GEOCODIO / gcd.GCD_FAILED
-
-    gcd_partials_dir_path: Path = DATA_ROOT / dirs.GCD_PARTIALS
+    gcd_partials_dir_path: Path = DATA_ROOT / DataDirs.GCD_PARTIALS
 
 
     def __init__(self):
@@ -57,7 +53,7 @@ class AddressBase:
 
     @classmethod
     def save_validated_addrs_initial(cls, df: pd.DataFrame) -> str:
-        return df_ops.save_df_csv(df, cls.validated_addrs_path)
+        return df_ops.save_df(df, cls.validated_addrs_path)
 
     @classmethod
     def call_geocodio(cls, api_key: str, address_search_string: str) -> list[GeocodioResult] | None:
@@ -76,7 +72,7 @@ class AddressBase:
     def save_geocodio_partial(cls, results: list[dict]):
         timestamp = utils.get_timestamp()
         df_partial = pd.DataFrame(results)
-        DataFrameOpsBase.save_df_csv(df_partial, cls.gcd_partials_dir_path / f"partial_geocodio_({timestamp}).csv")
+        DataFrameOpsBase.save_df(df_partial, cls.gcd_partials_dir_path / f"partial_geocodio_({timestamp}).csv")
 
     @classmethod
     def check_matching_addrs(cls, df: pd.DataFrame) -> bool:
@@ -376,8 +372,8 @@ class AddressValidatorBase(AddressBase):
 
     def __init__(self):
         super().__init__()
-        self.df_validated: pd.DataFrame = df_ops.load_df_csv(self.validated_addrs_path, str)
-        self.df_unvalidated: pd.DataFrame = df_ops.load_df_csv(self.unvalidated_addrs_path, str)
+        self.df_validated: pd.DataFrame = df_ops.load_df(self.validated_addrs_path, str)
+        self.df_unvalidated: pd.DataFrame = df_ops.load_df(self.unvalidated_addrs_path, str)
 
     def add_to_df_validated(self):
         # pass row of validated address data - pandera object?
@@ -389,8 +385,8 @@ class AddressValidatorBase(AddressBase):
 
 
     def save(self) -> dict[str, str]:
-        validated_path = df_ops.save_df_csv(self.df_validated, self.validated_addrs_path)
-        unvalidated_path = df_ops.save_df_csv(self.df_unvalidated, self.unvalidated_addrs_path)
+        validated_path = df_ops.save_df(self.df_validated, self.validated_addrs_path)
+        unvalidated_path = df_ops.save_df(self.df_unvalidated, self.unvalidated_addrs_path)
         return {
             "validated_path": validated_path,
             "unvalidated_path": unvalidated_path,
