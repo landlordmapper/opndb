@@ -16,10 +16,7 @@ from opndb.constants.base import DATA_ROOT
 
 console = Console()
 
-class TerminalPrinterBase:
-    pass
-
-class TerminalPrinter1(TerminalPrinterBase):
+class TerminalBase:
     """Messages & statements printed during stage 1 of the opndb workflow"""
     @classmethod
     def print_welcome(cls):
@@ -66,3 +63,62 @@ class TerminalPrinter1(TerminalPrinterBase):
         )
         console.print(panel)
         console.print()
+
+    @classmethod
+    def display_files_table(cls, files: list[Path]):
+        """Display files in a formatted table"""
+        table = Table(title="Available Files")
+
+        table.add_column("#", justify="right", style="cyan")
+        table.add_column("Filename", style="green")
+        table.add_column("Size", justify="right", style="blue")
+
+        for idx, file in enumerate(files, 1):
+            # Get file size in KB or MB
+            size_bytes = os.path.getsize(file)
+            if size_bytes > 1024 * 1024 * 1024:  # Greater than 1 GB
+                size_str = f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+            elif size_bytes > 1024 * 1024:  # Greater than 1 MB
+                size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+            else:  # Less than 1 MB
+                size_str = f"{size_bytes / 1024:.1f} KB"
+
+            table.add_row(str(idx), file.name, size_str)
+
+        console.print("\n" * 2)
+        console.print(table)
+
+class TerminalInteract(TerminalBase):
+
+    @classmethod
+    def get_file_selection(cls, files: list[Path], data_dir, data_type: str, data_type_display: str, required: bool = True) -> Path | None:
+        """Prompt user to select a file for a specific data type"""
+        while True:
+            console.print(f"\n[blue]Please select the file containing your {data_type_display}[/blue]")
+            if not required:
+                console.print("[yellow]Enter 0 to skip if you don't have this data[/yellow]")
+
+            try:
+                file_idx = IntPrompt.ask(
+                    "Enter the file number"
+                )
+
+                if 1 <= file_idx <= len(files):
+                    selected_file = files[file_idx - 1]
+
+                    # Copy file to raw data directory with standardized name
+                    new_filename = f"{data_type}.csv"
+                    destination = DATA_ROOT / data_dir / new_filename
+
+                    shutil.copy2(selected_file, destination)
+                    console.print(f"[green]✓ Copied {selected_file.name} to {destination}[/green]")
+
+                    return selected_file
+                else:
+                    if file_idx == 0 and not required:
+                        return None
+                    else:
+                        console.print("[red]Invalid file number. Please try again.[/red]")
+            except ValueError:
+                console.print("[red]Please enter a valid number.[/red]")
+

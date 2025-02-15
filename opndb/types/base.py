@@ -1,5 +1,12 @@
 from typing import TypedDict
 
+from opndb.workflows.base import WorkflowStage
+
+
+class WorkflowConfigs(TypedDict):
+    stage: WorkflowStage
+    wkfl_type: str
+
 
 class RawAddress(TypedDict, total=False):
     """

@@ -1,11 +1,12 @@
 from enum import IntEnum
-from typing import ClassVar
-
+from typing import ClassVar, Optional
+from abc import ABC, abstractmethod
 
 import pandas as pd
 
 from opndb.constants.base import FileNames, DATA_ROOT
 from opndb.df_ops import DataFrameOpsBase as df_ops
+from opndb.types.base import WorkflowConfigs
 from opndb.utils import UtilsBase as utils
 
 
@@ -28,20 +29,69 @@ class WorkflowBase:
     """
     Base workflow class the controls execution of data processing tasks required for each stage of the opndb workflow.
     Each child class that inherits from WorkflowBase corresponds to the broader workflow stage.
+
     """
-    stage: ClassVar[WorkflowStage]
     dirs = FileNames.DataDirs
+
+    def __init__(self, configs: WorkflowConfigs):
+        self.stage:WorkflowStage = configs["stage"]
+        self.wkfl_type:str = ""
+
+    @classmethod
+    def create_workflow(cls, workflow_type: str, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
+        if workflow_type == "preliminary":
+            return WkflPreliminary(configs)
+        elif workflow_type == "data_load":
+            return WkflDataLoad()
+        elif workflow_type == "data_clean":
+            return WkflDataClean()
+        elif workflow_type == "address_validation":
+            return WkflAddressValidation()
+        elif workflow_type == "name_analysis":
+            return WkflNameAnalysis()
+        elif workflow_type == "address_analysis":
+            return WkflAddressAnalysis()
+        elif workflow_type == "rental_subset":
+            return WkflRentalSubset()
+        elif workflow_type == "clean_merge":
+            return WkflCleanMerge()
+        elif workflow_type == "string_match":
+            return WkflStringMatch()
+        elif workflow_type == "network_graph":
+            return WkflNetworkGraph()
+        elif workflow_type == "final_output":
+            return WkflFinalOutput()
+        return None
+
+    @classmethod
+    def load_configs(cls) -> WorkflowConfigs:
+        # return utils.load_configs(DATA_ROOT / configs.json)
+        pass
+
+    @abstractmethod
+    def execute(self) -> None:
+        """Each workflow must implement an execute method"""
+        pass
 
 class WkflPreliminary(WorkflowBase):
     """Preliminary workflow stage. Merge class codes to taxpayer records, change colnames, etc."""
-    stage = WorkflowStage.PRE
+    def __init__(self, configs: WorkflowConfigs):
+        super().__init__(configs)
+        self.wkfl_type: str = "preliminary"
 
-class WkflDataLoading(WorkflowBase):
+    def execute(self):
+        # set summary stats
+        # update configuration file
+        # set stage
+        pass
+
+class WkflDataLoad(WorkflowBase):
     """Initial data load"""
     stage = WorkflowStage.DATA_LOAD
     raw = FileNames.Raw
-    def __init__(self):
+    def __init__(self, configs: WorkflowConfigs):
         super().__init__()
+        self.wkfl_type: str = "data_load"
 
     def execute(self):
         # raw datasets converted to pandas dataframes
@@ -61,18 +111,21 @@ class WkflDataLoading(WorkflowBase):
             # df_ops.save_df_csv(df, utils.generate_path(self.dirs.RAW, dataset_name, self.stage))
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
 
 
 
-class WkflDataCleaning(WorkflowBase):
+class WkflDataClean(WorkflowBase):
     """Initial data cleaning"""
     prev_stage = WorkflowStage.DATA_LOAD
     stage = WorkflowStage.DATA_CLEANING
     raw = FileNames.Raw
     def __init__(self):
         super().__init__()
+        self.wkfl_type: str = "data_clean"
         self.df_taxpayer_records: pd.DataFrame = df_ops.load_df_csv(
             utils.generate_path(
                 self.dirs.RAW,
@@ -114,6 +167,8 @@ class WkflDataCleaning(WorkflowBase):
         # cleaned files are saved to the "processed" directory
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
 
@@ -130,10 +185,13 @@ class WkflAddressValidation(WorkflowBase):
     stage = WorkflowStage.ADDRESS_VALIDATION
     def __init__(self):
         super().__init__()
+        self.wkfl_type: str = "data_load"
 
     def execute(self):
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
 
@@ -143,10 +201,13 @@ class WkflNameAnalysis(WorkflowBase):
     stage = WorkflowStage.NAME_ANALYSIS
     def __init__(self):
         super().__init__()
+        self.wkfl_type: str = "data_load"
 
     def execute(self):
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
 class WkflAddressAnalysis(WorkflowBase):
@@ -154,10 +215,13 @@ class WkflAddressAnalysis(WorkflowBase):
     stage = WorkflowStage.ADDRESS_ANALYSIS
     def __init__(self):
         super().__init__()
+        self.wkfl_type: str = "data_load"
 
     def execute(self):
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
 class WkflRentalSubset(WorkflowBase):
@@ -165,17 +229,21 @@ class WkflRentalSubset(WorkflowBase):
     stage = WorkflowStage.RENTAL_SUBSET
     def __init__(self):
         super().__init__()
+        self.wkfl_type: str = "data_load"
 
     def execute(self):
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
-class WkflCleaningMerging(WorkflowBase):
+class WkflCleanMerge(WorkflowBase):
     """Additional data cleaning & merging"""
     stage = WorkflowStage.CLEAN_MERGE
     def __init__(self):
         super().__init__()
+        self.wkfl_type: str = "data_load"
 
     def execute(self):
         # fixing taxpayer names based on manual research
@@ -185,32 +253,41 @@ class WkflCleaningMerging(WorkflowBase):
         # outputs & saves merged dataset to "processed" directory
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
 
-class WkflStringMatching(WorkflowBase):
+class WkflStringMatch(WorkflowBase):
     """String matching taxpayer records"""
     stage = WorkflowStage.STRING_MATCH
     def __init__(self):
         super().__init__()
+        self.wkfl_type: str = "data_load"
 
     def execute(self):
         # prompts user to create parameter matrix for string matching
         # outputs & saves string matched dataset to "processed" directory
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
 class WkflNetworkGraph(WorkflowBase):
     """Network graph generation"""
-
-    stage = WorkflowStage.NETWORK_GRAPH
+    def __init__(self):
+        super().__init__()
+        self.stage: ClassVar[WorkflowStage] = WorkflowStage.NETWORK_GRAPH
+        self.wkfl_type: str = "data_load"
 
     def execute(self):
         # prompts user to create parameter matrix for network graph generation
         # outputs & saves networked properties datasets to "processed" directory
         # set summary stats
         # update configuration file
+        # set stage
+
         pass
 
 
@@ -224,4 +301,6 @@ class WkflFinalOutput(WorkflowBase):
         # saves final outputs to "final_outputs" directory
         # set summary stats
         # update configuration file
+        # set stage
+
         pass

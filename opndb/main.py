@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import List
+from abc import ABC, abstractmethod
 
 import click
 from rich.console import Console
@@ -12,6 +13,8 @@ import shutil
 import pandas as pd
 
 from opndb.constants.base import DATA_ROOT
+from opndb.terminal_printers import TerminalBase as t, TerminalInteract as ti
+from opndb.workflows.base import WorkflowBase as w, WorkflowBase
 
 console = Console()
 REQUIRED_DATA_TYPES = [
@@ -31,85 +34,21 @@ def cli():
 
 
 
-
-
-def list_directory_files(directory: Path) -> list[Path]:
-    """List all files in the given directory"""
-    try:
-        files = [f for f in directory.iterdir() if f.is_file()]
-        return sorted(files)
-    except Exception as e:
-        console.print(f"[red]Error reading directory: {e}[/red]")
-        return []
-
-
-def display_files_table(files: list[Path]):
-    """Display files in a formatted table"""
-    table = Table(title="Available Files")
-
-    table.add_column("#", justify="right", style="cyan")
-    table.add_column("Filename", style="green")
-    table.add_column("Size", justify="right", style="blue")
-
-    for idx, file in enumerate(files, 1):
-        # Get file size in KB or MB
-        size_bytes = os.path.getsize(file)
-        if size_bytes > 1024 * 1024 * 1024:  # Greater than 1 GB
-            size_str = f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
-        elif size_bytes > 1024 * 1024:  # Greater than 1 MB
-            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
-        else:  # Less than 1 MB
-            size_str = f"{size_bytes / 1024:.1f} KB"
-
-        table.add_row(str(idx), file.name, size_str)
-
-    console.print("\n" * 2)
-    console.print(table)
-
-
-def get_file_selection(files: list[Path], data_type: str, data_type_display: str, required: bool = True) -> Path | None:
-    """Prompt user to select a file for a specific data type"""
+# This makes "start" a subcommand of cli (ex: running "opndb start" in command line executes start() command)
+@cli.command()
+def start():
     while True:
-        console.print(f"\n[blue]Please select the file containing your {data_type_display}[/blue]")
-        if not required:
-            console.print("[yellow]Enter 0 to skip if you don't have this data[/yellow]")
-
-        try:
-            file_idx = IntPrompt.ask(
-                "Enter the file number"
-            )
-
-            if 1 <= file_idx <= len(files):
-                selected_file = files[file_idx - 1]
-
-                # Copy file to raw data directory with standardized name
-                new_filename = f"{data_type}.csv"
-                destination = RAW_DATA_DIR / new_filename
-
-                shutil.copy2(selected_file, destination)
-                console.print(f"[green]✓ Copied {selected_file.name} to {destination}[/green]")
-
-                return selected_file
-            else:
-                if file_idx == 0 and not required:
-                    return None
-                else:
-                    console.print("[red]Invalid file number. Please try again.[/red]")
-        except ValueError:
-            console.print("[red]Please enter a valid number.[/red]")
-
-
-
-
-
+        configs = w.load_configs()
+        wkfl = w.create_workflow(configs["wkfl_type"], configs)
+        wkfl.execute()
 
 
 # This makes "start" a subcommand of cli (ex: running "opndb start" in command line executes start() command)
 @cli.command()
-def start():
+def start_old():
     """Start the OPNDB workflow"""
-    print_welcome()
-    print_raw_data_message()
+    t.print_welcome()
+    t.print_raw_data_message()
 
     # Get directory path from user
     while True:
@@ -127,7 +66,7 @@ def start():
             console.print("[red]Path is not a directory. Please try again.[/red]")
             continue
 
-        files = list_directory_files(directory)
+        files = ti.list_directory_files(directory)
 
         if not files:
             console.print("[yellow]No files found in directory. Please try again.[/yellow]")
@@ -136,13 +75,13 @@ def start():
         break
 
     # Display files in directory
-    display_files_table(files)
+    t.display_files_table(files)
 
     # Process each required data type
     selected_files = {}
-    for data_type, display_name in REQUIRED_DATA_TYPES:
-        selected_file = get_file_selection(files, data_type, display_name)
-        selected_files[data_type] = selected_file
+    # for data_type, display_name in REQUIRED_DATA_TYPES:
+        # selected_file = ti.get_file_selection(files, configs.data_dir, data_type, display_name)
+        # selected_files[data_type] = selected_file
 
     while True:
         console.print("\n")
@@ -153,8 +92,8 @@ def start():
         if class_codes_together == "Y":
             break
         elif class_codes_together == "n":
-            selected_file = get_file_selection(files, "bldg_class_codes", "Class Codes Data (properties)")
-            selected_files["bldg_class_codes"] = selected_file
+            # selected_file = get_file_selection(files, "bldg_class_codes", "Class Codes Data (properties)")
+            # selected_files["bldg_class_codes"] = selected_file
             break
         else:
             console.print("[red]Invalid input. Please try again.[/red]")
