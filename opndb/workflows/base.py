@@ -43,23 +43,27 @@ class WkflDataLoading(WorkflowBase):
     def __init__(self):
         super().__init__()
 
-    # raw datasets converted to pandas dataframes
-    # error is thrown if required columns are not present
-    # if all required columns are present, validators are run on the dataframes
-    # if there are validation errors, detailed error reports are shown
-    # if there are no validation errors, files are saved into the "raw" directory
-
-    # workflow should be for each individual dataset only and run validator and save only for single dataframe
-
-    def validate_load(self, raw_data, dataset_name):
-        df: pd.DataFrame = pd.DataFrame(raw_data)
-        # df, message = validate(df)
-        # if message:
+    def execute(self):
+        # raw datasets converted to pandas dataframes
+        # error is thrown if required columns are not present
+        # if all required columns are present, validators are run on the dataframes
+        # if there are validation errors, detailed error reports are shown
+        # if there are no validation errors, files are saved into the "raw" directory
+        # workflow should be for each individual dataset only and run validator and save only for single dataframe
+        # def validate_load(self, raw_data, dataset_name):
+        #     df: pd.DataFrame = pd.DataFrame(raw_data)
+            # df, message = validate(df)
+            # if message:
             # print failure message
             # store validation error logs to separate file, save & timestamp
-        # else:
+            # else:
             # print success message
             # df_ops.save_df_csv(df, utils.generate_path(self.dirs.RAW, dataset_name, self.stage))
+        # set summary stats
+        # update configuration file
+        pass
+
+
 
 
 class WkflDataCleaning(WorkflowBase):
@@ -102,22 +106,14 @@ class WkflDataCleaning(WorkflowBase):
             "str"
         )
 
-    # basic string cleaning operations performed on name and address columns for taxpayers and corps/llcs
-    # trimming whitespace
-    # removing symbols
-    # subset corps for active only (?), drop dup corps, etc
-    # cleaned files are saved to the "processed" directory
-
-    def clean_taxpayer_records(self):
-        pass
-
-    def clean_corps(self):
-        pass
-
-    def clean_llcs(self):
-        pass
-
-    def clean_class_code_descriptions(self):
+    def execute(self):
+        # basic string cleaning operations performed on name and address columns for taxpayers and corps/llcs
+        # trimming whitespace
+        # removing symbols
+        # subset corps for active only (?), drop dup corps, etc
+        # cleaned files are saved to the "processed" directory
+        # set summary stats
+        # update configuration file
         pass
 
 
@@ -135,11 +131,23 @@ class WkflAddressValidation(WorkflowBase):
     def __init__(self):
         super().__init__()
 
+    def execute(self):
+        # set summary stats
+        # update configuration file
+        pass
+
+
+
 class WkflNameAnalysis(WorkflowBase):
     """Taxpayer name analysis"""
     stage = WorkflowStage.NAME_ANALYSIS
     def __init__(self):
         super().__init__()
+
+    def execute(self):
+        # set summary stats
+        # update configuration file
+        pass
 
 class WkflAddressAnalysis(WorkflowBase):
     """Address analysis"""
@@ -147,42 +155,73 @@ class WkflAddressAnalysis(WorkflowBase):
     def __init__(self):
         super().__init__()
 
+    def execute(self):
+        # set summary stats
+        # update configuration file
+        pass
+
 class WkflRentalSubset(WorkflowBase):
     """Subset rental properties based on class code descriptions."""
     stage = WorkflowStage.RENTAL_SUBSET
     def __init__(self):
         super().__init__()
 
+    def execute(self):
+        # set summary stats
+        # update configuration file
+        pass
+
 class WkflCleaningMerging(WorkflowBase):
     """Additional data cleaning & merging"""
-    # fixing taxpayer names based on manual research
-    # merging corporate data & validated addresses into original property dataset (or creating new one entirely?)
-    # adding boolean columns necessary for string matching & network graph generation
-    # create new df with ONLY the columns required to run string matching - avoids large unwieldy datasets like in original chicago code
-    # outputs & saves merged dataset to "processed" directory
     stage = WorkflowStage.CLEAN_MERGE
     def __init__(self):
         super().__init__()
 
+    def execute(self):
+        # fixing taxpayer names based on manual research
+        # merging corporate data & validated addresses into original property dataset (or creating new one entirely?)
+        # adding boolean columns necessary for string matching & network graph generation
+        # create new df with ONLY the columns required to run string matching - avoids large unwieldy datasets like in original chicago code
+        # outputs & saves merged dataset to "processed" directory
+        # set summary stats
+        # update configuration file
+        pass
+
 
 class WkflStringMatching(WorkflowBase):
     """String matching taxpayer records"""
-    # prompts user to create parameter matrix for string matching
-    # outputs & saves string matched dataset to "processed" directory
     stage = WorkflowStage.STRING_MATCH
     def __init__(self):
         super().__init__()
 
+    def execute(self):
+        # prompts user to create parameter matrix for string matching
+        # outputs & saves string matched dataset to "processed" directory
+        # set summary stats
+        # update configuration file
+        pass
+
 class WkflNetworkGraph(WorkflowBase):
     """Network graph generation"""
-    # prompts user to create parameter matrix for network graph generation
-    # outputs & saves networked properties datasets to "processed" directory
+
     stage = WorkflowStage.NETWORK_GRAPH
+
+    def execute(self):
+        # prompts user to create parameter matrix for network graph generation
+        # outputs & saves networked properties datasets to "processed" directory
+        # set summary stats
+        # update configuration file
+        pass
 
 
 class WkflFinalOutput(WorkflowBase):
     """Produces final datasets to be converted into standardized format"""
-    # saves final outputs to "final_outputs" directory
     stage = WorkflowStage.FINAL_OUTPUT
     def __init__(self):
         super().__init__()
+
+    def execute(self):
+        # saves final outputs to "final_outputs" directory
+        # set summary stats
+        # update configuration file
+        pass
