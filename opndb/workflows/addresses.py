@@ -1,6 +1,27 @@
+from abc import abstractmethod
+from typing import Optional
+
+from opndb.types.base import WorkflowConfigs
+
+
 class WkflAddressBase:
 
-    def __init__(self):
+    def __init__(self, configs: WorkflowConfigs):
+        self.configs = configs
+
+    @classmethod
+    def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WkflAddressBase']:
+        if configs["wkfl_type_addrs"] == "initial":
+            return WkflAddressInitial(configs)
+        elif configs["wkfl_type_addrs"] == "open_addrs":
+            return WkflAddressOpenAddresses(configs)
+        elif configs["wkfl_type_addrs"] == "geocodio":
+            return WkflAddressGeocodio(configs)
+        return None
+
+    @abstractmethod
+    def execute(self) -> None:
+        """Each workflow must implement an execute method"""
         pass
 
 class WkflAddressInitial(WkflAddressBase):
@@ -12,12 +33,11 @@ class WkflAddressInitial(WkflAddressBase):
     unvalidated dataframes as instance variables.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, configs: WorkflowConfigs):
+        super().__init__(configs)
 
     def execute(self):
         """Executes initial data loading workflow."""
-        wkfl_initial = WkflAddressInitial()  # this will be where we account for single address col vs multiple
         # load raw tax and corp/llc data
         # pull addresses out of them
         # get unique addresses out of all datasets
@@ -34,8 +54,8 @@ class WkflAddressOpenAddresses(WkflAddressBase):
 
     # todo: figure out how to color code the summary stats so that people know how far off the mean their data is
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, configs: WorkflowConfigs):
+        super().__init__(configs)
 
     def execute(self):
         """Executes open address data workflow."""
@@ -51,8 +71,8 @@ class WkflAddressOpenAddresses(WkflAddressBase):
 
 class WkflAddressGeocodio(WkflAddressBase):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, configs: WorkflowConfigs):
+        super().__init__(configs)
 
     def execute(self):
         """Executes geocodio data workflow."""

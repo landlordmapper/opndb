@@ -1,11 +1,25 @@
-from typing import TypedDict
+from typing import TypedDict, Literal
 
 from opndb.workflows.base import WorkflowStage
 
 
+FileExt = Literal[".csv", ".json", ".geojson"]
+
 class WorkflowConfigs(TypedDict):
-    stage: WorkflowStage
-    wkfl_type: str
+    load_ext: FileExt
+    prev_stage: WorkflowStage | None
+    stage: WorkflowStage  # might be redundant if we have wkfl type
+    wkfl_type: str  # todo: create mapper that maps human readable wkfl type to WorkflowStage number
+    wkfl_type_addrs: str
+    accuracy: str
+
+class CleaningColumnMap(TypedDict):
+    name: dict[str, list[str]]
+    address: dict[str, list[str]]
+    accuracy: {
+        str, dict[str, [list[str]]],
+        str, dict[str, [list[str]]]
+    }
 
 
 class RawAddress(TypedDict, total=False):

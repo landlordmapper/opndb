@@ -39,7 +39,7 @@ def cli():
 def start():
     while True:
         configs = w.load_configs()
-        wkfl = w.create_workflow(configs["wkfl_type"], configs)
+        wkfl = w.create_workflow(configs)
         wkfl.execute()
 
 
@@ -48,6 +48,8 @@ def start():
 def start_old():
     """Start the OPNDB workflow"""
     t.print_welcome()
+    # ask to generate directory structure in the same path as the raw data if running locally
+    # if hitting the s3, the login data will be stored in configs
     t.print_raw_data_message()
 
     # Get directory path from user

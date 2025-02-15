@@ -197,7 +197,6 @@ class CleanStringBase:
 
         return " ".join(whole_list[:-1])  # Remove the 'JUNK' sentinel
 
-
 class CleanStringName(CleanStringBase):
 
     @classmethod
@@ -325,25 +324,6 @@ class CleanStringAddress(CleanStringBase):
 class CleanStringAccuracy(CleanStringBase):
 
     """String cleaning functions that could meaningfully impact accuracy during matching processes."""
-
-    @classmethod
-    def drop_floors(cls, text: str) -> str:
-        """
-        Removes floor indicators that match pattern ' {number}D'.
-        Specifically targets patterns like ' 3D', ' 15D' that represent floor numbers.
-
-        Examples:
-            '123 MAIN ST 3D' -> '123 MAIN ST'
-            'BUILDING A 15D' -> 'BUILDING A'
-            'APT 2D WEST' -> 'APT WEST'
-            '101 3D STREET' -> '101 STREET'
-            'NO FLOOR HERE' -> 'NO FLOOR HERE'
-        """
-        try:
-            text = re.sub(r" \d+D", "", text)
-        except:
-            return text
-        return text
 
     @classmethod
     def drop_letters(cls, text):
