@@ -3,13 +3,12 @@ import traceback
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from pathlib import Path
-from unittest import result
 
 import pandas as pd
 import requests as req
 
 from opndb.constants.base import DATA_ROOT, FileNames, GEOCODIO_URL
-from opndb.df_ops import DataFrameOpsBase as df_ops, DataFrameBaseCleaners, DataFrameOpsBase
+from opndb.services.dataframe import DataFrameOpsBase as df_ops, DataFrameBaseCleaners, DataFrameOpsBase
 from opndb.types.base import RawAddress, GeocodioResult, GeocodioResponse, GeocodioResultProcessed, GeocodioResultFlat
 from opndb.utils import UtilsBase as utils
 

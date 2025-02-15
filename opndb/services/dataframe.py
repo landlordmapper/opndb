@@ -1,29 +1,15 @@
-import string
 from pathlib import Path
 from typing import Any, Callable, Type
-import word2number as w2n
 
 import pandas as pd
 
-from opndb.string_cleaning import CleanStringBase as clean_base
-from opndb.string_cleaning import CleanStringName as clean_name
-from opndb.string_cleaning import CleanStringAddress as clean_addr
-from opndb.string_cleaning import CleanStringAccuracy as clean_acc
-from opndb.types.base import FileExt
+from opndb.services.string_cleaning import CleanStringBase as clean_base
+from opndb.services.string_cleaning import CleanStringName as clean_name
+from opndb.services.string_cleaning import CleanStringAddress as clean_addr
+from opndb.services.string_cleaning import CleanStringAccuracy as clean_acc
 
 
 class DataFrameOpsBase(object):
-
-    @classmethod
-    def print_cols(cls, df: pd.DataFrame) -> list[str]:
-        """Returns list of strings representing pandas dataframe columns."""
-        return [col for col in df.columns]
-
-    @classmethod
-    def rename_col(cls, df: pd.DataFrame, old_name: str, new_name: str) -> pd.DataFrame:
-        """Renames pandas dataframe column."""
-        df.rename(columns={old_name: new_name}, inplace=True)
-        return df
 
     @classmethod
     def load_df(cls, path: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame:
@@ -67,13 +53,22 @@ class DataFrameOpsBase(object):
             df.to_json(str(path), orient='records', indent=4)
         else:
             raise ValueError(f"Unsupported file format: {format}")
-
         return str(path)
 
+    @classmethod
+    def print_cols(cls, df: pd.DataFrame) -> list[str]:
+        """Returns list of strings representing pandas dataframe columns."""
+        return [col for col in df.columns]
+
+    @classmethod
+    def rename_col(cls, df: pd.DataFrame, old_name: str, new_name: str) -> pd.DataFrame:
+        """Renames pandas dataframe column."""
+        df.rename(columns={old_name: new_name}, inplace=True)
+        return df
+
+
 class DataFrameCleaners(DataFrameOpsBase):
-
     """Base dataframe cleaning methods."""
-
     @classmethod
     def apply_string_cleaner(
             cls,
@@ -132,6 +127,7 @@ class DataFrameBaseCleaners(DataFrameCleaners):
     def combine_numbers(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_base.combine_numbers, cols)
 
+
 class DataFrameNameCleaners(DataFrameCleaners):
 
     """
@@ -181,10 +177,6 @@ class DataFrameCleanersAccuracy(DataFrameCleaners):
     """
 
     @classmethod
-    def drop_floors(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
-        return cls.apply_string_cleaner(df, clean_acc.drop_floors, cols)
-
-    @classmethod
     def drop_letters(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_acc.drop_letters, cols)
 
@@ -195,4 +187,3 @@ class DataFrameCleanersAccuracy(DataFrameCleaners):
     @classmethod
     def remove_secondary_component(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_acc.remove_secondary_component, cols)
-
