@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 import pandas as pd
 
-from opndb.constants.base import FileNames, DATA_ROOT
+from opndb.constants.base import Raw, DataDirs
 from opndb.df_ops import DataFrameOpsBase as df_ops, DataFrameBaseCleaners as clean_base, DataFrameNameCleaners as clean_name, DataFrameAddressCleaners as clean_addr, DataFrameCleanersAccuracy as clean_acc
 from opndb.types.base import WorkflowConfigs, CleaningColumnMap
 from opndb.utils import UtilsBase as utils
@@ -32,7 +32,6 @@ class WorkflowBase:
     Each child class that inherits from WorkflowBase corresponds to the broader workflow stage.
 
     """
-    dirs = FileNames.DataDirs
 
     def __init__(self, configs: WorkflowConfigs):
         self.configs = configs
@@ -101,7 +100,6 @@ class WkflDataLoad(WorkflowBase):
             - 'ROOT/raw/class_code_descriptions[FileExt]'
     """
     stage = WorkflowStage.DATA_LOAD
-    raw = FileNames.Raw
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
 
@@ -144,35 +142,34 @@ class WkflDataClean(WorkflowBase):
             - 'ROOT/processed/llcs[FileExt]'
             - 'ROOT/processed/class_code_descriptions[FileExt]'
     """
-    raw = FileNames.Raw  # constant names
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
         self.dfs: dict[str,[pd.DataFrame]] = {
-            self.raw.TAXPAYER_RECORDS_RAW: df_ops.load_df_csv(
+            Raw.TAXPAYER_RECORDS_RAW: df_ops.load_df_csv(
                 utils.generate_path(
-                    self.dirs.RAW,
-                    self.raw.get_raw_filename_ext(self.raw.TAXPAYER_RECORDS_RAW, self.configs),
+                    DataDirs.RAW,
+                    Raw.get_raw_filename_ext(Raw.TAXPAYER_RECORDS_RAW, self.configs),
                     self.configs["prev_stage"],
                 ), str
             ),
-            "corps": df_ops.load_df_csv(
+            Raw.CORPS_RAW: df_ops.load_df_csv(
                 utils.generate_path(
-                    self.dirs.RAW,
-                    self.raw.get_raw_filename_ext(self.raw.CORPS_RAW, self.configs),
+                    DataDirs.RAW,
+                    Raw.get_raw_filename_ext(Raw.CORPS_RAW, self.configs),
                     self.configs["prev_stage"],
                 ), str
             ),
-            "llcs": df_ops.load_df_csv(
+            Raw.LLCS_RAW: df_ops.load_df_csv(
                 utils.generate_path(
-                    self.dirs.RAW,
-                    self.raw.get_raw_filename_ext(self.raw.LLCS_RAW, self.configs),
+                    DataDirs.RAW,
+                    Raw.get_raw_filename_ext(Raw.LLCS_RAW, self.configs),
                     self.configs["prev_stage"],
                 ), str
             ),
-            "class_code_descriptions": df_ops.load_df_csv(
+            Raw.CLASS_CODE_DESCRIPTIONS: df_ops.load_df_csv(
                 utils.generate_path(
-                    self.dirs.RAW,
-                    self.raw.get_raw_filename_ext(self.raw.CLASS_CODE_DESCRIPTIONS, self.configs),
+                    DataDirs.RAW,
+                    Raw.get_raw_filename_ext(Raw.CLASS_CODE_DESCRIPTIONS, self.configs),
                     self.configs["prev_stage"],
                 ), str
             )
