@@ -1,4 +1,5 @@
 import shutil
+from asyncio.subprocess import Process
 from enum import IntEnum
 from pathlib import Path
 from typing import ClassVar, Optional
@@ -6,7 +7,8 @@ from abc import abstractmethod
 
 import pandas as pd
 
-from opndb.constants.base import Raw, DataDirs, Processed
+from opndb.constants.columns import ValidatedAddrs, TaxpayerRecords
+from opndb.constants.files import Raw, Dirs, Processed, Analysis
 from opndb.services.dataframe import DataFrameOpsBase as df_ops, DataFrameBaseCleaners as clean_base, DataFrameNameCleaners as clean_name, DataFrameAddressCleaners as clean_addr, DataFrameCleanersAccuracy as clean_acc
 from opndb.types.base import WorkflowConfigs, CleaningColumnMap
 from opndb.utils import UtilsBase as utils
@@ -162,7 +164,7 @@ class WkflDataClean(WorkflowBase):
         self.dfs: dict[str, pd.DataFrame] = {
             Raw.TAXPAYER_RECORDS_RAW: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.RAW,
+                    Dirs.RAW,
                     Raw.get_raw_filename_ext(Raw.TAXPAYER_RECORDS_RAW, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -170,7 +172,7 @@ class WkflDataClean(WorkflowBase):
             ),
             Raw.CORPS_RAW: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.RAW,
+                    Dirs.RAW,
                     Raw.get_raw_filename_ext(Raw.CORPS_RAW, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -178,7 +180,7 @@ class WkflDataClean(WorkflowBase):
             ),
             Raw.LLCS_RAW: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.RAW,
+                    Dirs.RAW,
                     Raw.get_raw_filename_ext(Raw.LLCS_RAW, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -186,7 +188,7 @@ class WkflDataClean(WorkflowBase):
             ),
             Raw.CLASS_CODE_DESCRIPTIONS: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.RAW,
+                    Dirs.RAW,
                     Raw.get_raw_filename_ext(Raw.CLASS_CODE_DESCRIPTIONS, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -232,7 +234,6 @@ class WkflDataClean(WorkflowBase):
 
     def execute(self):
 
-        # todo: add boolean column for is_rental for
         # todo: add validator that checks for required columns, throw error/failure immediately if not
 
         # execute on all dataframes and columns
@@ -373,7 +374,7 @@ class WkflNameAnalysis(WorkflowBase):
         self.dfs: dict[str, pd.DataFrame] = {
             Processed.TAXPAYER_RECORDS_CLEAN: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.TAXPAYER_RECORDS_CLEAN, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -381,7 +382,7 @@ class WkflNameAnalysis(WorkflowBase):
             ),
             Processed.CORPS_CLEAN: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.CORPS_CLEAN, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -389,7 +390,7 @@ class WkflNameAnalysis(WorkflowBase):
             ),
             Processed.LLCS_CLEAN: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.LLCS_CLEAN, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -398,6 +399,8 @@ class WkflNameAnalysis(WorkflowBase):
         }
 
     def execute(self):
+        # create & save name frequency dataset
+        # add boolean columns
         # set summary stats
         # update configuration file
         # set stage
@@ -421,7 +424,7 @@ class WkflAddressAnalysis(WorkflowBase):
         self.dfs: dict[str, pd.DataFrame] = {
             Processed.VALIDATED_ADDRS: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.VALIDATED_ADDRS, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -430,10 +433,20 @@ class WkflAddressAnalysis(WorkflowBase):
         }
 
     def execute(self):
+        # create & save dataframe with unique validated addresses & their count
+        df_addr_counts: pd.DataFrame = df_ops.get_frequency_df(
+            self.dfs[Processed.VALIDATED_ADDRS],
+            ValidatedAddrs.FORMATTED_ADDRESS
+        )
+        df_ops.save_df(df_addr_counts, utils.generate_path(
+            Dirs.ANALYSIS,
+            Analysis.ADDRESS_ANALYSIS,
+            self.configs["stage"],
+            self.configs["load_ext"]
+        ))
         # set summary stats
         # update configuration file
         # set stage
-
         pass
 
 class WkflRentalSubset(WorkflowBase):
@@ -455,16 +468,24 @@ class WkflRentalSubset(WorkflowBase):
         self.dfs: dict[str, pd.DataFrame] = {
             Processed.TAXPAYER_RECORDS_CLEAN: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.TAXPAYER_RECORDS_CLEAN, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
                 ), str
             ),
-            Processed.BLDG_CLASS_CODES_CLEAN: df_ops.load_df(
+            Processed.VALIDATED_ADDRS: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
-                    Processed.get_raw_filename_ext(Processed.BLDG_CLASS_CODES_CLEAN, self.configs),
+                    Dirs.PROCESSED,
+                    Processed.get_raw_filename_ext(Processed.VALIDATED_ADDRS, self.configs),
+                    self.configs["prev_stage"],
+                    self.configs["load_ext"],
+                ), str
+            ),
+            Processed.CLASS_CODES_CLEAN: df_ops.load_df(
+                utils.generate_path(
+                    Dirs.PROCESSED,
+                    Processed.get_raw_filename_ext(Processed.CLASS_CODES_CLEAN, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
                 ), str
@@ -472,8 +493,29 @@ class WkflRentalSubset(WorkflowBase):
         }
 
     def execute(self):
-        # subset rental properties
+        # merge validated_addrs
+        df_props_addrs: pd.DataFrame = df_ops.merge_validated_addrs(
+            self.dfs[Processed.TAXPAYER_RECORDS_CLEAN],
+            self.dfs[Processed.VALIDATED_ADDRS],
+        )
+        # add is_rental column
+        df_props_rental_col: pd.DataFrame = df_ops.generate_is_rental(
+            df_props_addrs,
+            self.dfs[Processed.CLASS_CODES_CLEAN],
+        )
+        # execute initial subset based on is_rental
+        df_rentals_initial: pd.DataFrame = df_props_rental_col[df_props_rental_col[TaxpayerRecords.IS_RENTAL] == True]
+        # fetch properties left out of initial subset with matching validated taxpayer addresses
+        df_rentals_addrs: pd.DataFrame = df_ops.get_nonrentals_from_addrs(df_props_addrs, df_rentals_initial)
         # pull non-rentals with matching rental taxpayer addresses
+        df_rentals_final: pd.DataFrame = pd.concat([df_rentals_initial, df_rentals_addrs], axis=1)
+        # save
+        df_ops.save_df(df_rentals_final, utils.generate_path(
+            Dirs.PROCESSED,
+            Processed.PROPS_SUBSETTED,
+            self.configs["stage"],
+            self.configs["load_ext"],
+        ))
         # set summary stats
         # update configuration file
         # set stage
@@ -498,7 +540,7 @@ class WkflCleanMerge(WorkflowBase):
         self.dfs: dict[str, pd.DataFrame] = {
             Processed.PROPS_SUBSETTED: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.PROPS_SUBSETTED, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -506,7 +548,7 @@ class WkflCleanMerge(WorkflowBase):
             ),
             Processed.CORPS_CLEAN: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.CORPS_CLEAN, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -514,7 +556,7 @@ class WkflCleanMerge(WorkflowBase):
             ),
             Processed.LLCS_CLEAN: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.LLCS_CLEAN, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -551,7 +593,7 @@ class WkflStringMatch(WorkflowBase):
         self.dfs: dict[str, pd.DataFrame] = {
             Processed.PROPS_PREPPED: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.PROPS_PREPPED, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -586,7 +628,7 @@ class WkflNetworkGraph(WorkflowBase):
         self.dfs: dict[str, pd.DataFrame] = {
             Processed.PROPS_STRING_MATCHED: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.PROPS_STRING_MATCHED, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
@@ -619,7 +661,7 @@ class WkflFinalOutput(WorkflowBase):
         self.dfs: dict[str, pd.DataFrame] = {
             Processed.PROPS_NETWORKED: df_ops.load_df(
                 utils.generate_path(
-                    DataDirs.PROCESSED,
+                    Dirs.PROCESSED,
                     Processed.get_raw_filename_ext(Processed.PROPS_NETWORKED, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],

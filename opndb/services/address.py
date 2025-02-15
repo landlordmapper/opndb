@@ -7,7 +7,8 @@ from pathlib import Path
 import pandas as pd
 import requests as req
 
-from opndb.constants.base import DATA_ROOT, FileNames, GEOCODIO_URL, DataDirs, Processed, Geocodio
+from opndb.constants.base import DATA_ROOT, GEOCODIO_URL
+from opndb.constants.files import Dirs, Processed, Geocodio
 from opndb.services.dataframe import DataFrameOpsBase as df_ops, DataFrameBaseCleaners, DataFrameOpsBase
 from opndb.types.base import RawAddress, GeocodioResult, GeocodioResponse, GeocodioResultProcessed, GeocodioResultFlat
 from opndb.utils import UtilsBase as utils
@@ -15,14 +16,14 @@ from opndb.utils import UtilsBase as utils
 
 class AddressBase:
 
-    validated_addrs_path: Path = DATA_ROOT / DataDirs.PROCESSED / Processed.VALIDATED_ADDRS
-    unvalidated_addrs_path: Path = DATA_ROOT / DataDirs.PROCESSED / Processed.UNVALIDATED_ADDRS
+    validated_addrs_path: Path = DATA_ROOT / Dirs.PROCESSED / Processed.VALIDATED_ADDRS
+    unvalidated_addrs_path: Path = DATA_ROOT / Dirs.PROCESSED / Processed.UNVALIDATED_ADDRS
 
-    gcd_validated_path: Path = DATA_ROOT / DataDirs.GEOCODIO / Geocodio.GCD_VALIDATED
-    gcd_unvalidated_path: Path = DATA_ROOT / DataDirs.GEOCODIO / Geocodio.GCD_UNVALIDATED
-    gcd_failed_path: Path = DATA_ROOT / DataDirs.GEOCODIO / Geocodio.GCD_FAILED
+    gcd_validated_path: Path = DATA_ROOT / Dirs.GEOCODIO / Geocodio.GCD_VALIDATED
+    gcd_unvalidated_path: Path = DATA_ROOT / Dirs.GEOCODIO / Geocodio.GCD_UNVALIDATED
+    gcd_failed_path: Path = DATA_ROOT / Dirs.GEOCODIO / Geocodio.GCD_FAILED
 
-    gcd_partials_dir_path: Path = DATA_ROOT / DataDirs.GCD_PARTIALS
+    gcd_partials_dir_path: Path = DATA_ROOT / Dirs.GCD_PARTIALS
 
 
     def __init__(self):

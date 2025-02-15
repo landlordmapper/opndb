@@ -3,6 +3,7 @@ from typing import Any, Callable, Type
 
 import pandas as pd
 
+from opndb.constants.columns import TaxpayerRecords, ValidatedAddrs, ClassCodes
 from opndb.services.string_cleaning import CleanStringBase as clean_base
 from opndb.services.string_cleaning import CleanStringName as clean_name
 from opndb.services.string_cleaning import CleanStringAddress as clean_addr
@@ -65,6 +66,70 @@ class DataFrameOpsBase(object):
         """Renames pandas dataframe column."""
         df.rename(columns={old_name: new_name}, inplace=True)
         return df
+
+    @classmethod
+    def get_frequency_df(cls, df: pd.DataFrame, unique_col: str) -> pd.DataFrame:
+        """
+        Returns single dataframe with a column of unique values from the original dataframe and their frequency counts
+        """
+        df_freq = df[unique_col].value_counts().reset_index()
+        df_freq.columns = [unique_col, "count"]
+        return df_freq
+
+    # MOVE THESE TO OTHER CLASS? boolean col generators?
+    @classmethod
+    def merge_validated_addrs(cls, df_props: pd.DataFrame, df_addrs: pd.DataFrame) -> pd.DataFrame:
+        """Merges validated address data into property taxpayer dataset."""
+        # todo: remove repeated cols (combine columns function from old workflow)
+        # todo: remove unnecessary columns before returning
+        # todo: test to confirm whether we should drop duplicates here
+        return pd.merge(
+            df_props,
+            df_addrs,
+            how="left",
+            left_on=TaxpayerRecords.TAX_ADDR,
+            right_on=ValidatedAddrs.TAX_ADDR
+        )
+
+    @classmethod
+    def rental_class_check(cls, class_codes: list[str], rental_classes: list[str]) -> bool:
+        """
+        Checks class codes and returns True if at least one of them is a rental class code. Returns false if none are.
+        """
+        return any(code in rental_classes for code in class_codes)
+
+    @classmethod
+    def generate_is_rental(cls, df_props: pd.DataFrame, df_class_codes: pd.DataFrame) -> pd.DataFrame:
+        """
+        Subsets property dataframe to only include properties associated with rental class codes. Handles situations in
+        which multiple class codes are associated with a single property and are separated by commas.
+        :param df_props: Dataframe containing entire property taxpayer dataset
+        :param df_class_codes: Dataframe containing building class code descriptions
+        :return: D
+        """
+        df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes[ClassCodes.IS_RENTAL] == True]
+        rental_codes: list[str] = list(df_rental_codes[ClassCodes.IS_RENTAL])
+        df_props[TaxpayerRecords.IS_RENTAL] = df_props[TaxpayerRecords.BLDG_CLASS].apply(
+            lambda codes: cls.rental_class_check(
+                [code.strip() for code in codes.split(",")],
+                rental_codes
+            )
+        )
+        return df_props
+
+    @classmethod
+    def get_nonrentals_from_addrs(cls, df_all: pd.DataFrame, df_rentals_initial: pd.DataFrame) -> pd.DataFrame:
+        """
+        Extracts properties whose class codes are NOT associated with rental class codes, but whose taxpayer mailing
+        address matches with an address from the rental property subset.
+
+        :param df_all: Dataframe containing entire property taxpayer dataset
+        :param df_rentals_initial: Dataframe containing initial rental subset
+        :return: Dataframe containing properties excluded from initial rental subset with matching validated taxpayer addresses
+        """
+        rental_addrs: list[str] = list(df_rentals_initial[TaxpayerRecords.FORMATTED_ADDRESS].dropna().unique())
+        df_nonrentals: pd.DataFrame = df_all[df_all[TaxpayerRecords.IS_RENTAL] == False]
+        return df_nonrentals[df_nonrentals[TaxpayerRecords.FORMATTED_ADDRESS].isin(rental_addrs)]
 
 
 class DataFrameCleaners(DataFrameOpsBase):
