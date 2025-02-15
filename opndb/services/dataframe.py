@@ -68,6 +68,25 @@ class DataFrameOpsBase(object):
         return df
 
     @classmethod
+    def combine_columns(cls, c1, c2):
+        """Combines two dataframe columns."""
+        # todo: check where and how this is used to provide a more detailed description
+        if pd.isnull(c1) == True:
+            return c2
+        else:
+            return c1
+
+    @classmethod
+    def combine_columns_parallel(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """Removes duplicated, redundant columns (based on _x and _y auto-added suffixes)"""
+        # todo: check where and how this is used to provide a more detailed description
+        for column in df.columns:
+            if column[-2:] == '_x':
+                df[column[:-2]] = df.apply(lambda x: cls.combine_columns(x[column], x[column[:-2] + '_y']), axis =1)
+                df.drop(columns = [column, column[:-2] + '_y'], inplace = True)
+        return df
+
+    @classmethod
     def get_frequency_df(cls, df: pd.DataFrame, unique_col: str) -> pd.DataFrame:
         """
         Returns single dataframe with a column of unique values from the original dataframe and their frequency counts

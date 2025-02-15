@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TypedDict, Literal
+from typing import TypedDict, Literal, Any
 
 from opndb.workflows.base import WorkflowStage
 
@@ -13,6 +13,7 @@ class WorkflowConfigs(TypedDict):
     stage: WorkflowStage  # might be redundant if we have wkfl type
     wkfl_type: str  # todo: create mapper that maps human readable wkfl type to WorkflowStage number
     wkfl_type_addrs: str
+    wkfl_type_string_match: str
     accuracy: str
 
 class CleaningColumnMap(TypedDict):
@@ -22,7 +23,6 @@ class CleaningColumnMap(TypedDict):
         str, dict[str, [list[str]]],
         str, dict[str, [list[str]]]
     }
-
 
 class RawAddress(TypedDict, total=False):
     """
@@ -95,3 +95,20 @@ class GeocodioResultProcessed(TypedDict):
     raw_addr: RawAddress
     results: list[GeocodioResultFlat]
     results_parsed: list[GeocodioResultFlat] | None
+
+class NmslibOptions(TypedDict):
+    method: str
+    space: str
+    data_type: Any
+
+class QueryBatchOptions(TypedDict):
+    num_threads: int
+    K: int
+
+class StringMatchParams(TypedDict):
+    name_col: str
+    match_threshold: int | float
+    include_orgs: bool
+    include_unresearched: bool
+    nmslib_opts: NmslibOptions
+    query_batch_opts: QueryBatchOptions

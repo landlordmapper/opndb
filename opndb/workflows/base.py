@@ -3,7 +3,7 @@ from asyncio.subprocess import Process
 from enum import IntEnum
 from pathlib import Path
 from typing import ClassVar, Optional
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
 import pandas as pd
 
@@ -30,13 +30,13 @@ class WorkflowStage(IntEnum):
     FINAL_OUTPUT = 10
 
 
-class WorkflowBase:
+class WorkflowBase(ABC):
     """
     Base workflow class the controls execution of data processing tasks required for each stage of the opndb workflow.
     Each child class that inherits from WorkflowBase corresponds to the broader workflow stage.
     """
     def __init__(self, configs: WorkflowConfigs):
-        self.configs = configs
+        self.configs: WorkflowConfigs = configs
 
     @classmethod
     def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
@@ -119,7 +119,7 @@ class WkflDataLoad(WorkflowBase):
             Raw.TAXPAYER_RECORDS_RAW,
             Raw.CORPS_RAW,
             Raw.LLCS_RAW,
-            Raw.CLASS_CODE_DESCRIPTIONS
+            Raw.CLASS_CODES_RAW
         ]
         for file_name in file_names:
             source_file = origin / file_name
@@ -186,10 +186,10 @@ class WkflDataClean(WorkflowBase):
                     self.configs["load_ext"],
                 ), str
             ),
-            Raw.CLASS_CODE_DESCRIPTIONS: df_ops.load_df(
+            Raw.CLASS_CODES_RAW: df_ops.load_df(
                 utils.generate_path(
                     Dirs.RAW,
-                    Raw.get_raw_filename_ext(Raw.CLASS_CODE_DESCRIPTIONS, self.configs),
+                    Raw.get_raw_filename_ext(Raw.CLASS_CODES_RAW, self.configs),
                     self.configs["prev_stage"],
                     self.configs["load_ext"],
                 ), str
@@ -235,9 +235,10 @@ class WkflDataClean(WorkflowBase):
     def execute(self):
 
         # todo: add validator that checks for required columns, throw error/failure immediately if not
+        # todo: add "clean_name" column, differentiate from raw_name
 
         # execute on all dataframes and columns
-        for df in self.dfs:
+        for df in self.dfs.values():
             df = clean_base.make_upper(df)
             df = clean_base.remove_symbols_punctuation(df)
             df = clean_base.trim_whitespace(df)
@@ -566,6 +567,7 @@ class WkflCleanMerge(WorkflowBase):
 
     def execute(self):
         # fixing taxpayer names based on manual research
+        # add core name
         # merging corporate data & validated addresses into original property dataset (or creating new one entirely?)
         # adding boolean columns necessary for string matching & network graph generation
         # create new df with ONLY the columns required to run string matching - avoids large unwieldy datasets like in original chicago code
@@ -590,16 +592,7 @@ class WkflStringMatch(WorkflowBase):
     stage = WorkflowStage.STRING_MATCH
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
-        self.dfs: dict[str, pd.DataFrame] = {
-            Processed.PROPS_PREPPED: df_ops.load_df(
-                utils.generate_path(
-                    Dirs.PROCESSED,
-                    Processed.get_raw_filename_ext(Processed.PROPS_PREPPED, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            )
-        }
+
 
     def execute(self):
         # prompts user to create parameter matrix for string matching

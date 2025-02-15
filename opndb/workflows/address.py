@@ -1,10 +1,10 @@
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from typing import Optional
 
 from opndb.types.base import WorkflowConfigs
 
 
-class WkflAddressBase:
+class WkflAddressBase(ABC):
 
     def __init__(self, configs: WorkflowConfigs):
         self.configs = configs

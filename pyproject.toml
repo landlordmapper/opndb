@@ -9,7 +9,9 @@ dependencies = [
     "click==8.1.8",
     "rich==13.9.4",
     "pandas==2.2.3",
-    "word2number==1.1"
+    "word2number==1.1",
+    "networkx==3.4.2",
+    "scikit-learn==1.6.1"
 ]
 
 [dependency-groups]
