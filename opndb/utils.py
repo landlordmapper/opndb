@@ -2,8 +2,9 @@ from datetime import datetime
 from pathlib import Path
 
 from opndb.constants.base import DATA_ROOT
-from opndb.workflows import WorkflowStage
 from rich.console import Console
+
+from opndb.workflows.base import WorkflowStage
 
 console = Console()
 
@@ -35,3 +36,14 @@ class UtilsBase(object):
         """Returns file path for specified file name and subdirectory."""
         filename: str = cls.generate_filename(filename, stage, ext)
         return DATA_ROOT / subdir / filename
+
+    @classmethod
+    def generate_configs(cls):
+        """Generates new configs.json file."""
+        pass
+
+    @classmethod
+    def load_configs(cls):
+        """Loads configs.json file associated with the project. Creates it if it doesn't exist"""
+
+        pass

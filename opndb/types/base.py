@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import TypedDict, Literal
 
 from opndb.workflows.base import WorkflowStage
@@ -6,6 +7,7 @@ from opndb.workflows.base import WorkflowStage
 FileExt = Literal[".csv", ".json", ".geojson"]
 
 class WorkflowConfigs(TypedDict):
+    root: Path
     load_ext: FileExt
     prev_stage: WorkflowStage | None
     stage: WorkflowStage  # might be redundant if we have wkfl type

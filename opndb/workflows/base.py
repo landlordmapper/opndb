@@ -1,4 +1,6 @@
+import shutil
 from enum import IntEnum
+from pathlib import Path
 from typing import ClassVar, Optional
 from abc import ABC, abstractmethod
 
@@ -30,9 +32,7 @@ class WorkflowBase:
     """
     Base workflow class the controls execution of data processing tasks required for each stage of the opndb workflow.
     Each child class that inherits from WorkflowBase corresponds to the broader workflow stage.
-
     """
-
     def __init__(self, configs: WorkflowConfigs):
         self.configs = configs
 
@@ -42,25 +42,25 @@ class WorkflowBase:
         if configs["wkfl_type"] == "preliminary":
             return WkflPreliminary(configs)
         elif configs["wkfl_type"] == "data_load":
-            return WkflDataLoad()
+            return WkflDataLoad(configs)
         elif configs["wkfl_type"] == "data_clean":
-            return WkflDataClean()
+            return WkflDataClean(configs)
         elif configs["wkfl_type"] == "address_validation":
-            return WkflAddressValidation()
+            return WkflAddressValidation(configs)
         elif configs["wkfl_type"] == "name_analysis":
-            return WkflNameAnalysis()
+            return WkflNameAnalysis(configs)
         elif configs["wkfl_type"] == "address_analysis":
-            return WkflAddressAnalysis()
+            return WkflAddressAnalysis(configs)
         elif configs["wkfl_type"] == "rental_subset":
-            return WkflRentalSubset()
+            return WkflRentalSubset(configs)
         elif configs["wkfl_type"] == "clean_merge":
-            return WkflCleanMerge()
+            return WkflCleanMerge(configs)
         elif configs["wkfl_type"] == "string_match":
-            return WkflStringMatch()
+            return WkflStringMatch(configs)
         elif configs["wkfl_type"] == "network_graph":
-            return WkflNetworkGraph()
+            return WkflNetworkGraph(configs)
         elif configs["wkfl_type"] == "final_output":
-            return WkflFinalOutput()
+            return WkflFinalOutput(configs)
         return None
 
     @classmethod
@@ -104,21 +104,36 @@ class WkflDataLoad(WorkflowBase):
         super().__init__(configs)
 
     def execute(self):
-        # raw datasets converted to pandas dataframes
-        # error is thrown if required columns are not present
-        # if all required columns are present, validators are run on the dataframes
-        # if there are validation errors, detailed error reports are shown
-        # if there are no validation errors, files are saved into the "raw" directory
-        # workflow should be for each individual dataset only and run validator and save only for single dataframe
-        # def validate_load(self, raw_data, dataset_name):
-        #     df: pd.DataFrame = pd.DataFrame(raw_data)
-            # df, message = validate(df)
-            # if message:
-            # print failure message
-            # store validation error logs to separate file, save & timestamp
-            # else:
-            # print success message
-            # df_ops.save_df_csv(df, utils.generate_path(self.dirs.RAW, dataset_name, self.stage))
+        # prompt user for path to raw data
+        origin_dir = ""
+        origin = Path(origin_dir)
+        # if user is running locally, ask where to generate new folders
+        destination_dir = ""
+        destination = Path(destination_dir)
+        # set root path in configs
+        self.configs["root"] = destination
+        # copy raw data files to destination directory
+        file_names = [
+            Raw.TAXPAYER_RECORDS_RAW,
+            Raw.CORPS_RAW,
+            Raw.LLCS_RAW,
+            Raw.CLASS_CODE_DESCRIPTIONS
+        ]
+        for file_name in file_names:
+            source_file = origin / file_name
+            dest_file = destination / file_name
+            try:
+                if not source_file.exists():
+                    # logging.warning(f"Source file not found: {source_file}")
+                    continue
+                shutil.copy2(source_file, dest_file)
+                # logging.info(f"Successfully copied {file_name}")
+            except PermissionError:
+                # logging.error(f"Permission denied when copying {file_name}")
+                raise
+            except Exception as e:
+                # logging.error(f"Error copying {file_name}: {str(e)}")
+                raise
         # set summary stats
         # update configuration file
         # set stage
@@ -214,6 +229,7 @@ class WkflDataClean(WorkflowBase):
     def execute(self):
 
         # todo: add boolean column for is_rental for
+        # todo: add validator that checks for required columns, throw error/failure immediately if not
 
         # execute on all dataframes and columns
         for df in self.dfs:
