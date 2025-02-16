@@ -235,7 +235,7 @@ class WkflDataClean(WorkflowBase):
     def execute(self):
 
         # todo: add validator that checks for required columns, throw error/failure immediately if not
-        # todo: add "clean_name" column, differentiate from raw_name
+        # todo: add "clean_name" and "core_name" columns, differentiate from raw_name
 
         # execute on all dataframes and columns
         for df in self.dfs.values():
@@ -494,6 +494,7 @@ class WkflRentalSubset(WorkflowBase):
         }
 
     def execute(self):
+        # todo: add merge code for class codes
         # merge validated_addrs
         df_props_addrs: pd.DataFrame = df_ops.merge_validated_addrs(
             self.dfs[Processed.TAXPAYER_RECORDS_CLEAN],
