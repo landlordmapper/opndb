@@ -618,16 +618,6 @@ class WkflNetworkGraph(WorkflowBase):
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
         self.stage: ClassVar[WorkflowStage] = WorkflowStage.NETWORK_GRAPH
-        self.dfs: dict[str, pd.DataFrame] = {
-            Processed.PROPS_STRING_MATCHED: df_ops.load_df(
-                utils.generate_path(
-                    Dirs.PROCESSED,
-                    Processed.get_raw_filename_ext(Processed.PROPS_STRING_MATCHED, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            )
-        }
 
     def execute(self):
         # prompts user to create parameter matrix for network graph generation
@@ -651,16 +641,6 @@ class WkflFinalOutput(WorkflowBase):
     stage = WorkflowStage.FINAL_OUTPUT
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
-        self.dfs: dict[str, pd.DataFrame] = {
-            Processed.PROPS_NETWORKED: df_ops.load_df(
-                utils.generate_path(
-                    Dirs.PROCESSED,
-                    Processed.get_raw_filename_ext(Processed.PROPS_NETWORKED, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            )
-        }
 
     def execute(self):
         # saves final outputs to "final_outputs" directory

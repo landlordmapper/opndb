@@ -47,3 +47,10 @@ class UtilsBase(object):
     def load_configs(cls):
         """Loads configs.json file associated with the project. Creates it if it doesn't exist"""
         pass
+
+    @classmethod
+    def is_encoded_empty(cls, x):
+        if isinstance(x, str):
+            # Check if string contains mostly non-printable characters
+            return any(ord(c) < 32 for c in x)
+        return False

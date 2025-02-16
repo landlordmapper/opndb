@@ -12,6 +12,8 @@ from opndb.types.base import WorkflowConfigs, StringMatchParams, NmslibOptions
 from opndb.utils import UtilsBase as utils
 
 
+# todo: pull out dataframe operation code and store in dataframe service
+
 class WkflStringMatchBase(ABC):
 
     """Base class for string matching workflow."""
@@ -51,7 +53,6 @@ class WkflStringMatchBase(ABC):
         self.df_process_results: pd.DataFrame | None = None
         self.df_process_output: pd.DataFrame | None = None
 
-
     @classmethod
     def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WkflStringMatchBase']:
         if configs["wkfl_type_string_match"] == "params":
@@ -66,7 +67,6 @@ class WkflStringMatchBase(ABC):
 
     @abstractmethod
     def execute(self) -> None:
-        """Each workflow must implement an execute method"""
         pass
 
 
@@ -200,7 +200,7 @@ class WkflStringMatchMerge(WkflStringMatchBase):
         # clean up
         df_process_output: pd.DataFrame = df_ops.combine_columns_parallel(df_process_output)
         df_process_output.drop_duplicates(TaxpayerRecords.PIN, inplace=True)
-        df_process_output.drop(columns=["original_doc"], inplace=True)  # todo: which other columns should be dropped?
+        df_process_output.drop(columns=["original_doc"], inplace=True)  # todo: which other columns should be dropped? - NOT name_address_clean
         # done
         self.df_process_output: pd.DataFrame = df_process_output
         df_ops.save_df(

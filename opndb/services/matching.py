@@ -18,10 +18,26 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 from opndb.constants.columns import AddressAnalysis
 from opndb.services.dataframe import DataFrameOpsBase as df_ops
-from opndb.types.base import StringMatchParams
+from opndb.types.base import StringMatchParams, NetworkMatchParams
+from opndb.utils import UtilsBase as utils
 
+# todo: add type hints and docstrings where missing
 
 class MatchingBase:
+
+    @classmethod
+    def check_name(cls, row: pd.Series) -> bool:
+        """
+        Returns "True" if the row SHOULD be included in the network analysis, and False if it should be ignored.
+        """
+        return pd.isna(row["IS_COMMON_NAME"]) or row["IS_COMMON_NAME"] is False
+
+    @classmethod
+    def check_entity_name(cls, row: pd.Series) -> bool:
+        """
+        Returns "True" if the row SHOULD be included in the network analysis, and False if it should be ignored.
+        """
+        return pd.isna(row["IS_COMMON_NAME"]) or row["IS_COMMON_NAME"] is False
 
     @classmethod
     def check_address(
@@ -151,11 +167,318 @@ class StringMatching(MatchingBase):
 
 
 class NetworkMatching(MatchingBase):
-
+    """
+    Network matching service class. Contains all functions related to building network graph objects and connected
+    component maps. Methods are defined roughly in their order of execution in generalized network graph workflows.
+    """
+    # todo: standardize pattern of what these functions return (Ex: set of functions that return nx.Graph objects, dataframe objects, other network graph-related objects, etc.)
     @classmethod
     def build_edge(cls, g, node_a, node_b, common_names=None, common_addrs=None):
         if (common_names is None or node_a not in common_names) and (common_addrs is None or node_b not in common_addrs):
             g.add_edge(node_a, node_b)
+
+    @classmethod
+    def process_row_network(
+            cls,
+            g: nx.Graph,
+            row: pd.Series,
+            df_analysis: pd.DataFrame,
+            clean_core_column: str,
+            include_orgs: bool,
+            include_unresearched: bool
+    ) -> None:
+        """
+        Adds nodes and edges for taxpayer name and taxpayer address. Uses clean address to check for inclusion
+        detection and matching_address for the network graph
+
+        Names that are NOT indicated as being common names are included. Addresses that pass the check_address test are
+        included. If both the name and address pass the name and address checks, add them as nodes AND edges
+
+        If the name passes the check_name test but the address does not pass the check_address test, add ONLY the name
+        as a node.
+        """
+
+        name = row[clean_core_column]
+        clean_address = row["GCD_FORMATTED_ADDRESS"]
+        matching_address = row["GCD_FORMATTED_MATCH"]
+
+        if cls.check_address(clean_address, df_analysis, include_orgs, include_unresearched) and cls.check_name(row):
+            if pd.notnull(name) and not utils.is_encoded_empty(name) and pd.notnull(
+                    clean_address) and not utils.is_encoded_empty(clean_address):
+                g.add_edge(name, matching_address)
+        elif cls.check_name(row) and pd.notnull(name) and not utils.is_encoded_empty(name):
+            g.add_node(name)
+
+    @classmethod
+    def process_row_network_string_match(
+            cls,
+            g: nx.Graph,
+            row: pd.Series,
+            string_match_column: str,
+            df_analysis: pd.DataFrame,
+            clean_core_column: str,
+            include_orgs: bool,
+            include_unresearched: bool
+    ) -> None:
+
+        # todo: fix these column names
+        fuzzy_match_combo = row[string_match_column]
+        clean_address = row["GCD_FORMATTED_ADDRESS"]
+        name = row[clean_core_column]
+        matching_address = row["GCD_FORMATTED_MATCH"]
+
+        if cls.check_address(clean_address, df_analysis, include_orgs, include_unresearched) and cls.check_name(row):
+            if pd.notnull(name) and pd.notnull(clean_address):
+                g.add_edge(name, fuzzy_match_combo)
+                g.add_edge(matching_address, fuzzy_match_combo)
+        elif cls.check_name(row) and pd.notnull(name):
+            g.add_edge(name, fuzzy_match_combo)
+        else:
+            g.add_node(fuzzy_match_combo)
+
+    @classmethod
+    def process_row_network_entity(
+            cls,
+            g: nx.Graph,
+            row: pd.Series,
+            df_analysis: pd.DataFrame,
+            string_match_column: str,
+            clean_core_column: str,
+            clean_core_column_entity: str,
+            include_orgs: bool,
+            include_unresearched: bool
+    ) -> None:
+        """Processes nodes and edges related EXCLUSIVELY to entity_name and entity_address"""
+        # todo: fix these column names
+        entities_to_ignore: List[str] = ["CHICAGO TITLE LAND TRUST COMPANY", "CHICAGO TITLE LAND"]
+        taxpayer_name = row[clean_core_column]
+        entity_name = row[clean_core_column_entity]
+        fuzzy_match_combo = row[string_match_column]
+        entity_addresses = [
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_1"],
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_2"],
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_3"],
+        ]
+        entity_matching_addresses = [
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_1_MATCH"],
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_2_MATCH"],
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_3_MATCH"],
+        ]
+        for i, address in enumerate(entity_addresses):
+            if cls.check_address(address, df_analysis, include_orgs, include_unresearched):
+                if pd.notnull(address) and entity_name not in entities_to_ignore:
+                    g.add_edge(entity_name, entity_matching_addresses[i])
+                    g.add_edge(taxpayer_name, entity_matching_addresses[i])
+                    if pd.notnull(fuzzy_match_combo):
+                        g.add_edge(entity_name, fuzzy_match_combo)
+                        g.add_edge(entity_matching_addresses[i], fuzzy_match_combo)
+                elif pd.notnull(address):
+                    g.add_edge(taxpayer_name, entity_matching_addresses[i])
+                    if pd.notnull(fuzzy_match_combo):
+                        g.add_edge(entity_matching_addresses[i], fuzzy_match_combo)
+
+    @classmethod
+    def rentals_network(
+            cls,
+            network_id: int,
+            df_input: pd.DataFrame,
+            df_analysis: pd.DataFrame,
+            params: NetworkMatchParams
+    ):
+        # todo: break this into smaller pieces
+        """
+        Generates and NetworkX graph object containing nodes and edges for rental dataset based on parameters. Returns
+        graph object and dataframe with associated component IDs.
+        """
+        gMatches = nx.Graph()
+        for i, row in df_input.iterrows():
+            # 1. Add nodes & edges for taxpayer name and address
+            cls.process_row_network(
+                gMatches,
+                row,
+                df_analysis,
+                params["taxpayer_name_col"],
+                params["include_orgs"],
+                params["include_unresearched"]
+            )
+            # 2. Add nodes & edges for fuzzy match combo name (if present)
+            if pd.notnull(row[params["string_match_name"]]):
+                cls.process_row_network_string_match(
+                    gMatches,
+                    row,
+                    params["string_match_name"],
+                    df_analysis,
+                    params["taxpayer_name_col"],
+                    params["include_orgs"],
+                    params["include_unresearched"]
+                )
+            # 3. Add nodes & edges for entity name and entity address (if present)
+            if pd.notnull(row[params["entity_name_col"]]):
+                cls.process_row_network_entity(
+                    g=gMatches,
+                    row=row,
+                    df_analysis=df_analysis,
+                    string_match_column=params["string_match_name"],
+                    clean_core_column=params["taxpayer_name_col"],
+                    clean_core_column_entity=params["entity_name_col"],
+                    include_orgs=params["include_orgs"],
+                    include_unresearched=params["include_unresearched"]
+                )
+        # get unique values for each column used to generate nodes and edges
+        taxpayer_names_set = list(set(df_input[params["taxpayer_name_col"]].dropna().unique()))
+        fuzzy_matches_set = list(set(df_input[params["string_match_name"]].dropna().unique()))
+        clean_addresses_set = list(set(
+                list(set(df_input["GCD_FORMATTED_MATCH"].dropna().unique())) +
+                list(set(df_input["GCD_FORMATTED_ADDRESS_ADDRESS_1_MATCH"].dropna().unique()))  #+
+                # list(set(df_unique["GCD_FORMATTED_ADDRESS_ADDRESS_2_MATCH"].dropna().unique())) +
+                # list(set(df_unique["GCD_FORMATTED_ADDRESS_ADDRESS_3_MATCH"].dropna().unique()))
+        ))
+        entity_names_set = list(set(df_input[params["entity_name_col"]].dropna().unique()))
+        # loop through connected to components to associate component IDs
+        # assign components to unique values from each column used to generate nodes and edges
+        component_map: dict[str, int] = {}
+        for i, connections in enumerate(list(nx.connected_components(gMatches))):
+            for component in connections:
+                if component in taxpayer_names_set:
+                    component_map[component] = i
+                elif component in fuzzy_matches_set:
+                    component_map[component] = i
+                elif component in clean_addresses_set:
+                    component_map[component] = i
+                elif component in entity_names_set:
+                    component_map[component] = i
+
+        df_input[f"final_component_{network_id+1}"] = df_input.apply(
+            lambda row: cls.set_component(row, component_map, params), axis=1
+        )
+        return df_input, gMatches
+
+    @classmethod
+    def set_component(
+            cls,
+            row: pd.Series,
+            component_map: dict,
+            params: NetworkMatchParams
+    ):
+        """
+        Assigns connected component to rental property row. Uses connected component map generated by
+        build_connected_component_map() to associate a property with a network based on the association of taxpayer
+        names, entity names, and mailing addresses.
+        """
+        keys_to_check = [
+            row[params["taxpayer_name_col"]],
+            row["GCD_FORMATTED_MATCH"],
+            row[params["string_match_name"]],
+            row[params["entity_name_col"]],
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_1_MATCH"],
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_2_MATCH"],
+            row["GCD_FORMATTED_ADDRESS_ADDRESS_3_MATCH"]
+        ]
+        for key in keys_to_check:
+            if key in component_map.keys():
+                return component_map[key]
+        # If no match is found, print debug info and return np.nan
+        # print(f"KeyError for CleanName: {row['CLEAN_NAME']} and ADDRESS: {row['CLEAN_ADDRESS']}")
+        return np.nan
+
+    @classmethod
+    def set_network_name(
+            cls,
+            network_id: int,
+            df_process_results: pd.DataFrame,
+            component_col_name: str,
+            network_col_name: str,
+    ) -> pd.DataFrame:
+
+        df_networked = df_process_results.copy()
+        df_networked[network_col_name] = np.nan
+        unique_networks = df_networked[component_col_name].unique()
+
+        for ntwk in unique_networks:
+            df_subset = df_networked[df_networked[component_col_name] == ntwk]
+            unique_names = list(df_subset["clean_name"].dropna())
+            name_counts = Counter(unique_names)
+            sorted_names = [name for name, count in name_counts.most_common()]
+
+            if sorted_names:
+                network_name_short = f"{sorted_names[0]} Etc."
+            else:
+                network_name_short = f"Network {network_id} - {ntwk}"
+
+            concatenated_names = " -- ".join(sorted_names[:3])
+            concatenated_names += f" -- {ntwk} -- ({network_id})"
+
+            # Handle case where there are no clean names
+            df_networked.loc[
+                df_networked[component_col_name] == ntwk, network_col_name
+            ] = concatenated_names
+
+            df_networked.loc[
+                df_networked[component_col_name] == ntwk, f"{network_col_name}_SHORT"
+            ] = network_name_short
+
+        return df_networked
+
+    @classmethod
+    def set_network_text(
+            cls,
+            gMatches: nx.Graph,
+            df_process_results: pd.DataFrame,
+            network_col_name: str,
+            component_col_name: str
+    ):
+        df_networked = df_process_results.copy()
+        df_networked[f"{network_col_name}_TEXT"] = np.nan
+        unique_networks = df_networked[component_col_name].unique()
+        components = list(nx.connected_components(gMatches))
+
+        for ntwk in unique_networks:
+            if ntwk == None or np.isnan(ntwk): continue
+            nodes = list(gMatches.subgraph(components[int(ntwk)]).nodes())
+            edges = list(gMatches.subgraph(components[int(ntwk)]).edges())
+            if len(edges) == 0:
+                network_text = json.dumps(nodes)
+            else:
+                network_text = json.dumps(edges)
+            df_networked.loc[
+                df_networked[component_col_name] == ntwk, f"{network_col_name}_TEXT"
+            ] = network_text
+
+        return df_networked
+
+    # @classmethod
+    # def build_connected_component_map(
+    #         cls,
+    #         gMatches: nx.Graph,
+    #         df_process_input: pd.DataFrame,
+    #         params: NetworkMatchParams
+    # ) -> dict[str, int]:
+    #     """Builds and returns dictionary mapping connected components to names and addresses."""
+    #     # get unique values for each column used to generate nodes and edges
+    #     taxpayer_names_set = list(set(df_process_input[params["taxpayer_name_col"]].dropna().unique()))
+    #     fuzzy_matches_set = list(set(df_process_input[params["string_match_name"]].dropna().unique()))
+    #     clean_addresses_set = list(set(
+    #             list(set(df_process_input["GCD_FORMATTED_MATCH"].dropna().unique())) +
+    #             list(set(df_process_input["GCD_FORMATTED_ADDRESS_ADDRESS_1_MATCH"].dropna().unique()))  #+
+    #             # list(set(df_unique["GCD_FORMATTED_ADDRESS_ADDRESS_2_MATCH"].dropna().unique())) +
+    #             # list(set(df_unique["GCD_FORMATTED_ADDRESS_ADDRESS_3_MATCH"].dropna().unique()))
+    #     ))
+    #     entity_names_set = list(set(df_process_input[params["entity_name_col"]].dropna().unique()))
+    #     # loop through connected to components to associate component IDs
+    #     # assign components to unique values from each column used to generate nodes and edges
+    #     component_map: dict[str, int] = {}
+    #     for i, connections in enumerate(list(nx.connected_components(gMatches))):
+    #         for component in connections:
+    #             if component in taxpayer_names_set:
+    #                 component_map[component] = i
+    #             elif component in fuzzy_matches_set:
+    #                 component_map[component] = i
+    #             elif component in clean_addresses_set:
+    #                 component_map[component] = i
+    #             elif component in entity_names_set:
+    #                 component_map[component] = i
+    #
+    #     return component_map
 
     @classmethod
     def string_match_network_graph(
@@ -174,14 +497,14 @@ class NetworkMatching(MatchingBase):
             cls.build_edge(gMatches, row["original_doc"], row["matched_doc"])
 
         # loop through each connected component
-        combosgMatches = {}
-        combosgMatchesNames = {}
+        component_map = {}
+        component_map_names = {}
         for i, connections in enumerate(list(nx.connected_components(gMatches))):
             # pull out name with the shortest length as representative "canonical" name for network
             shortest = min(connections, key=len)
             # store key/value pair for original name and new name in dictionary
             for component in connections:
-                combosgMatches[component] = shortest
+                component_map[component] = shortest
             shortest_two = sorted(connections, key=len)[:3]
             shortest_names = []
             for name in shortest_two:
@@ -191,11 +514,11 @@ class NetworkMatching(MatchingBase):
             canonical_name = ' -- '.join(shortest_names)
             # store key/value pair for original name and new name in dictionary
             for component in connections:
-                combosgMatchesNames[component] = f"{canonical_name} -- {i}"
+                component_map_names[component] = f"{canonical_name} -- {i}"
 
         # add new column for landlord network name
-        df_matches["fuzzy_match_name"] = df_matches["original_doc"].apply(lambda x: combosgMatches[x])  # this is likely the redundant column
-        df_matches["fuzzy_match_combo"] = df_matches["original_doc"].apply(lambda x: combosgMatchesNames[x])
+        df_matches["fuzzy_match_name"] = df_matches["original_doc"].apply(lambda x: component_map[x])  # this is likely the redundant column
+        df_matches["fuzzy_match_combo"] = df_matches["original_doc"].apply(lambda x: component_map_names[x])
 
         # merge clean name and clean address columns based on the simplified, calculated network name
         # df_matches = pd.merge(df_matches, df_filtered[['CLEAN_NAME', 'CLEAN_ADDRESS']], how='left', left_on='FUZZY_MATCH_NAME', right_on='CLEAN_NAME')
@@ -219,4 +542,3 @@ class NetworkMatching(MatchingBase):
         df_filtered = df_filtered.rename(columns={"fuzzy_match_combo": f"string_matched_name_{match_count+1}"})
 
         return df_filtered
-

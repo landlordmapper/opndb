@@ -14,6 +14,7 @@ class WorkflowConfigs(TypedDict):
     wkfl_type: str  # todo: create mapper that maps human readable wkfl type to WorkflowStage number
     wkfl_type_addrs: str
     wkfl_type_string_match: str
+    wkfl_type_ntwk: str
     accuracy: str
 
 class CleaningColumnMap(TypedDict):
@@ -112,3 +113,10 @@ class StringMatchParams(TypedDict):
     include_unresearched: bool
     nmslib_opts: NmslibOptions
     query_batch_opts: QueryBatchOptions
+
+class NetworkMatchParams(TypedDict):
+    taxpayer_name_col: str
+    entity_name_col: str
+    include_orgs: bool
+    include_unresearched: bool
+    string_match_name: str
