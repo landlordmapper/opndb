@@ -414,7 +414,7 @@ class NetworkMatchBase(MatchBase):
             ] = concatenated_names
 
             df_networked.loc[
-                df_networked[component_col_name] == ntwk, f"{network_col_name}_SHORT"
+                df_networked[component_col_name] == ntwk, f"{network_col_name}_short"
             ] = network_name_short
 
         return df_networked
@@ -428,7 +428,7 @@ class NetworkMatchBase(MatchBase):
             component_col_name: str
     ):
         df_networked = df_process_results.copy()
-        df_networked[f"{network_col_name}_TEXT"] = np.nan
+        df_networked[f"{network_col_name}_text"] = np.nan
         unique_networks = df_networked[component_col_name].unique()
         components = list(nx.connected_components(gMatches))
 
@@ -441,7 +441,7 @@ class NetworkMatchBase(MatchBase):
             else:
                 network_text = json.dumps(edges)
             df_networked.loc[
-                df_networked[component_col_name] == ntwk, f"{network_col_name}_TEXT"
+                df_networked[component_col_name] == ntwk, f"{network_col_name}_text"
             ] = network_text
 
         return df_networked
