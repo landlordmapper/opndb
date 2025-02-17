@@ -16,6 +16,7 @@ from opndb.utils import UtilsBase as utils
 
 class AddressBase:
 
+    # todo: get this out of here - all file processing should be handled in the workflow
     validated_addrs_path: Path = DATA_ROOT / Dirs.PROCESSED / Processed.VALIDATED_ADDRS
     unvalidated_addrs_path: Path = DATA_ROOT / Dirs.PROCESSED / Processed.UNVALIDATED_ADDRS
 
@@ -364,7 +365,15 @@ class AddressBase:
         """Removes validated addresses from 'DATA_ROOT/processed/unvalidated_addrs.csv'"""
         pass
 
+    @classmethod
+    def clean_poboxes(cls, df: pd.DataFrame):
+        """Cleans up and standardizes PO Box addresses"""
+        pass
 
+    @classmethod
+    def validate_poboxes(cls, df: pd.DataFrame):
+        """Checks for valid zip codes and city names in cleaned PO Box values."""
+        pass
 
 
 class AddressValidatorBase(AddressBase):

@@ -1,7 +1,14 @@
 from abc import abstractmethod, ABC
 from typing import Optional
+import pandas as pd
 
+from opndb.constants.columns import UnvalidatedAddrs as u, ValidatedAddrs as va
+from opndb.constants.files import Dirs as d, Processed as p
+from opndb.services.address import AddressBase as addr
+from opndb.services.dataframe import DataFrameOpsBase as ops_df, DataFrameColumnGenerators as col_df, \
+    DataFrameSubsetters as subset_df
 from opndb.types.base import WorkflowConfigs
+from opndb.utils import UtilsBase as utils
 
 
 class WkflAddressBase(ABC):
@@ -21,30 +28,50 @@ class WkflAddressBase(ABC):
 
     @abstractmethod
     def execute(self) -> None:
-        """Each workflow must implement an execute method"""
         pass
 
 class WkflAddressInitial(WkflAddressBase):
-
-    # todo: create excel file with different tabs for stages and save summary stats in each tab
-
     """
     Initial address workflow. Loads unique addresses from raw data, extracts PO boxes and saves master validated and
     unvalidated dataframes as instance variables.
     """
-
+    # todo: create excel file with different tabs for stages and save summary stats in each tab
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
+        self.dfs: dict[str, pd.DataFrame] = {
+            "unvalidated_addrs": ops_df.load_df(
+                utils.generate_path(
+                    d.PROCESSED,
+                    p.get_raw_filename_ext(p.UNVALIDATED_ADDRS, self.configs),
+                    self.configs["prev_stage"],
+                    self.configs["load_ext"]
+                ), str
+            ),
+        }
 
     def execute(self):
         """Executes initial data loading workflow."""
-        # load raw tax and corp/llc data
-        # pull addresses out of them
-        # get unique addresses out of all datasets
+        # todo: add conditional handling for whether or not street column is separate from full address column
+        # todo: use pydantic/panderas model to created validated object address rows
+        dfs = {
+            key: df.copy()
+            for key, df in self.dfs.items()
+        }
         # add is_pobox
-        # create self.df_validated and add po boxes, save to data dir
-        # remove them from the raw dataset
-        # create self.df_unvalidated and save to data dir
+        dfs["unvalidated_addrs"]["is_pobox"] = col_df.set_is_pobox(dfs["unvalidated_addrs"], u.TAX_STREET)
+        # subset is_pobox
+        df_pobox: pd.DataFrame = subset_df.get_is_pobox(dfs["unvalidated_addrs"])
+        # cleans up pobox addresses
+        poboxes_cleaned = addr.clean_poboxes(df_pobox)  # these should be pydantic/pandera model objects
+        # checks city names and zipcodes
+        poboxes_validated = addr.validate_poboxes(df_pobox)  # these should be pydantic/pandera model objects
+        # adds pobox rows with validated city/state/zip to df_validated_addrs
+        df_validated_addrs: pd.DataFrame = pd.DataFrame(poboxes_validated)
+        # removes validated pobox addrs from unvalidated_addrs, saves
+        df_unvalidated_addrs: pd.DataFrame = subset_df.update_unvalidated_addrs(
+            dfs["unvalidated_addrs"],
+            list(df_validated_addrs[va.CLEAN_ADDRESS].unique())
+        )
         # set summary stats
         # update configuration file
         pass
@@ -73,10 +100,24 @@ class WkflAddressGeocodio(WkflAddressBase):
 
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
+        self.dfs: dict[str, pd.DataFrame] = {
+            "unvalidated_addrs": ops_df.load_df(
+                utils.generate_path(
+                    d.PROCESSED,
+                    p.get_raw_filename_ext(p.UNVALIDATED_ADDRS, self.configs),
+                    self.configs["prev_stage"],
+                    self.configs["load_ext"]
+                ), str
+            ),
+        }
 
     def execute(self):
         """Executes geocodio data workflow."""
-        # pull unvalidated data into dataframes
+        dfs = {
+            key: df.copy()
+            for key, df in self.dfs.items()
+        }
+        # print out address count to be validated using geocodio
         # prompt user for api key and display warning with number of calls and estimated cost
         # call geocodio or exit
         # add validated addrs to the master files and save to data dirs

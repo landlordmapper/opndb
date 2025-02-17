@@ -3,7 +3,8 @@ from typing import Any, Callable, Type
 
 import pandas as pd
 
-from opndb.constants.columns import TaxpayerRecords as tr, ValidatedAddrs as va, ClassCodes as cc, Properties as p
+from opndb.constants.columns import TaxpayerRecords as tr, ValidatedAddrs as va, ClassCodes as cc, Properties as p, \
+    UnvalidatedAddrs as ua
 from opndb.services.string_clean import CleanStringBase as clean_base
 from opndb.services.string_clean import CleanStringName as clean_name
 from opndb.services.string_clean import CleanStringAddress as clean_addr
@@ -237,6 +238,17 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         df[is_llc_col] = df[col].apply(lambda name: clean_base.get_is_llc(name))
         return df
 
+    @classmethod
+    def set_is_pobox(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        """
+        Adds is_pobox boolean column to dataframe.
+
+        :param df: Dataframe to add column to
+        :param col: Column in the dataframe to be used to set is_pobox
+        """
+        df["is_pobox"] = df[col].apply(lambda addr: clean_base.get_is_pobox(addr))
+        return df
+
 
 class DataFrameSubsetters(DataFrameOpsBase):
     """Dataframe operations that return subsets."""
@@ -257,6 +269,23 @@ class DataFrameSubsetters(DataFrameOpsBase):
     @classmethod
     def get_active(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
         pass
+
+    @classmethod
+    def get_is_pobox(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """Subsets dataframe to include only addresses identified as matching a PO Box pattern."""
+        return df[df["is_pobox"] == True]
+
+    @classmethod
+    def update_unvalidated_addrs(cls, df: pd.DataFrame, addrs: list[str]) -> pd.DataFrame:
+        """
+        Removes addresses from the unvalidated_addrs master dataset. This should be called after validating new
+        addresses.
+
+        :param df: Dataframe containing the previous unvalidated addresses dataset
+        :param addrs: Addresses to remove from the unvalidated_addrs master dataset
+        """
+        # todo: figure out how to handle saving dfs, whether or not it should be done in the workflows or in these
+        return df[~df[ua.TAX_FULL_ADDRESS].isin(addrs)]
 
 
 class DataFrameCleaners(DataFrameOpsBase):

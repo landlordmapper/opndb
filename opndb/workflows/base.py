@@ -143,7 +143,8 @@ class WkflDataLoad(WorkflowBase):
 
 class WkflDataClean(WorkflowBase):
     """
-    Initial data cleaning.
+    Initial data cleaning. Runs cleaners and validators on raw datasets. if they pass the validation checks, raw
+    datasets are broken up and stored in their appropriate locations.
 
     INPUTS:
         - Raw taxpayer, corporate and LLC data
@@ -153,10 +154,12 @@ class WkflDataClean(WorkflowBase):
             - 'ROOT/raw/class_code_descriptions[FileExt]'
     OUTPUTS:
         - Cleaned taxpayer, corporate and LLC data
+            = 'ROOT/processed/properties[FileExt]'
             - 'ROOT/processed/taxpayer_records[FileExt]'
             - 'ROOT/processed/corps[FileExt]'
             - 'ROOT/processed/llcs[FileExt]'
             - 'ROOT/processed/class_code_descriptions[FileExt]'
+            - 'ROOT/processed/unvalidated_addrs[FileExt]'
     """
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
@@ -310,6 +313,7 @@ class WkflDataClean(WorkflowBase):
         # todo: change column name to clean_name and clean_address
         # todo: merge raw taxpayer data into cleaned data, rename raw_name and raw_address
         # todo: create clean_address column with comma-separated addresses - will be single source of truth
+        # todo: fetch unique raw addresses and store in PROCESSED/unvalidated_addrs
         # set summary stats
         # update configuration file
         # return?

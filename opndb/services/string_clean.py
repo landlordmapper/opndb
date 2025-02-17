@@ -4,7 +4,7 @@ import pandas as pd
 import word2number as w2n
 
 from opndb.constants.base import DIRECTIONS, STREET_SUFFIXES, SECONDARY_KEYWORDS, CORE_NAME_KEYS, TRUSTS_STRINGS, \
-    TRUSTS, CORP_WORDS
+    TRUSTS, CORP_WORDS, PO_BOXES
 
 
 class CleanStringBase:
@@ -99,6 +99,14 @@ class CleanStringBase:
         else:
             return False
 
+    @classmethod
+    def get_is_pobox(cls, text: str) -> bool:
+        """Returns True if a PO box address pattern is identified in the string."""
+        addr_spaces_removed = text.replace(" ", "")
+        for po in PO_BOXES:
+            if addr_spaces_removed.startswith(po):
+                return True
+        return False
 
     @classmethod
     def make_upper(cls, text: str) -> str:
