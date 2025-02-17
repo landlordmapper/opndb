@@ -119,7 +119,7 @@ class DataFrameOpsBase(object):
         return any(code in rental_classes for code in class_codes)
 
     @classmethod
-    def generate_is_rental(cls, df_props: pd.DataFrame, df_class_codes: pd.DataFrame) -> pd.DataFrame:
+    def set_is_rental(cls, df_props: pd.DataFrame, df_class_codes: pd.DataFrame) -> pd.DataFrame:
         """
         Subsets property dataframe to only include properties associated with rental class codes. Handles situations in
         which multiple class codes are associated with a single property and are separated by commas.
