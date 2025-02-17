@@ -7,44 +7,43 @@ class ClassCodes:
     DESCRIPTION: str = "description"
     IS_RENTAL: str = "is_rental"
 
-class TaxpayerRecords:
+class Properties:
     PIN: str = "pin"
     TAX_NAME: str = "tax_name"
-    TAX_ADDR: str = "tax_addr_full"
-    TAX_STREET: str = "tax_street"
-    TAX_CITY: str = "tax_city"
-    TAX_STATE: str = "tax_state"
-    TAX_ZIP: str = "tax_zip"
+    TAX_ADDRESS: str = "tax_address"
     BLDG_CLASS: str = "bldg_class"
+
+class TaxpayerRecords:
+    RAW_NAME: str = "raw_name"
+    RAW_ADDRESS: str = "raw_addr_full"
+    RAW_STREET: str = "raw_street"
+    RAW_CITY: str = "raw_city"
+    RAW_STATE: str = "raw_state"
+    RAW_ZIP: str = "raw_zip"
+    CLEAN_NAME: str = "clean_name"
+    CLEAN_ADDRESS: str = "clean_address"
+    CLEAN_STREET: str = "clean_street"
+    CLEAN_CITY: str = "clean_city"
+    CLEAN_STATE: str = "clean_state"
+    CLEAN_ZIP: str = "clean_zip"
+    CORE_NAME: str = "core_name"
     IS_RENTAL: str = "is_rental"
     IS_BANK: str = "is_bank"
     IS_PERSON: str = "is_person"
+    IS_COMMON_NAME: str = "is_common_name"
     IS_ORG: str = "is_org"
+    IS_LLC: str = "is_llc"
 
     # merged address data
     # todo: determine whether it's necessary to include all these? or only include ones that are absolutely necessary for whatever is being done
-    NUMBER: str = "number"
-    PREDIRECTIONAL: str = "predirectional"
-    PREFIX: str = "prefix"
-    STREET: str = "street"
-    SUFFIX: str = "suffix"
-    POSTDIRECTIONAL: str = "postdirectional"
-    SECONDARYUNIT: str = "secondaryunit"
-    SECONDARYNUMBER: str = "secondarynumber"
-    CITY: str = "city"
-    COUNTY: str = "county"
-    STATE: str = "state"
-    ZIP: str = "zip"
-    COUNTRY: str = "country"
-    LNG: str = "lng"
-    LAT: str = "lat"
-    ACCURACY: str = "accuracy"
     FORMATTED_ADDRESS: str = "formatted_address"
-
 
 class Corps:
 
-    NAME: str = "name"
+    RAW_NAME: str = "raw_name"
+    CLEAN_NAME: str = "clean_name"
+    CORE_NAME: str = "core_name"
+
     FILE_NUMBER: str = "file_number"
     DATE_INCORPORATED: str = "date_incorporated"
 
@@ -56,7 +55,9 @@ class Corps:
     PRESIDENT_ADDR_ZIP: str = "president_addr_zip"
     IS_BANK_PRESIDENT: str = "is_bank_president"
     IS_PERSON_PRESIDENT: str = "is_person_president"
+    IS_COMMON_NAME_PRESIDENT: str = "is_common_name_president"
     IS_ORG_PRESIDENT: str = "is_org_president"
+    IS_LLC_PRESIDENT: str = "is_llc_president"
 
     SECRETARY_NAME: str = "secretary_name"
     SECRETARY_ADDR: str = "secretary_addr"
@@ -66,12 +67,17 @@ class Corps:
     SECRETARY_ADDR_ZIP: str = "secretary_addr_zip"
     IS_BANK_SECRETARY: str = "is_bank_secretary"
     IS_PERSON_SECRETARY: str = "is_person_secretary"
+    IS_COMMON_NAME_SECRETARY: str = "is_common_name_secretary"
     IS_ORG_SECRETARY: str = "is_org_secretary"
+    IS_LLC_SECRETARY: str = "is_llc_secretary"
 
 
 class LLCs:
 
-    NAME: str = "name"
+    RAW_NAME: str = "raw_name"
+    CLEAN_NAME: str = "clean_name"
+    CORE_NAME: str = "core_name"
+
     FILE_NUMBER: str = "file_number"
     DATE_INCORPORATED: str = "date_incorporated"
 
@@ -81,9 +87,11 @@ class LLCs:
     MANAGER_MEMBER_ADDR_CITY: str = "manager_member_addr"
     MANAGER_MEMBER_ADDR_STATE: str = "manager_member_addr"
     MANAGER_MEMBER_ADDR_ZIP: str = "manager_member_addr"
-    IS_BANK_MANAGER_MEMBER: str = "is_bank_secretary"
-    IS_PERSON_MANAGER_MEMBER: str = "is_person_secretary"
+    IS_BANK_MANAGER_MEMBER: str = "is_bank_manager_member"
+    IS_PERSON_MANAGER_MEMBER: str = "is_person_manager_member"
+    IS_COMMON_NAME_MANAGER_MEMBER: str = "is_common_name_manager_member"
     IS_ORG_MANAGER_MEMBER: str = "is_org_secretary"
+    IS_LLC_MANAGER_MEMBER: str = "is_llc_secretary"
 
     AGENT_NAME: str = "agent_name"
     AGENT_ADDR: str = "agent_addr"
@@ -93,7 +101,9 @@ class LLCs:
     AGENT_ADDR_ZIP: str = "agent_addr_zip"
     IS_BANK_AGENT: str = "is_bank_agent"
     IS_PERSON_AGENT: str = "is_person_agent"
+    IS_COMMON_NAME_AGENT: str = "is_common_name_agent"
     IS_ORG_AGENT: str = "is_org_agent"
+    IS_LLC_AGENT: str = "is_llc_agent"
 
     OFFICE_ADDR: str = "office_addr"
     OFFICE_ADDR_STREET: str = "office_addr_street"
@@ -103,11 +113,7 @@ class LLCs:
 
 
 class ValidatedAddrs:
-    TAX_ADDR: str = "tax_addr_full"
-    TAX_STREET: str = "tax_street"
-    TAX_CITY: str = "tax_city"
-    TAX_STATE: str = "tax_state"
-    TAX_ZIP: str = "tax_zip"
+    CLEAN_ADDRESS: str = "tax_addr_full"
     NUMBER: str = "number"
     PREDIRECTIONAL: str = "predirectional"
     PREFIX: str = "prefix"

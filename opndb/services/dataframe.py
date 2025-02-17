@@ -4,10 +4,10 @@ from typing import Any, Callable, Type
 import pandas as pd
 
 from opndb.constants.columns import TaxpayerRecords, ValidatedAddrs, ClassCodes
-from opndb.services.string_cleaning import CleanStringBase as clean_base
-from opndb.services.string_cleaning import CleanStringName as clean_name
-from opndb.services.string_cleaning import CleanStringAddress as clean_addr
-from opndb.services.string_cleaning import CleanStringAccuracy as clean_acc
+from opndb.services.string_clean import CleanStringBase as clean_base
+from opndb.services.string_clean import CleanStringName as clean_name
+from opndb.services.string_clean import CleanStringAddress as clean_addr
+from opndb.services.string_clean import CleanStringAccuracy as clean_acc
 
 
 class DataFrameOpsBase(object):
@@ -97,17 +97,18 @@ class DataFrameOpsBase(object):
 
     # MOVE THESE TO OTHER CLASS? boolean col generators?
     @classmethod
-    def merge_validated_addrs(cls, df_props: pd.DataFrame, df_addrs: pd.DataFrame) -> pd.DataFrame:
+    def merge_validated_addrs(cls, df: pd.DataFrame, df_addrs: pd.DataFrame, clean_addr_cols: list[str]) -> pd.DataFrame:
         """Merges validated address data into property taxpayer dataset."""
         # todo: remove repeated cols (combine columns function from old workflow)
         # todo: remove unnecessary columns before returning
         # todo: test to confirm whether we should drop duplicates here
+        va = ValidatedAddrs
         return pd.merge(
-            df_props,
-            df_addrs,
+            df,
+            df_addrs[[va.CLEAN_ADDRESS, va.FORMATTED_ADDRESS]],
             how="left",
-            left_on=TaxpayerRecords.TAX_ADDR,
-            right_on=ValidatedAddrs.TAX_ADDR
+            left_on=clean_addr_col,
+            right_on=va.CLEAN_ADDRESS
         )
 
     @classmethod
@@ -149,6 +150,14 @@ class DataFrameOpsBase(object):
         rental_addrs: list[str] = list(df_rentals_initial[TaxpayerRecords.FORMATTED_ADDRESS].dropna().unique())
         df_nonrentals: pd.DataFrame = df_all[df_all[TaxpayerRecords.IS_RENTAL] == False]
         return df_nonrentals[df_nonrentals[TaxpayerRecords.FORMATTED_ADDRESS].isin(rental_addrs)]
+
+
+class DataFrameMergers(DataFrameOpsBase):
+    pass
+
+
+class DataFrameColumnGenerators(DataFrameOpsBase):
+    pass
 
 
 class DataFrameCleaners(DataFrameOpsBase):

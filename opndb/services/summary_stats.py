@@ -67,6 +67,7 @@ class SummaryStats(object):
         # number of unique corps pulled in
         # number of unique LLCs pulled in
         # number of taxpayer records identified as corp/entities but NOT assigned a corp/LLC
+        # number of IS_LLC == True rows vs number of matched LLCs
         pass
 
     @classmethod

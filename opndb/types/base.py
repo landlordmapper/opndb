@@ -25,6 +25,11 @@ class CleaningColumnMap(TypedDict):
         str, dict[str, [list[str]]]
     }
 
+class BooleanColumnMap(TypedDict):
+    taxpayer_records: list[str]
+    corps: list[str]
+    llcs: list[str]
+
 class RawAddress(TypedDict, total=False):
     """
     Used to generate list of unique addresses from raw data. Handles situations in which there's only a single field
