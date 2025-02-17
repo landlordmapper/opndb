@@ -3,7 +3,7 @@ from typing import Any, Callable, Type
 
 import pandas as pd
 
-from opndb.constants.columns import TaxpayerRecords, ValidatedAddrs, ClassCodes
+from opndb.constants.columns import TaxpayerRecords as tr, ValidatedAddrs as va, ClassCodes as cc
 from opndb.services.string_clean import CleanStringBase as clean_base
 from opndb.services.string_clean import CleanStringName as clean_name
 from opndb.services.string_clean import CleanStringAddress as clean_addr
@@ -95,22 +95,6 @@ class DataFrameOpsBase(object):
         df_freq.columns = [unique_col, "count"]
         return df_freq
 
-    # MOVE THESE TO OTHER CLASS? boolean col generators?
-    @classmethod
-    def merge_validated_addrs(cls, df: pd.DataFrame, df_addrs: pd.DataFrame, clean_addr_cols: list[str]) -> pd.DataFrame:
-        """Merges validated address data into property taxpayer dataset."""
-        # todo: remove repeated cols (combine columns function from old workflow)
-        # todo: remove unnecessary columns before returning
-        # todo: test to confirm whether we should drop duplicates here
-        va = ValidatedAddrs
-        return pd.merge(
-            df,
-            df_addrs[[va.CLEAN_ADDRESS, va.FORMATTED_ADDRESS]],
-            how="left",
-            left_on=clean_addr_col,
-            right_on=va.CLEAN_ADDRESS
-        )
-
     @classmethod
     def rental_class_check(cls, class_codes: list[str], rental_classes: list[str]) -> bool:
         """
@@ -118,6 +102,33 @@ class DataFrameOpsBase(object):
         """
         return any(code in rental_classes for code in class_codes)
 
+
+class DataFrameMergers(DataFrameOpsBase):
+    """
+    Dataframe operations that merge multiple dataframes and handle post-merge cleanup (dropping duplicates, combining
+    columns, etc.)
+    """
+    @classmethod
+    def merge_orgs(cls, df_taxpayers: pd.DataFrame, df_orgs: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @classmethod
+    def merge_validated_addrs(cls, df: pd.DataFrame, df_addrs: pd.DataFrame, clean_addr_cols: list[str]) -> pd.DataFrame:
+        """Merges validated address data into property taxpayer dataset."""
+        # todo: remove repeated cols (combine columns function from old workflow)
+        # todo: remove unnecessary columns before returning
+        # todo: test to confirm whether we should drop duplicates here
+        return pd.merge(
+            df,
+            df_addrs[[va.CLEAN_ADDRESS, va.FORMATTED_ADDRESS]],
+            how="left",
+            left_on=clean_addr_cols[0],
+            right_on=va.CLEAN_ADDRESS
+        )
+
+
+class DataFrameColumnGenerators(DataFrameOpsBase):
+    """Dataframe operations that generate new columns."""
     @classmethod
     def set_is_rental(cls, df_props: pd.DataFrame, df_class_codes: pd.DataFrame) -> pd.DataFrame:
         """
@@ -127,9 +138,9 @@ class DataFrameOpsBase(object):
         :param df_class_codes: Dataframe containing building class code descriptions
         :return: D
         """
-        df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes[ClassCodes.IS_RENTAL] == True]
-        rental_codes: list[str] = list(df_rental_codes[ClassCodes.IS_RENTAL])
-        df_props[TaxpayerRecords.IS_RENTAL] = df_props[TaxpayerRecords.BLDG_CLASS].apply(
+        df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes[cc.IS_RENTAL] == True]
+        rental_codes: list[str] = list(df_rental_codes[cc.IS_RENTAL])
+        df_props[tr.IS_RENTAL] = df_props[tr.BLDG_CLASS].apply(
             lambda codes: cls.rental_class_check(
                 [code.strip() for code in codes.split(",")],
                 rental_codes
@@ -137,6 +148,33 @@ class DataFrameOpsBase(object):
         )
         return df_props
 
+    @classmethod
+    def set_core_name(cls, df: pd.DataFrame, name_col: str) -> pd.DataFrame:
+        pass
+
+    @classmethod
+    def set_is_bank(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        pass
+
+    @classmethod
+    def set_is_person(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        pass
+
+    @classmethod
+    def set_is_common_name(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        pass
+
+    @classmethod
+    def set_is_org(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        pass
+
+    @classmethod
+    def set_is_llc(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        pass
+
+
+class DataFrameSubsetters(DataFrameOpsBase):
+    """Dataframe operations that return subsets."""
     @classmethod
     def get_nonrentals_from_addrs(cls, df_all: pd.DataFrame, df_rentals_initial: pd.DataFrame) -> pd.DataFrame:
         """
@@ -147,17 +185,13 @@ class DataFrameOpsBase(object):
         :param df_rentals_initial: Dataframe containing initial rental subset
         :return: Dataframe containing properties excluded from initial rental subset with matching validated taxpayer addresses
         """
-        rental_addrs: list[str] = list(df_rentals_initial[TaxpayerRecords.FORMATTED_ADDRESS].dropna().unique())
-        df_nonrentals: pd.DataFrame = df_all[df_all[TaxpayerRecords.IS_RENTAL] == False]
-        return df_nonrentals[df_nonrentals[TaxpayerRecords.FORMATTED_ADDRESS].isin(rental_addrs)]
+        rental_addrs: list[str] = list(df_rentals_initial[tr.FORMATTED_ADDRESS].dropna().unique())
+        df_nonrentals: pd.DataFrame = df_all[df_all[tr.IS_RENTAL] == False]
+        return df_nonrentals[df_nonrentals[tr.FORMATTED_ADDRESS].isin(rental_addrs)]
 
-
-class DataFrameMergers(DataFrameOpsBase):
-    pass
-
-
-class DataFrameColumnGenerators(DataFrameOpsBase):
-    pass
+    @classmethod
+    def get_active(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        pass
 
 
 class DataFrameCleaners(DataFrameOpsBase):

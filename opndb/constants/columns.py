@@ -46,6 +46,7 @@ class Corps:
 
     FILE_NUMBER: str = "file_number"
     DATE_INCORPORATED: str = "date_incorporated"
+    STATUS: str = "status"
 
     PRESIDENT_NAME: str = "president_name"
     PRESIDENT_ADDR: str = "president_addr"
@@ -80,6 +81,7 @@ class LLCs:
 
     FILE_NUMBER: str = "file_number"
     DATE_INCORPORATED: str = "date_incorporated"
+    STATUS: str = "status"
 
     MANAGER_MEMBER_NAME: str = "manager_member_name"
     MANAGER_MEMBER_ADDR: str = "manager_member_addr"

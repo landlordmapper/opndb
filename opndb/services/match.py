@@ -23,7 +23,7 @@ from opndb.utils import UtilsBase as utils
 
 # todo: add type hints and docstrings where missing
 
-class MatchingBase:
+class MatchBase:
 
     @classmethod
     def check_name(cls, row: pd.Series) -> bool:
@@ -85,7 +85,7 @@ class MatchingBase:
             return row["GCD_FORMATTED_MATCH"]
 
 
-class StringMatching(MatchingBase):
+class StringMatch(MatchBase):
 
     @classmethod
     def concatenate_name_addr(cls, df: pd.DataFrame, name_addr_col: str, name_col: str, addr_col: str) -> pd.DataFrame:
@@ -166,7 +166,7 @@ class StringMatching(MatchingBase):
             return df_matches
 
 
-class NetworkMatching(MatchingBase):
+class NetworkMatchBase(MatchBase):
     """
     Network matching service class. Contains all functions related to building network graph objects and connected
     component maps. Methods are defined roughly in their order of execution in generalized network graph workflows.
@@ -542,3 +542,18 @@ class NetworkMatching(MatchingBase):
         df_filtered = df_filtered.rename(columns={"fuzzy_match_combo": f"string_matched_name_{match_count+1}"})
 
         return df_filtered
+
+
+class NetworkMatchGraph(NetworkMatchBase):
+    """Class for all network-related functions that return graph objects."""
+    pass
+
+
+class NetworkMatchDF(NetworkMatchBase):
+    """Class for all network-related functions that return dataframes."""
+    pass
+
+
+class NetworkMatchNodesEdges(NetworkMatchBase):
+    """Class for all network-related functions that create, manipulate and return nodes and edges of graph objects."""
+    pass
