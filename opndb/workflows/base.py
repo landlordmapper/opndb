@@ -72,7 +72,6 @@ class WorkflowBase(ABC):
 
     @abstractmethod
     def execute(self) -> None:
-        """Each workflow must implement an execute method"""
         pass
 
 
@@ -235,7 +234,6 @@ class WkflDataClean(WorkflowBase):
     def execute(self):
 
         # todo: add validator that checks for required columns, throw error/failure immediately if not
-        # todo: add "clean_name" and "core_name" columns, differentiate from raw_name
 
         # execute on all dataframes and columns
         for df in self.dfs.values():
@@ -347,7 +345,6 @@ class WkflAddressValidation(WorkflowBase):
             # set stage
 
 
-
 class WkflNameAnalysis(WorkflowBase):
     """
     Taxpayer name analysis
@@ -407,6 +404,7 @@ class WkflNameAnalysis(WorkflowBase):
         # set stage
         pass
 
+
 class WkflAddressAnalysis(WorkflowBase):
     """
     Address analysis
@@ -449,6 +447,7 @@ class WkflAddressAnalysis(WorkflowBase):
         # update configuration file
         # set stage
         pass
+
 
 class WkflRentalSubset(WorkflowBase):
     """
@@ -523,6 +522,7 @@ class WkflRentalSubset(WorkflowBase):
         # set stage
         pass
 
+
 class WkflCleanMerge(WorkflowBase):
     """
     Additional data cleaning & merging.
@@ -567,8 +567,10 @@ class WkflCleanMerge(WorkflowBase):
         }
 
     def execute(self):
+        # fixing taxpayer addresses based on manual research
         # fixing taxpayer names based on manual research
-        # add core name
+        # add "clean_name" and "core_name" columns
+        # add bool columns for is_common_name, is_org, is_llc, is_person, is_bank
         # merging corporate data & validated addresses into original property dataset (or creating new one entirely?)
         # adding boolean columns necessary for string matching & network graph generation
         # create new df with ONLY the columns required to run string matching - avoids large unwieldy datasets like in original chicago code

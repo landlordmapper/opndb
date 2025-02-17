@@ -7,7 +7,7 @@ import networkx as nx
 from opndb.constants.columns import TaxpayerRecords
 from opndb.constants.files import Processed, Dirs, Analysis
 from opndb.services.dataframe import DataFrameOpsBase as df_ops
-from opndb.services.matching import StringMatching, NetworkMatching, MatchingBase
+from opndb.services.match import StringMatching, NetworkMatching, MatchingBase
 from opndb.types.base import WorkflowConfigs, StringMatchParams, NmslibOptions
 from opndb.utils import UtilsBase as utils
 

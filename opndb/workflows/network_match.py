@@ -4,7 +4,7 @@ import networkx as nx
 import pandas as pd
 
 from opndb.constants.files import Processed, Dirs, Analysis
-from opndb.services.matching import NetworkMatching
+from opndb.services.match import NetworkMatching
 from opndb.types.base import WorkflowConfigs, NetworkMatchParams
 from opndb.services.dataframe import DataFrameOpsBase as df_ops
 from opndb.utils import UtilsBase as utils
