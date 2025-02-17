@@ -1,15 +1,104 @@
 import re
 import string
-from curses.ascii import isdigit
-
+import pandas as pd
 import word2number as w2n
 
-from opndb.constants.base import DIRECTIONS, STREET_SUFFIXES, SECONDARY_KEYWORDS
+from opndb.constants.base import DIRECTIONS, STREET_SUFFIXES, SECONDARY_KEYWORDS, CORE_NAME_KEYS, TRUSTS_STRINGS, \
+    TRUSTS, CORP_WORDS
 
 
 class CleanStringBase:
 
     """Functions that accept a single string as an argument and return the string cleaned."""
+
+    # MOVE THESE? aren't necessarily string cleaners
+    @classmethod
+    def core_name(cls, text: str) -> str:
+        """
+        Extracts core name from clean name by removing all words found in CORE_NAME_KEYS.
+
+        Examples:
+            'Oak Grove Properties' -> 'Oak Grove'
+            'Pleasant View Apartments' -> 'Pleasant View'
+        """
+        try:
+            text = text + " "
+            for key in CORE_NAME_KEYS:
+                text = re.sub(r"{}".format(key), "", text)
+            return text.strip()
+        except:
+            return text
+
+    @classmethod
+    def get_is_bank(cls, text: str) -> bool:
+        """Returns True if the string contains keywords associated with banks."""
+        # todo: figure out best way to check if text is in BANK_VALUES
+        if pd.notnull(text):
+            for key in BANK_VALUES:
+                if key in text:
+                    return True
+        return False
+
+    @classmethod
+    def get_is_trust(cls, text: str) -> bool:
+        """Returns True if the string contains keywords associated with trusts."""
+        if pd.notnull(text):
+            name_split = text.split()
+            for name in name_split:
+                if name in TRUSTS:
+                    return True
+            for t in TRUSTS_STRINGS:
+                if t in text:
+                    return True
+        return False
+
+    @classmethod
+    def get_is_person(cls, text: str) -> bool:
+        """Returns True if the string is identified as a person."""
+        # todo: figure out a better way to check if text is in NAMES_LIST
+        try:
+            text_list = text.split()
+            if len(text_list) > 2 and text_list[-1] in ["JR", "SR"]:
+                if all(word in NAMES_LIST for word in text_list[:-1]):
+                    return True
+            if all(word in NAMES_LIST for word in text_list):
+                return True
+            return False
+        except:
+            return False
+
+    @classmethod
+    def get_is_common_name(cls, text: str) -> bool:
+        """Checks common names data and returns True if the name passed as a parameter is found within it."""
+        # todo: figure out a better way to check if text is in COMMON_NAMES
+        return text in COMMON_NAMES
+
+    @classmethod
+    def get_is_org(cls, text: str) -> bool:
+        """Returns True if the string contains keywords associated with organizations."""
+        try:
+            all_words = []
+            for item in text.split():
+                if item in CORP_WORDS:
+                    all_words.append(True)
+                else:
+                    all_words.append(False)
+            if True in all_words:
+                return True
+            else:
+                return False
+        except:
+            return False
+
+    @classmethod
+    def get_is_llc(cls, text: str) -> bool:
+        """Returns True if the string contains LLC."""
+        text_split = text.split()
+        if "LLC" in text_split or "LLC" in text[-4:]:
+            return True
+        else:
+            return False
+
 
     @classmethod
     def make_upper(cls, text: str) -> str:

@@ -3,7 +3,7 @@ from typing import Any, Callable, Type
 
 import pandas as pd
 
-from opndb.constants.columns import TaxpayerRecords as tr, ValidatedAddrs as va, ClassCodes as cc
+from opndb.constants.columns import TaxpayerRecords as tr, ValidatedAddrs as va, ClassCodes as cc, Properties as p
 from opndb.services.string_clean import CleanStringBase as clean_base
 from opndb.services.string_clean import CleanStringName as clean_name
 from opndb.services.string_clean import CleanStringAddress as clean_addr
@@ -140,7 +140,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         """
         df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes[cc.IS_RENTAL] == True]
         rental_codes: list[str] = list(df_rental_codes[cc.IS_RENTAL])
-        df_props[tr.IS_RENTAL] = df_props[tr.BLDG_CLASS].apply(
+        df_props[tr.IS_RENTAL] = df_props[p.CLASS_CODE].apply(
             lambda codes: cls.rental_class_check(
                 [code.strip() for code in codes.split(",")],
                 rental_codes
@@ -150,27 +150,92 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def set_core_name(cls, df: pd.DataFrame, name_col: str) -> pd.DataFrame:
-        pass
+        """
+        Adds core_name column to dataframe.
+
+        :param df: Dataframe to add column to
+        :param name_col: Column in the dataframe to be used to derive core name
+        """
+        df["core_name"] = df[name_col].apply(lambda name: clean_base.core_name(name))
+        return df
 
     @classmethod
-    def set_is_bank(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
-        pass
+    def set_is_bank(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
+        """
+        Adds is_bank boolean column to dataframe.
+
+        :param df: Dataframe to add column to
+        :param name_col: Column in the dataframe to be used to set is_bank
+        :param suffix: Suffix to add to column name (ex: is_bank_president, is_bank_agent, etc.)
+        """
+        is_bank_col: str = f"is_bank_{suffix}" if suffix else "is_bank"
+        df[is_bank_col] = df[col].apply(lambda name: clean_base.get_is_bank(name))
+        return df
 
     @classmethod
-    def set_is_person(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
-        pass
+    def set_is_trust(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
+        """
+        Adds is_trust boolean column to dataframe.
+
+        :param df: Dataframe to add column to
+        :param name_col: Column in the dataframe to be used to set is_trust
+        :param suffix: Suffix to add to column name (ex: is_trust_president, is_trust_agent, etc.)
+        """
+        is_trust_col: str = f"is_trust_{suffix}" if suffix else "is_trust"
+        df[is_trust_col] = df[col].apply(lambda name: clean_base.get_is_trust(name))
+        return df
 
     @classmethod
-    def set_is_common_name(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
-        pass
+    def set_is_person(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
+        """
+        Adds is_person boolean column to dataframe.
+
+        :param df: Dataframe to add column to
+        :param name_col: Column in the dataframe to be used to set is_person
+        :param suffix: Suffix to add to column name (ex: is_person_president, is_person_agent, etc.)
+        """
+        is_person_col: str = f"is_person_{suffix}" if suffix else "is_person"
+        df[is_person_col] = df[col].apply(lambda name: clean_base.get_is_person(name))
+        return df
 
     @classmethod
-    def set_is_org(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
-        pass
+    def set_is_common_name(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
+        """
+        Adds is_common_name boolean column to dataframe.
+
+        :param df: Dataframe to add column to
+        :param name_col: Column in the dataframe to be used to set is_common_name
+        :param suffix: Suffix to add to column name (ex: is_common_name_president, is_common_name_agent, etc.)
+        """
+        is_common_name_col: str = f"is_common_name_{suffix}" if suffix else "is_common_name"
+        df[is_common_name_col] = df[col].apply(lambda name: clean_base.get_is_common_name(name))
+        return df
 
     @classmethod
-    def set_is_llc(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
-        pass
+    def set_is_org(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
+        """
+        Adds is_org boolean column to dataframe.
+
+        :param df: Dataframe to add column to
+        :param name_col: Column in the dataframe to be used to set is_org
+        :param suffix: Suffix to add to column name (ex: is_org_president, is_org_agent, etc.)
+        """
+        is_org_col: str = f"is_org_{suffix}" if suffix else "is_org"
+        df[is_org_col] = df[col].apply(lambda name: clean_base.get_is_org(name))
+        return df
+
+    @classmethod
+    def set_is_llc(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
+        """
+        Adds is_llc boolean column to dataframe.
+
+        :param df: Dataframe to add column to
+        :param name_col: Column in the dataframe to be used to set is_llc
+        :param suffix: Suffix to add to column name (ex: is_llc_president, is_llc_agent, etc.)
+        """
+        is_llc_col: str = f"is_llc_{suffix}" if suffix else "is_llc"
+        df[is_llc_col] = df[col].apply(lambda name: clean_base.get_is_llc(name))
+        return df
 
 
 class DataFrameSubsetters(DataFrameOpsBase):
