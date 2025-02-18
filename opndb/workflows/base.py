@@ -98,6 +98,48 @@ class WorkflowBase(ABC):
             dfs[key] = self.load_df(key, path)
         return dfs
 
+class WorkflowStandardBase(WorkflowBase):
+    """Base class for workflows that follow the standard load->process->save pattern"""
+    def execute(self) -> None:
+        """Template method implementation"""
+        try:
+            dfs_load = self.load()
+            dfs_process = self.process(dfs_load)
+            summary_stats = self.get_summary_stats(dfs_load, dfs_process)
+            self.save(dfs_process, summary_stats)
+            self.update_configs(self.configs)
+        except Exception as e:
+            raise
+
+    @abstractmethod
+    def load(self) -> dict[str, pd.DataFrame]:
+        """Loads data files into dataframes. Returns dictionary mapping dataframes to IDs."""
+        pass
+
+    @abstractmethod
+    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+        """
+        Executes business & transformation logic for the workflow. Returns dictionary mapping processed dataframes to
+        IDs, ready to be saved.
+        """
+        pass
+
+    @abstractmethod
+    def get_summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+        """Executes summary stats builder for the workflow."""
+        # todo: determine summary stats data type (return data hint)
+        pass
+
+    @abstractmethod
+    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
+        """Saves processed dataframes."""
+        pass
+
+    @abstractmethod
+    def update_configs(self, configs: WorkflowConfigs) -> None:
+        """Updates configurations based on current workflow stage."""
+        pass
+
 
 class WkflPreliminary(WorkflowBase):
     """Preliminary workflow stage. Merge class codes to taxpayer records, change column names, etc."""
@@ -163,7 +205,7 @@ class WkflDataLoad(WorkflowBase):
         # update configuration file
 
 
-class WkflDataClean(WorkflowBase):
+class WkflDataClean(WorkflowStandardBase):
     """
     Initial data cleaning. Runs cleaners and validators on raw datasets. if they pass the validation checks, raw
     datasets are broken up and stored in their appropriate locations.
@@ -221,20 +263,19 @@ class WkflDataClean(WorkflowBase):
     }
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
-        self.required_dfs: dict[str, Path] = {
+
+    def load(self):
+        dfs_load_path_map: dict[str, Path] = {
             "taxpayer_records": path_gen.raw_taxpayer_records(self.configs),
             "corps": path_gen.raw_corps(self.configs),
             "llcs": path_gen.raw_llcs(self.configs),
             "class_codes": path_gen.raw_class_codes(self.configs)
         }
+        return self.set_working_dfs(dfs_load_path_map)
 
-    def execute(self):
+    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
 
         # todo: add validator that checks for required columns, throw error/failure immediately if not
-
-        # load & cache required dataframes
-        dfs = self.set_working_dfs(self.required_dfs)
-
         # execute on all dataframes and columns
         for df in dfs.values():
             df = clean_df_base.make_upper(df)
@@ -308,7 +349,13 @@ class WkflDataClean(WorkflowBase):
         # todo: fetch unique raw addresses and store in PROCESSED/unvalidated_addrs
         # set summary stats
         # update configuration file
-        # return?
+        return dfs
+
+    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
+        dfs_save_path_map: dict[str, Path] = {
+
+        }
+
 
 
 class WkflAddressValidation(WorkflowBase):
