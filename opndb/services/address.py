@@ -291,12 +291,13 @@ class AddressBase:
         pass
 
     @classmethod
-    def run_geocodio(cls, api_key: str, df_addrs: pd.DataFrame, interval: int = 50):
+    def run_geocodio(cls, api_key: str, df_addrs: pd.DataFrame, addr_col: str, interval: int = 50):
         """
         Executes Geocodio API calls for raw, unvalidated addresses.
 
         :param api_key: user's unique Geocodio API key
         :param df_addrs: Dataframe of rows containing raw address data, with one row per unique address.
+        :param addr_col: Column name containing the addresses to be validated..
         :param interval: Optional interval setting to control how many Geocodio calls should trigger a partial save.
         :return:
         """
@@ -307,7 +308,7 @@ class AddressBase:
                 # store all unique addresses from dataframe into future object
                 futures = {}
                 for i, row in df_addrs.iterrows():
-                    future = executor.submit(cls.call_geocodio, api_key, row["complete_address"])
+                    future = executor.submit(cls.call_geocodio, api_key, row[addr_col])
                     futures[future] = (i, row)
                 # loop through futures object, executing geocodio calls for each one
                 for future in as_completed(futures):  # todo: add progress bar visualization

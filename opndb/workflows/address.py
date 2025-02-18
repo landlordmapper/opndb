@@ -2,11 +2,12 @@ from abc import abstractmethod, ABC
 from typing import Optional
 import pandas as pd
 
-from opndb.constants.columns import UnvalidatedAddrs as u, ValidatedAddrs as va
-from opndb.constants.files import Dirs as d, Processed as p
+from opndb.constants.columns import UnvalidatedAddrs as u, ValidatedAddrs as va, UnvalidatedAddrs as ua
+from opndb.constants.files import Dirs as d, Processed as p, Geocodio as g
 from opndb.services.address import AddressBase as addr
 from opndb.services.dataframe import DataFrameOpsBase as ops_df, DataFrameColumnGenerators as col_df, \
     DataFrameSubsetters as subset_df
+from opndb.services.terminal_printers import TerminalBase as terminal
 from opndb.types.base import WorkflowConfigs
 from opndb.utils import UtilsBase as utils
 
@@ -109,7 +110,16 @@ class WkflAddressGeocodio(WkflAddressBase):
                     self.configs["load_ext"]
                 ), str
             ),
+            "validated_addrs": ops_df.load_df(
+                utils.generate_path(
+                    d.PROCESSED,
+                    p.get_raw_filename_ext(p.VALIDATED_ADDRS, self.configs),
+                    self.configs["prev_stage"],
+                    self.configs["load_ext"]
+                ), str
+            ),
         }
+        self.api_key: str = ""
 
     def execute(self):
         """Executes geocodio data workflow."""
@@ -118,10 +128,25 @@ class WkflAddressGeocodio(WkflAddressBase):
             for key, df in self.dfs.items()
         }
         # print out address count to be validated using geocodio
+        terminal.print_geocodio_warning(dfs["unvalidated_addrs"])
         # prompt user for api key and display warning with number of calls and estimated cost
+        self.api_key = terminal.enter_geocodio_api_key()
         # call geocodio or exit
+        addr.run_geocodio(self.api_key, dfs["unvalidated_addrs"], ua.TAX_FULL_ADDRESS)  # have it return the dfs?
         # add validated addrs to the master files and save to data dirs
+        df_validated_gcd: pd.DataFrame = ops_df.load_df(
+            utils.generate_path(
+                d.GEOCODIO,
+                g.get_raw_filename_ext(g.GCD_VALIDATED, self.configs),
+                self.configs["prev_stage"],
+                self.configs["load_ext"]
+            )
+        )
         # remove validated raw address from unvalidated master file
+        dfs["unvalidated_gcd"] = subset_df.update_unvalidated_addrs(
+            dfs["unvalidated_gcd"],
+            df_validated_gcd[va.CLEAN_ADDRESS]
+        )
         # set summary stats
         # update configuration file
         pass
