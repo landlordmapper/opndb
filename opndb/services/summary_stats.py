@@ -1,5 +1,5 @@
 class SummaryStats(object):
-
+    # todo: create excel file with tabs for different workflow stages and save summary stats in each tab
     @classmethod
     def summary_stats_data_load(cls):
         # unique property count
