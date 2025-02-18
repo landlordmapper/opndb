@@ -2,7 +2,7 @@ import shutil
 from asyncio.subprocess import Process
 from enum import IntEnum
 from pathlib import Path
-from typing import ClassVar, Optional
+from typing import ClassVar, Optional, Any
 from abc import abstractmethod, ABC
 
 import pandas as pd
@@ -13,8 +13,10 @@ from opndb.services.dataframe import DataFrameOpsBase as ops_df, DataFrameBaseCl
     DataFrameNameCleaners as clean_df_name, DataFrameAddressCleaners as clean_df_addr, DataFrameCleanersAccuracy as clean_df_acc, \
     DataFrameMergers as merge_df, DataFrameSubsetters as subset_df, DataFrameColumnGenerators as cols_df
 from opndb.types.base import WorkflowConfigs, CleaningColumnMap, BooleanColumnMap
-from opndb.utils import UtilsBase as utils
+from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
 from opndb.workflows.address import WkflAddressBase
+from opndb.workflows.network_match import WkflNetworkBase
+from opndb.workflows.string_match import WkflStringMatchBase
 
 
 class WorkflowStage(IntEnum):
@@ -36,9 +38,16 @@ class WorkflowBase(ABC):
     """
     Base workflow class the controls execution of data processing tasks required for each stage of the opndb workflow.
     Each child class that inherits from WorkflowBase corresponds to the broader workflow stage.
+
+    CHILD WORKFLOW REQUIREMENTS:
+        - Required dataframes object: instance variable containing all required dataframes and their file paths
+        - Execute method: executes data load, required logic and transformations, and saves outputs
+        - Load
+
     """
     def __init__(self, configs: WorkflowConfigs):
         self.configs: WorkflowConfigs = configs
+        self._dataframes: dict[str, pd.DataFrame] = {}
 
     @classmethod
     def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
@@ -76,9 +85,22 @@ class WorkflowBase(ABC):
     def execute(self) -> None:
         pass
 
+    def load_df(self, key: str, path: Path, dtype: Any = str) -> pd.DataFrame:
+        """Lazy load dataframes only when needed and cache them."""
+        if key not in self._dataframes:
+            self._dataframes[key] = ops_df.load_df(path, dtype)
+        return self._dataframes[key].copy()
+
+    def set_working_dfs(self, required_dfs: dict[str, Path]) -> dict[str, pd.DataFrame]:
+        """Loads required dataframes for a specific workflow."""
+        dfs = {}
+        for key, path in required_dfs.items():
+            dfs[key] = self.load_df(key, path)
+        return dfs
+
 
 class WkflPreliminary(WorkflowBase):
-    """Preliminary workflow stage. Merge class codes to taxpayer records, change colnames, etc."""
+    """Preliminary workflow stage. Merge class codes to taxpayer records, change column names, etc."""
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
 
@@ -117,10 +139,10 @@ class WkflDataLoad(WorkflowBase):
         self.configs["root"] = destination
         # copy raw data files to destination directory
         file_names = [
-            r.TAXPAYER_RECORDS_RAW,
-            r.CORPS_RAW,
-            r.LLCS_RAW,
-            r.CLASS_CODES_RAW
+            r.TAXPAYER_RECORDS,
+            r.CORPS,
+            r.LLCS,
+            r.CLASS_CODES
         ]
         for file_name in file_names:
             source_file = origin / file_name
@@ -161,44 +183,25 @@ class WkflDataClean(WorkflowBase):
             - 'ROOT/processed/class_code_descriptions[FileExt]'
             - 'ROOT/processed/unvalidated_addrs[FileExt]'
     """
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
-        self.dfs: dict[str, pd.DataFrame] = {
-            "taxpayer_records": ops_df.load_df(
-                utils.generate_path(
-                    d.RAW,
-                    r.get_raw_filename_ext(r.TAXPAYER_RECORDS_RAW, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            "corps": ops_df.load_df(
-                utils.generate_path(
-                    d.RAW,
-                    r.get_raw_filename_ext(r.CORPS_RAW, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            "llcs": ops_df.load_df(
-                utils.generate_path(
-                    d.RAW,
-                    r.get_raw_filename_ext(r.LLCS_RAW, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            "class_codes": ops_df.load_df(
-                utils.generate_path(
-                    d.RAW,
-                    r.get_raw_filename_ext(r.CLASS_CODES_RAW, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            )
-        }
-        self.cleaning_column_map: CleaningColumnMap = {
-            "name" : {
+    cleaning_column_map: CleaningColumnMap = {
+        "name": {
+            "taxpayer_records": [
+                # string column names from raw data to have name cleaners run on them
+                # USE CONSTANTS
+            ],
+            "corps": [],
+            "llcs": [],
+        },
+        "address": {
+            "taxpayer_records": [
+                # string column names from raw data to have name cleaners run on them
+                # USE CONSTANTS
+            ],
+            "corps": [],
+            "llcs": [],
+        },
+        "accuracy": {
+            "name": {
                 "taxpayer_records": [
                     # string column names from raw data to have name cleaners run on them
                     # USE CONSTANTS
@@ -213,35 +216,24 @@ class WkflDataClean(WorkflowBase):
                 ],
                 "corps": [],
                 "llcs": [],
-            },
-            "accuracy": {
-                "name": {
-                    "taxpayer_records": [
-                        # string column names from raw data to have name cleaners run on them
-                        # USE CONSTANTS
-                    ],
-                    "corps": [],
-                    "llcs": [],
-                },
-                "address": {
-                    "taxpayer_records": [
-                        # string column names from raw data to have name cleaners run on them
-                        # USE CONSTANTS
-                    ],
-                    "corps": [],
-                    "llcs": [],
-                }
             }
+        }
+    }
+    def __init__(self, configs: WorkflowConfigs):
+        super().__init__(configs)
+        self.required_dfs: dict[str, Path] = {
+            "taxpayer_records": path_gen.raw_taxpayer_records(self.configs),
+            "corps": path_gen.raw_corps(self.configs),
+            "llcs": path_gen.raw_llcs(self.configs),
+            "class_codes": path_gen.raw_class_codes(self.configs)
         }
 
     def execute(self):
 
         # todo: add validator that checks for required columns, throw error/failure immediately if not
 
-        dfs = {
-            key: df.copy()
-            for key, df in self.dfs.items()
-        }
+        # load & cache required dataframes
+        dfs = self.set_working_dfs(self.required_dfs)
 
         # execute on all dataframes and columns
         for df in dfs.values():
@@ -267,7 +259,7 @@ class WkflDataClean(WorkflowBase):
             )
 
         # execute on the address columns only
-        for id, df in self.dfs.items():
+        for id, df in dfs.items():
             # leave out additional class code cleaning for now
             # will have to be updated as class code format varies by municipality
             if id == "class_code_descriptions":
@@ -345,18 +337,8 @@ class WkflAddressValidation(WorkflowBase):
         super().__init__(configs)
 
     def execute(self):
-        while True:
-            wkfl = WkflAddressBase.create_workflow(self.configs)
-            # fetch list of all unique addresses from taxpayer and corp/llc datasets
-            # pull out, standardize & save all PO box addresses, save to master validated address file
-            # run remaining addresses through open addresses validator
-            # save open address-validated addresses to master file
-            # for all addresses that were NOT validated, send them through geocodio
-            # prompt user for their geocodio API key, confirm the number of calls, include estimated cost, ask for their permission to continue
-            # run remaining addresses through geocodio, filter, parse & string match, save validated addresses in master file
-            # all remaining, unvalidated addresses get saved in master unvalidated address file
-            # set summary stats
-            # update configuration file
+        wkfl = WkflAddressBase.create_workflow(self.configs)
+        wkfl.execute()
 
 
 class WkflNameAnalysis(WorkflowBase):
@@ -383,31 +365,10 @@ class WkflNameAnalysis(WorkflowBase):
     stage = WorkflowStage.NAME_ANALYSIS
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
-        self.dfs: dict[str, pd.DataFrame] = {
-            "taxpayer_records": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.TAXPAYER_RECORDS_CLEAN, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            p.CORPS_CLEAN: ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.CORPS_CLEAN, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            p.LLCS_CLEAN: ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.LLCS_CLEAN, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            )
+        self.required_dfs: dict[str, Path] = {
+            "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
+            "corps": path_gen.processed_corps(self.configs),
+            "llcs": path_gen.processed_llcs(self.configs),
         }
 
     def execute(self):
@@ -434,21 +395,16 @@ class WkflAddressAnalysis(WorkflowBase):
     stage = WorkflowStage.ADDRESS_ANALYSIS
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
-        self.dfs: dict[str, pd.DataFrame] = {
-            "validated_addrs": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.VALIDATED_ADDRS, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            )
+        self.required_dfs: dict[str, Path] = {
+            "validated_addrs": path_gen.processed_validated_addrs(self.configs),
         }
 
     def execute(self):
+        # load data
+        dfs: dict[str, pd.DataFrame] = self.set_working_dfs(self.required_dfs)
         # create & save dataframe with unique validated addresses & their count
         df_addr_counts: pd.DataFrame = ops_df.get_frequency_df(
-            self.dfs["validated_addrs"],
+            dfs["validated_addrs"],
             va.FORMATTED_ADDRESS
         )
         ops_df.save_df(df_addr_counts, utils.generate_path(
@@ -477,39 +433,15 @@ class WkflRentalSubset(WorkflowBase):
     stage = WorkflowStage.RENTAL_SUBSET
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
-        self.dfs: dict[str, pd.DataFrame] = {
-            "taxpayer_records": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.TAXPAYER_RECORDS_CLEAN, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            "validated_addrs": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.VALIDATED_ADDRS, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            "class_codes_clean": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.CLASS_CODES_CLEAN, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            )
+        self.required_dfs: dict[str, Path] = {
+            "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
+            "validated_addrs": path_gen.processed_validated_addrs(self.configs),
+            "class_codes": path_gen.processed_class_codes(self.configs)
         }
 
     def execute(self):
         # todo: add merge code for class codes
-        dfs = {
-            key: df.copy()
-            for key, df in self.dfs.items()
-        }
+        dfs: dict[str, pd.DataFrame] = self.set_working_dfs(self.required_dfs)
         # merge validated_addrs
         df_props_addrs: pd.DataFrame = merge_df.merge_validated_addrs(
             dfs["taxpayer_records"],
@@ -551,53 +483,24 @@ class WkflCleanMerge(WorkflowBase):
             - 'ROOT/processed/props_prepped[FileExt]'
     """
     stage = WorkflowStage.CLEAN_MERGE
+    bool_col_map: BooleanColumnMap = {
+        "taxpayer_records": [tr.CLEAN_NAME],
+        "corps": [c.PRESIDENT_NAME, c.SECRETARY_NAME],
+        "llcs": [l.MANAGER_MEMBER_NAME, l.AGENT_NAME],
+    }
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
-        self.dfs: dict[str, pd.DataFrame] = {
-            "taxpayer_records": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.PROPS_SUBSETTED, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            "corps": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.CORPS_CLEAN, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            "llcs": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.LLCS_CLEAN, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-            "validated_addrs": ops_df.load_df(
-                utils.generate_path(
-                    d.PROCESSED,
-                    p.get_raw_filename_ext(p.VALIDATED_ADDRS, self.configs),
-                    self.configs["prev_stage"],
-                    self.configs["load_ext"],
-                ), str
-            ),
-        }
-        self.bool_col_map: BooleanColumnMap = {
-            "taxpayer_records": [tr.CLEAN_NAME],
-            "corps": [c.PRESIDENT_NAME, c.SECRETARY_NAME],
-            "llcs": [l.MANAGER_MEMBER_NAME, l.AGENT_NAME],
+        self.required_dfs: dict[str, Path] = {
+            "taxpayer_records": path_gen.processed_props_subsetted(self.configs),
+            "corps": path_gen.raw_corps(self.configs),
+            "llcs": path_gen.raw_llcs(self.configs),
+            "validated_addrs": path_gen.processed_validated_addrs(self.configs),
         }
 
     def execute(self):
-        dfs = {
-            key: df.copy()
-            for key, df in self.dfs.items()
-        }
+        # load data
+        dfs: dict[str, pd.DataFrame] = self.set_working_dfs(self.required_dfs)
+
         # fixing taxpayer addresses based on manual research - services/address.py
         # fixing taxpayer names based on manual research - services/base.py
 
@@ -616,8 +519,8 @@ class WkflCleanMerge(WorkflowBase):
                 dfs[id]["is_llc"] = cols_df.set_is_llc(dfs[id], col)
 
         # subset active corps/llcs
-        dfs["corps"] = subset_df.get_active(dfs["corps"])
-        dfs["llcs"] = subset_df.get_active(dfs["llcs"])
+        dfs["corps"] = subset_df.get_active(dfs["corps"], c.STATUS)
+        dfs["llcs"] = subset_df.get_active(dfs["llcs"], l.STATUS)
 
         # drop duplicates corps/llcs
         dfs["corps"].drop_duplicates(subset=[c.CLEAN_NAME], inplace=True)
@@ -631,8 +534,8 @@ class WkflCleanMerge(WorkflowBase):
             df = merge_df.merge_validated_addrs(df, dfs["validated_addrs"], [])
 
         # merge corps/llcs to taxpayer records
-        df["taxpayer_records"] = merge_df.merge_orgs(df["taxpayer_records"], df["corps"])
-        df["taxpayer_records"] = merge_df.merge_orgs(df["taxpayer_records"], df["corps"])
+        dfs["taxpayer_records"] = merge_df.merge_orgs(dfs["taxpayer_records"], dfs["corps"])
+        dfs["taxpayer_records"] = merge_df.merge_orgs(dfs["taxpayer_records"], dfs["corps"])
 
         # set summary stats
         # update configuration file
@@ -655,11 +558,8 @@ class WkflStringMatch(WorkflowBase):
 
 
     def execute(self):
-        # prompts user to create parameter matrix for string matching
-        # outputs & saves string matched dataset to "processed" directory
-        # set summary stats
-        # update configuration file
-        pass
+        wkfl = WkflStringMatchBase.create_workflow(configs=self.configs)
+        wkfl.execute()
 
 
 class WkflNetworkGraph(WorkflowBase):
@@ -679,11 +579,8 @@ class WkflNetworkGraph(WorkflowBase):
         self.stage: ClassVar[WorkflowStage] = WorkflowStage.NETWORK_GRAPH
 
     def execute(self):
-        # prompts user to create parameter matrix for network graph generation
-        # outputs & saves networked properties datasets to "processed" directory
-        # set summary stats
-        # update configuration file
-        pass
+        wkfl = WkflNetworkBase.create_workflow(configs=self.configs)
+        wkfl.execute()
 
 
 class WkflFinalOutput(WorkflowBase):
