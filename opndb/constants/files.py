@@ -23,7 +23,7 @@ class Root(FileNames):
 
 class Raw(FileNames):
     """Raw input files, saved after running initial validation checks."""
-    TAXPAYER_RECORDS: str = "taxpayer_records"
+    PROPS_TAXPAYERS: str = "props_taxpayers"
     CORPS: str = "corps"
     LLCS: str = "llcs"
     CLASS_CODES: str = "class_codes"

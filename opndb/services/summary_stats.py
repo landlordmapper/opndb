@@ -22,6 +22,8 @@ class SummaryStats(object):
         # po box addrs detected
         # po box addrs successfully validated
         # total validated & unvalidated after initial processing
+        # number of unique raw name+addresses
+        # number of unique cleaned name+addresses
         pass
 
     @classmethod

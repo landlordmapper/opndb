@@ -34,7 +34,7 @@ class UtilsBase(object):
             return []
 
     @classmethod
-    def generate_path(cls, data_root: str, subdir: str, filename: str, ext: FileExt = "csv") -> Path:
+    def generate_path(cls, data_root: str | Path, subdir: str, filename: str, ext: FileExt = "csv") -> Path:
         """Returns file path for specified file name and subdirectory."""
         filename: str = cls.generate_filename(filename, ext)
         return Path(data_root) / subdir / filename
@@ -140,12 +140,12 @@ class PathGenerators(UtilsBase):
     # ----RAW----
     # -----------
     @classmethod
-    def raw_taxpayer_records(cls, configs: WorkflowConfigs) -> Path:
+    def raw_props_taxpayers(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/raw/taxpayer_records[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.RAW,
-            Raw.TAXPAYER_RECORDS,
+            Raw.PROPS_TAXPAYERS,
             configs["load_ext"]
         )
     @classmethod
