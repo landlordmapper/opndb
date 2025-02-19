@@ -32,22 +32,11 @@ class UtilsBase(object):
             console.print(f"[red]Error reading directory: {e}[/red]")
             return []
 
-
     @classmethod
     def generate_path(cls, subdir: str, filename: str, stage: WorkflowStage, ext: FileExt = "csv") -> Path:
         """Returns file path for specified file name and subdirectory."""
         filename: str = cls.generate_filename(filename, stage, ext)
         return DATA_ROOT / subdir / filename
-
-    @classmethod
-    def generate_configs(cls):
-        """Generates new configs.json file."""
-        pass
-
-    @classmethod
-    def load_configs(cls):
-        """Loads configs.json file associated with the project. Creates it if it doesn't exist"""
-        pass
 
     @classmethod
     def is_encoded_empty(cls, x):

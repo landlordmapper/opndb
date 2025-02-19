@@ -18,6 +18,9 @@ class FileNames:
         """Sets file extension on file names. Allows for flexibility in file format of data inputs"""
         return f"{filename}.{config['load_ext']}"
 
+class Root(FileNames):
+    CONFIGS: str = "configs.json"
+
 class Raw(FileNames):
     """Raw input files, saved after running initial validation checks."""
     TAXPAYER_RECORDS: str = "taxpayer_records"

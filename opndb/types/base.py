@@ -21,7 +21,7 @@ class WorkflowStage(IntEnum):
     FINAL_OUTPUT = 10
 
 
-class WorkflowConfigs(TypedDict):
+class WorkflowConfigs(TypedDict, total=False):
     root: Path
     load_ext: FileExt
     prev_stage: WorkflowStage | None

@@ -6,6 +6,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from opndb.constants.base import DATA_ROOT
+from opndb.services.config import ConfigManager
 from opndb.services.terminal_printers import TerminalBase as t, TerminalInteract as ti
 from opndb.workflows.base import WorkflowBase as w
 
@@ -44,6 +45,25 @@ def start():
     # ask to generate directory structure in the same path as the raw data if running locally
     # if hitting the s3, the login data will be stored in configs
     t.print_raw_data_message()
+
+    # add press "continue" button
+
+    # load configs
+    # print loading configs statement
+    configs: ConfigManager = ConfigManager()
+    if configs.exists:
+        # print "loading settings..."
+        configs.load()
+    else:
+        # print "no configs file detected. generating..."
+        # input = paste root directory where project will be created
+        root = ""
+        configs.generate("root")
+
+    # check if directories exist
+    # create directories if they don't already exist
+
+
 
     # Get directory path from user
     while True:
