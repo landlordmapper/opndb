@@ -10,7 +10,7 @@ from opndb.constants.files import Dirs
 from opndb.services.config import ConfigManager
 from opndb.services.terminal_printers import TerminalBase as t, TerminalInteract as ti
 from opndb.utils import UtilsBase as utils
-from opndb.workflows.base import WorkflowBase as w
+from opndb.workflows.base import WorkflowBase as w, WorkflowBase
 
 console = Console()
 REQUIRED_DATA_TYPES = [
@@ -53,8 +53,6 @@ def init(config_manager: ConfigManager, data_root: Path):
     console.print("\n")
     utils.copy_raw_data(raw_data_dir, data_root)
 
-
-
 @cli.command()
 @click.pass_obj
 def start(config_manager: ConfigManager):
@@ -66,10 +64,17 @@ def start(config_manager: ConfigManager):
     if config_manager.exists:
         console.print("Configs file located. Loading...")
         config_manager.load()
+        console.print("Configs successfully loaded.")
     else:
         console.print("No configs file was found. Run `opndb init /path/to/your/root/data/dir`")
         return
-    t.print_test()
+    console.print("Launching workflows...")
+    while True:
+        wkfl = WorkflowBase.create_workflow(config_manager.configs)
+        wkfl.load()
+        # print out summary stats of data found in raw datasets
+        # press enter to begin cleaning
+
 
 
 # This makes "start" a subcommand of cli (ex: running "opndb start" in command line executes start() command)

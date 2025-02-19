@@ -70,6 +70,7 @@ class WorkflowBase(ABC):
         """Loads required dataframes for a specific workflow."""
         dfs = {}
         for key, path in required_dfs.items():
+            print(f"Loading {key} dataset into pandas dataframe...")
             dfs[key] = self.load_dfs(key, path)
         return dfs
 
@@ -82,11 +83,7 @@ class WorkflowBase(ABC):
     @classmethod
     def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
         """Instantiates workflow object based on last saved progress (config['wkfl_stage'])."""
-        if configs["wkfl_type"] == "preliminary":
-            return WkflPreliminary(configs)
-        elif configs["wkfl_type"] == "data_load":
-            return WkflDataLoad(configs)
-        elif configs["wkfl_type"] == "data_clean":
+        if configs["wkfl_type"] == "data_clean":
             return WkflDataClean(configs)
         elif configs["wkfl_type"] == "address_initial":
             return WkflAddressInitial(configs)
@@ -158,69 +155,6 @@ class WorkflowStandardBase(WorkflowBase):
     def update_configs(self, configs: WorkflowConfigs) -> None:
         """Updates configurations based on current workflow stage."""
         pass
-
-
-class WkflPreliminary(WorkflowBase):
-    """Preliminary workflow stage. Merge class codes to taxpayer records, change column names, etc."""
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
-
-    def execute(self):
-        # set summary stats
-        # update configuration file
-        # set stage in config
-        pass
-
-
-class WkflDataLoad(WorkflowBase):
-    """
-    Initial data load
-
-    INPUTS:
-        - User inputs file path to their local raw data dir
-    OUTPUTS:
-        - Raw taxpayer, corporate and LLC data files
-            - 'ROOT/raw/taxpayer_records[FileExt]'
-            - 'ROOT/raw/corps[FileExt]'
-            - 'ROOT/raw/llcs[FileExt]'
-            - 'ROOT/raw/class_code_descriptions[FileExt]'
-    """
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
-
-    def execute(self):
-        # prompt user for path to raw data
-        origin_dir = ""
-        origin = Path(origin_dir)
-        # if user is running locally, ask where to generate new folders
-        destination_dir = ""
-        destination = Path(destination_dir)
-        # set root path in configs
-        self.configs["root"] = destination
-        # copy raw data files to destination directory
-        file_names = [
-            r.TAXPAYER_RECORDS,
-            r.CORPS,
-            r.LLCS,
-            r.CLASS_CODES
-        ]
-        for file_name in file_names:
-            source_file = origin / file_name
-            dest_file = destination / file_name
-            try:
-                if not source_file.exists():
-                    # logging.warning(f"Source file not found: {source_file}")
-                    continue
-                shutil.copy2(source_file, dest_file)
-                # logging.info(f"Successfully copied {file_name}")
-            except PermissionError:
-                # logging.error(f"Permission denied when copying {file_name}")
-                raise
-            except Exception as e:
-                # logging.error(f"Error copying {file_name}: {str(e)}")
-                raise
-        # set summary stats
-        # update configuration file
 
 
 class WkflDataClean(WorkflowStandardBase):

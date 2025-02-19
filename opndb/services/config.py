@@ -27,9 +27,11 @@ class ConfigManager:
             # Create config dictionary with typed structure
             configs: WorkflowConfigs = {
                 "data_root": data_root,
+                "load_ext": "csv"  # todo: remove, have user indicate (per-file?)
             }
             json_configs = {
-                "data_root": str(configs["data_root"].absolute())
+                "data_root": str(configs["data_root"].absolute()),
+                "load_ext": ".csv"
             }
             # Write configs to file with pretty printing
             with open(self._configs_path, "w", encoding="utf-8") as f:
@@ -47,20 +49,21 @@ class ConfigManager:
         """Load configuration from file"""
         if self._configs_path.exists():
             with open(self._configs_path) as f:
-                self._config = json.load(f)
+                self._configs = json.load(f)
+                console.print(self._configs)
 
     def save(self) -> None:
         """Save current configuration to file"""
         with open(str(self._configs_path), "w", encoding="utf-8") as f:
-            json.dump(self._config, f, indent=2)
+            json.dump(self._configs, f, indent=2)
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value"""
-        return self._config.get(key, default)
+        return self._configs.get(key, default)
 
     def set(self, key: str, value: Any) -> None:
         """Set a configuration value"""
-        self._config[key] = value
+        self._configs[key] = value
         self.save()
 
     @property
@@ -69,11 +72,8 @@ class ConfigManager:
 
     @property
     def exists(self) -> bool:
-        console.print(f"configs file path: {self._configs_path}")
         found = self._configs_path.exists()
         if found:
-            console.print("configs file found")
-            console.print(self._configs_path)
             return found
         else:
             console.print("configs file not found")

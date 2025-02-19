@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import TypedDict, Literal, Any
 
 
-FileExt = Literal[".csv", ".json", ".geojson"]
+FileExt = Literal["csv", "json", "geojson"]
 
 
 class WorkflowStage(IntEnum):
