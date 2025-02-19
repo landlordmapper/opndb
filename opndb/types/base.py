@@ -37,8 +37,8 @@ class CleaningColumnMap(TypedDict):
     name: dict[str, list[str]]
     address: dict[str, list[str]]
     accuracy: {
-        str, dict[str, [list[str]]],
-        str, dict[str, [list[str]]]
+        str, dict[str, list[str]],
+        str, dict[str, list[str]]
     }
 
 class BooleanColumnMap(TypedDict):

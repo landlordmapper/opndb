@@ -26,15 +26,6 @@ from opndb.utils import UtilsBase as utils
 class AddressBase:
 
     # todo: get this out of here - all file processing should be handled in the workflow
-    validated_addrs_path: Path = DATA_ROOT / Dirs.PROCESSED / Processed.VALIDATED_ADDRS
-    unvalidated_addrs_path: Path = DATA_ROOT / Dirs.PROCESSED / Processed.UNVALIDATED_ADDRS
-
-    gcd_validated_path: Path = DATA_ROOT / Dirs.GEOCODIO / Geocodio.GCD_VALIDATED
-    gcd_unvalidated_path: Path = DATA_ROOT / Dirs.GEOCODIO / Geocodio.GCD_UNVALIDATED
-    gcd_failed_path: Path = DATA_ROOT / Dirs.GEOCODIO / Geocodio.GCD_FAILED
-
-    gcd_partials_dir_path: Path = DATA_ROOT / Dirs.GCD_PARTIALS
-
 
     def __init__(self):
         self.geocodio_api_key = ""
