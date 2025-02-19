@@ -1,6 +1,3 @@
-from typing import Any
-
-
 class ClassCodes:
     CODE: str = "code"
     CATEGORY: str = "category"
@@ -10,8 +7,13 @@ class ClassCodes:
 class Properties:
     PIN: str = "pin"
     TAX_NAME: str = "tax_name"
-    TAX_ADDRESS: str = "tax_address"
-    BLDG_CLASS: str = "bldg_class"
+    TAX_ADDRESS: str = "tax_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
+    TAX_STREET: str = "tax_street"  # todo: add documentation: optional - addresses may come in a single string format and need to be parsed
+    TAX_CITY: str = "tax_city"
+    TAX_STATE: str = "tax_state"
+    TAX_ZIP: str = "tax_zip"
+    CLASS_CODE: str = "class_code"
+    NUM_UNITS: str = "num_units"  # todo: add documentation: optional - ideal but will work without it
 
 class TaxpayerRecords:
     RAW_NAME: str = "raw_name"
@@ -40,32 +42,32 @@ class TaxpayerRecords:
 
 class Corps:
 
-    RAW_NAME: str = "raw_name"
-    CLEAN_NAME: str = "clean_name"
-    CORE_NAME: str = "core_name"
-
+    # raw data fields
+    NAME: str = "raw_name"
     FILE_NUMBER: str = "file_number"
     DATE_INCORPORATED: str = "date_incorporated"
+    DATE_DISSOLVED: str = "date_dissolved"  # todo: add documentation: optional may be active
     STATUS: str = "status"
-
     PRESIDENT_NAME: str = "president_name"
-    PRESIDENT_ADDR: str = "president_addr"
-    PRESIDENT_ADDR_STREET: str = "president_addr_street"
-    PRESIDENT_ADDR_CITY: str = "president_addr_city"
-    PRESIDENT_ADDR_STATE: str = "president_addr_state"
-    PRESIDENT_ADDR_ZIP: str = "president_addr_zip"
+    PRESIDENT_ADDRESS: str = "president_address"
+    PRESIDENT_STREET: str = "president_street"
+    PRESIDENT_CITY: str = "president_city"
+    PRESIDENT_STATE: str = "president_state"
+    PRESIDENT_ZIP: str = "president_zip"
+    SECRETARY_NAME: str = "secretary_name"
+    SECRETARY_ADDRESS: str = "secretary_address"
+    SECRETARY_STREET: str = "secretary_street"
+    SECRETARY_CITY: str = "secretary_city"
+    SECRETARY_STATE: str = "secretary_state"
+    SECRETARY_ZIP: str = "secretary_zip"
+
+    CLEAN_NAME: str = "clean_name"
+    CORE_NAME: str = "core_name"
     IS_BANK_PRESIDENT: str = "is_bank_president"
     IS_PERSON_PRESIDENT: str = "is_person_president"
     IS_COMMON_NAME_PRESIDENT: str = "is_common_name_president"
     IS_ORG_PRESIDENT: str = "is_org_president"
     IS_LLC_PRESIDENT: str = "is_llc_president"
-
-    SECRETARY_NAME: str = "secretary_name"
-    SECRETARY_ADDR: str = "secretary_addr"
-    SECRETARY_ADDR_STREET: str = "secretary_addr_street"
-    SECRETARY_ADDR_CITY: str = "secretary_addr_city"
-    SECRETARY_ADDR_STATE: str = "secretary_addr_state"
-    SECRETARY_ADDR_ZIP: str = "secretary_addr_zip"
     IS_BANK_SECRETARY: str = "is_bank_secretary"
     IS_PERSON_SECRETARY: str = "is_person_secretary"
     IS_COMMON_NAME_SECRETARY: str = "is_common_name_secretary"
@@ -75,43 +77,42 @@ class Corps:
 
 class LLCs:
 
-    RAW_NAME: str = "raw_name"
-    CLEAN_NAME: str = "clean_name"
-    CORE_NAME: str = "core_name"
-
+    # raw data fields
+    NAME: str = "name"
     FILE_NUMBER: str = "file_number"
     DATE_INCORPORATED: str = "date_incorporated"
-    STATUS: str = "status"
-
+    DATE_DISSOLVED: str = "date_dissolved"  # todo: add documentation: optional may be active
+    STATUS: str = "status"  # todo: add documentation: optional - may be codes whose meanings will determine how the active filters are applied
     MANAGER_MEMBER_NAME: str = "manager_member_name"
-    MANAGER_MEMBER_ADDR: str = "manager_member_addr"
-    MANAGER_MEMBER_ADDR_STREET: str = "manager_member_addr"
-    MANAGER_MEMBER_ADDR_CITY: str = "manager_member_addr"
-    MANAGER_MEMBER_ADDR_STATE: str = "manager_member_addr"
-    MANAGER_MEMBER_ADDR_ZIP: str = "manager_member_addr"
+    MANAGER_MEMBER_ADDRESS: str = "manager_member_address"
+    MANAGER_MEMBER_STREET: str = "manager_member_street"
+    MANAGER_MEMBER_CITY: str = "manager_member_city"
+    MANAGER_MEMBER_STATE: str = "manager_member_state"  # todo: add documentation: optional - sometimes missing, not ideal
+    MANAGER_MEMBER_ZIP: str = "manager_member_zip"
+    AGENT_NAME: str = "agent_name"
+    AGENT_ADDRESS: str = "agent_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
+    AGENT_STREET: str = "agent_street"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
+    AGENT_CITY: str = "agent_city"
+    AGENT_STATE: str = "agent_state"  # todo: add documentation: optional - sometimes missing, not ideal
+    AGENT_ZIP: str = "agent_zip"
+    OFFICE_ADDRESS: str = "office_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
+    OFFICE_STREET: str = "office_street"
+    OFFICE_CITY: str = "office_city"
+    OFFICE_STATE: str = "office_state"  # todo: add documentation: optional - sometimes missing, not ideal
+    OFFICE_ZIP: str = "office_addr_zip"
+
+    CLEAN_NAME: str = "clean_name"
+    CORE_NAME: str = "core_name"
     IS_BANK_MANAGER_MEMBER: str = "is_bank_manager_member"
     IS_PERSON_MANAGER_MEMBER: str = "is_person_manager_member"
     IS_COMMON_NAME_MANAGER_MEMBER: str = "is_common_name_manager_member"
     IS_ORG_MANAGER_MEMBER: str = "is_org_secretary"
     IS_LLC_MANAGER_MEMBER: str = "is_llc_secretary"
-
-    AGENT_NAME: str = "agent_name"
-    AGENT_ADDR: str = "agent_addr"
-    AGENT_ADDR_STREET: str = "agent_addr_street"
-    AGENT_ADDR_CITY: str = "agent_addr_city"
-    AGENT_ADDR_STATE: str = "agent_addr_state"
-    AGENT_ADDR_ZIP: str = "agent_addr_zip"
     IS_BANK_AGENT: str = "is_bank_agent"
     IS_PERSON_AGENT: str = "is_person_agent"
     IS_COMMON_NAME_AGENT: str = "is_common_name_agent"
     IS_ORG_AGENT: str = "is_org_agent"
     IS_LLC_AGENT: str = "is_llc_agent"
-
-    OFFICE_ADDR: str = "office_addr"
-    OFFICE_ADDR_STREET: str = "office_addr_street"
-    OFFICE_ADDR_CITY: str = "office_addr_city"
-    OFFICE_ADDR_STATE: str = "office_addr_state"
-    OFFICE_ADDR_ZIP: str = "office_addr_zip"
 
 
 class ValidatedAddrs:

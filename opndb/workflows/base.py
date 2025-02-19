@@ -1,22 +1,19 @@
 import shutil
-from asyncio.subprocess import Process
 from enum import IntEnum
 from pathlib import Path
-from typing import ClassVar, Optional, Any
-from abc import abstractmethod, ABC
+from typing import ClassVar, Any
 
 import pandas as pd
-import nmslib
-import networkx as nx
+# import nmslib
 from abc import abstractmethod, ABC
 from typing import Optional
 
 from opndb.services.match import StringMatch, NetworkMatchBase, MatchBase
 from opndb.services.address import AddressBase as addr
 from opndb.services.terminal_printers import TerminalBase as terminal
-from opndb.types.base import WorkflowConfigs, NmslibOptions, StringMatchParams, NetworkMatchParams
+from opndb.types.base import NmslibOptions, StringMatchParams, NetworkMatchParams
 from opndb.constants.columns import ValidatedAddrs as va, UnvalidatedAddrs as ua, TaxpayerRecords as tr, Corps as c, LLCs as l
-from opndb.constants.files import Raw as r, Dirs as d, Processed as p, Analysis as a, Geocodio as g
+from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
 from opndb.services.dataframe import DataFrameOpsBase as ops_df, DataFrameBaseCleaners as clean_df_base, \
     DataFrameNameCleaners as clean_df_name, DataFrameAddressCleaners as clean_df_addr, DataFrameCleanersAccuracy as clean_df_acc, \
     DataFrameMergers as merge_df, DataFrameSubsetters as subset_df, DataFrameColumnGenerators as cols_df
@@ -679,6 +676,7 @@ class WkflCleanMerge(WorkflowStandardBase):
                 dfs[id]["is_org"] = cols_df.set_is_org(dfs[id], col)
                 dfs[id]["is_llc"] = cols_df.set_is_llc(dfs[id], col)
         # subset active corps/llcs
+        # todo: ask for user input to indicate whether only active llcs/corps should be merged into properties, or if all of them should
         dfs["corps"] = subset_df.get_active(dfs["corps"], c.STATUS)
         dfs["llcs"] = subset_df.get_active(dfs["llcs"], l.STATUS)
         # drop duplicates corps/llcs
@@ -720,7 +718,7 @@ class WkflStringMatch(WorkflowStandardBase):
     DEFAULT_NMSLIB: NmslibOptions = {
         "method": "hnsw",
         "space": "cosinesimil_sparse_fast",
-        "data_type": nmslib.DataType.SPARSE_VECTOR
+        # "data_type": nmslib.DataType.SPARSE_VECTOR
     }
     DEFAULT_QUERY_BATCH = {
         "num_threads": 8,

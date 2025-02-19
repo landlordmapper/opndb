@@ -1,15 +1,12 @@
 import os
 from pathlib import Path
-from typing import List
 
-import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt, IntPrompt
+from rich.prompt import IntPrompt
 from rich.table import Table
 from rich.text import Text
 import shutil
-import pandas as pd
 
 from opndb.constants.base import DATA_ROOT
 

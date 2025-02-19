@@ -29,7 +29,7 @@ def cli():
 
 # This makes "start" a subcommand of cli (ex: running "opndb start" in command line executes start() command)
 @cli.command()
-def start():
+def start_new():
     while True:
         configs = w.load_configs()
         wkfl = w.create_workflow(configs)
@@ -38,7 +38,7 @@ def start():
 
 # This makes "start" a subcommand of cli (ex: running "opndb start" in command line executes start() command)
 @cli.command()
-def start_old():
+def start():
     """Start the OPNDB workflow"""
     t.print_welcome()
     # ask to generate directory structure in the same path as the raw data if running locally
