@@ -34,7 +34,7 @@ from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
 # 6. Services (these can depend on everything else)
 from opndb.services.match import StringMatch, NetworkMatchBase, MatchBase
 from opndb.services.address import AddressBase as addr
-from opndb.services.terminal_printers import TerminalBase as terminal
+from opndb.services.terminal_printers import TerminalBase as terminal, TerminalBase
 from opndb.services.dataframe import (
     DataFrameOpsBase as ops_df,
     DataFrameBaseCleaners as clean_df_base,
@@ -70,8 +70,17 @@ class WorkflowBase(ABC):
         """Loads required dataframes for a specific workflow."""
         dfs = {}
         for key, path in required_dfs.items():
-            print(f"Loading {key} dataset into pandas dataframe...")
             dfs[key] = self.load_dfs(key, path)
+        # prep data for summary table printing
+        table_data = []
+        for id, df in self._dfs.items():  # todo: standardize this, enforce types
+            memory_usage = df.memory_usage(deep=True).sum()
+            table_data.append({
+                "dataset_name": id,
+                "file_size": utils.sizeof_fmt(memory_usage),
+                "record_count": len(df)
+            })
+        TerminalBase.display_table(table_data)
         return dfs
 
     @classmethod

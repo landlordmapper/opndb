@@ -16,7 +16,19 @@ from opndb.services.string_clean import (
     CleanStringAddress as clean_addr,
     CleanStringAccuracy as clean_acc
 )
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    FileSizeColumn,
+    TotalFileSizeColumn,
+    TimeRemainingColumn
+)
+from rich.console import Console
 
+
+console = Console()
 
 class DataFrameOpsBase(object):
 
@@ -29,18 +41,36 @@ class DataFrameOpsBase(object):
         :param dtype: Specify data types for columns or entire dataset
         :return: Dataframe containing data from specified file
         """
-        print(f"load_df Path: {path}")
+        file_size = path.stat().st_size
         format = path.suffix[1:].lower()
-        if format == "csv":
-            return pd.read_csv(str(path), dtype=dtype)
-        elif format == "parquet":
-            return pd.read_parquet(str(path), dtype=dtype)
-        elif format == "xlsx" or format == "xls":
-            return pd.read_excel(str(path), dtype=dtype)
-        elif format == "json":
-            return pd.read_json(str(path), dtype=dtype)
-        else:
-            raise ValueError(f"Unsupported file format: {format}")
+        with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TotalFileSizeColumn(),
+        ) as progress:
+            task = progress.add_task(
+                f"Loading {path.name} into dataframe...",
+                total=file_size,
+                completed=0
+            )
+            try:
+                if format == "csv":
+                    df: pd.DataFrame = pd.read_csv(str(path), dtype=dtype)
+                elif format == "parquet":
+                    df: pd.DataFrame = pd.read_parquet(str(path), dtype=dtype)
+                elif format == "xlsx" or format == "xls":
+                    df: pd.DataFrame = pd.read_excel(str(path), dtype=dtype)
+                elif format == "json":
+                    df: pd.DataFrame = pd.read_json(str(path), dtype=dtype)
+                else:
+                    raise ValueError(f"Unsupported file format: {format}")
+                progress.update(task, completed=file_size)
+                return df
+            except Exception as e:
+                progress.stop()
+                console.print(f"[red]Error loading {path.name}: {str(e)}[/red]")
+                raise
 
     @classmethod
     def save_df(cls, df: pd.DataFrame, path: Path) -> str:

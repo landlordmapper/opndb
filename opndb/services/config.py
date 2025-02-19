@@ -50,7 +50,6 @@ class ConfigManager:
         if self._configs_path.exists():
             with open(self._configs_path) as f:
                 self._configs = json.load(f)
-                console.print(self._configs)
 
     def save(self) -> None:
         """Save current configuration to file"""

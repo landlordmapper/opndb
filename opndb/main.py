@@ -57,7 +57,7 @@ def init(config_manager: ConfigManager, data_root: Path):
 @click.pass_obj
 def start(config_manager: ConfigManager):
     t.print_welcome()
-    if not t.press_enter_to_continue():
+    if not t.press_enter_to_continue("continue "):
         console.print("Exiting program...", style="yellow")
         return
     console.print("Searching for project settings...")
@@ -69,9 +69,13 @@ def start(config_manager: ConfigManager):
         console.print("No configs file was found. Run `opndb init /path/to/your/root/data/dir`")
         return
     console.print("Launching workflows...")
+    console.print("\n")
     while True:
         wkfl = WorkflowBase.create_workflow(config_manager.configs)
         wkfl.load()
+        if not t.press_enter_to_continue("execute string cleaning workflow "):
+            console.print("Exiting program...", style="yellow")
+            return
         # print out summary stats of data found in raw datasets
         # press enter to begin cleaning
 

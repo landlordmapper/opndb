@@ -23,14 +23,14 @@ class TerminalBase:
     # def
 
     @classmethod
-    def press_enter_to_continue(cls) -> bool:
+    def press_enter_to_continue(cls, specify_text: str = "") -> bool:
         """
         Prompts user to press enter to continue or 'q' to quit.
 
         Returns:
             bool: True if user wants to continue, False if user wants to quit
         """
-        response = input("\nPress ENTER to continue or \"q\" + ENTER to quit: ").lower()
+        response = input(f"\nPress ENTER to {specify_text}(or \"q\" + ENTER to quit): ").lower()
         return response != "q"
 
     @classmethod
@@ -167,6 +167,30 @@ class TerminalBase:
 
         console.print("\n" * 2)
         console.print(table)
+
+    @classmethod
+    def display_table(cls, table_data):
+        table = Table(title="Dataframes Loaded")
+        table.add_column("Dataset Name", justify="right", style="cyan")
+        table.add_column("File Size", justify="right", style="green")
+        table.add_column("Number of Rows", justify="right", style="blue")
+        for td_obj in table_data:
+            table.add_row(
+                str(td_obj["dataset_name"]),
+                str(td_obj["file_size"]),
+                str(td_obj["record_count"]),
+            )
+        console.print("\n" * 2)
+        console.print(table)
+
+    @classmethod
+    def prompt_continue(cls):
+        """Prompts user to press Enter to continue."""
+        while True:
+            response = input("\nPress Enter to continue...")
+            if response == "":
+                break
+
 
 class TerminalInteract(TerminalBase):
 
