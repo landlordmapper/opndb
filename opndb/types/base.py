@@ -1,10 +1,25 @@
+from enum import IntEnum
 from pathlib import Path
 from typing import TypedDict, Literal, Any
 
-from opndb.workflows.base import WorkflowStage
-
 
 FileExt = Literal[".csv", ".json", ".geojson"]
+
+
+class WorkflowStage(IntEnum):
+    """Keeps track of workflow stages."""
+    PRE = 0
+    DATA_LOAD = 1
+    DATA_CLEANING = 2
+    ADDRESS_VALIDATION = 3
+    NAME_ANALYSIS = 4
+    ADDRESS_ANALYSIS = 5
+    RENTAL_SUBSET = 6
+    CLEAN_MERGE = 7
+    STRING_MATCH = 8
+    NETWORK_GRAPH = 9
+    FINAL_OUTPUT = 10
+
 
 class WorkflowConfigs(TypedDict):
     root: Path
@@ -16,6 +31,7 @@ class WorkflowConfigs(TypedDict):
     wkfl_type_string_match: str
     wkfl_type_ntwk: str
     accuracy: str
+
 
 class CleaningColumnMap(TypedDict):
     name: dict[str, list[str]]

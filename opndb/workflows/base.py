@@ -1,41 +1,50 @@
+# 1. Standard library imports
 import shutil
+from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
-from typing import ClassVar, Any
+from typing import Any, ClassVar, Optional
 
+# 2. Third-party imports
 import pandas as pd
-# import nmslib
-from abc import abstractmethod, ABC
-from typing import Optional
 
+# 3. Constants (these should have no dependencies on other local modules)
+from opndb.constants.columns import (
+    ValidatedAddrs as va,
+    UnvalidatedAddrs as ua,
+    TaxpayerRecords as tr,
+    Corps as c,
+    LLCs as l,
+)
+from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
+
+# 4. Types (these should only depend on constants)
+from opndb.types.base import (
+    WorkflowConfigs,
+    NmslibOptions,
+    StringMatchParams,
+    NetworkMatchParams,
+    CleaningColumnMap,
+    BooleanColumnMap, WorkflowStage,
+)
+
+# 5. Utils (these should only depend on constants and types)
+from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
+
+# 6. Services (these can depend on everything else)
 from opndb.services.match import StringMatch, NetworkMatchBase, MatchBase
 from opndb.services.address import AddressBase as addr
 from opndb.services.terminal_printers import TerminalBase as terminal
-from opndb.types.base import NmslibOptions, StringMatchParams, NetworkMatchParams
-from opndb.constants.columns import ValidatedAddrs as va, UnvalidatedAddrs as ua, TaxpayerRecords as tr, Corps as c, LLCs as l
-from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.services.dataframe import DataFrameOpsBase as ops_df, DataFrameBaseCleaners as clean_df_base, \
-    DataFrameNameCleaners as clean_df_name, DataFrameAddressCleaners as clean_df_addr, DataFrameCleanersAccuracy as clean_df_acc, \
-    DataFrameMergers as merge_df, DataFrameSubsetters as subset_df, DataFrameColumnGenerators as cols_df
-from opndb.types.base import WorkflowConfigs, CleaningColumnMap, BooleanColumnMap
-from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
-
-
-
-class WorkflowStage(IntEnum):
-    """Keeps track of workflow stages."""
-    PRE = 0
-    DATA_LOAD = 1
-    DATA_CLEANING = 2
-    ADDRESS_VALIDATION = 3
-    NAME_ANALYSIS = 4
-    ADDRESS_ANALYSIS = 5
-    RENTAL_SUBSET = 6
-    CLEAN_MERGE = 7
-    STRING_MATCH = 8
-    NETWORK_GRAPH = 9
-    FINAL_OUTPUT = 10
-
+from opndb.services.dataframe import (
+    DataFrameOpsBase as ops_df,
+    DataFrameBaseCleaners as clean_df_base,
+    DataFrameNameCleaners as clean_df_name,
+    DataFrameAddressCleaners as clean_df_addr,
+    DataFrameCleanersAccuracy as clean_df_acc,
+    DataFrameMergers as merge_df,
+    DataFrameSubsetters as subset_df,
+    DataFrameColumnGenerators as cols_df,
+)
 
 class WorkflowBase(ABC):
     """

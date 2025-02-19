@@ -1,16 +1,16 @@
+# import nmslib
+from collections import Counter
 import json
 from typing import List
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 import re
-from collections import Counter
-import networkx as nx
-# import nmslib
 
 from opndb.constants.columns import AddressAnalysis
-from opndb.services.dataframe import DataFrameOpsBase as df_ops
 from opndb.types.base import StringMatchParams, NetworkMatchParams
+from opndb.services.dataframe import DataFrameOpsBase as df_ops
 from opndb.utils import UtilsBase as utils
 
 # todo: add type hints and docstrings where missing

@@ -3,12 +3,19 @@ from typing import Any, Callable, Type
 
 import pandas as pd
 
-from opndb.constants.columns import TaxpayerRecords as tr, ValidatedAddrs as va, ClassCodes as cc, Properties as p, \
+from opndb.constants.columns import (
+    TaxpayerRecords as tr,
+    ValidatedAddrs as va,
+    ClassCodes as cc,
+    Properties as p,
     UnvalidatedAddrs as ua
-from opndb.services.string_clean import CleanStringBase as clean_base
-from opndb.services.string_clean import CleanStringName as clean_name
-from opndb.services.string_clean import CleanStringAddress as clean_addr
-from opndb.services.string_clean import CleanStringAccuracy as clean_acc
+)
+from opndb.services.string_clean import (
+    CleanStringBase as clean_base,
+    CleanStringName as clean_name,
+    CleanStringAddress as clean_addr,
+    CleanStringAccuracy as clean_acc
+)
 
 
 class DataFrameOpsBase(object):

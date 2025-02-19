@@ -1,11 +1,19 @@
 import re
 import string
+
 import pandas as pd
 import word2number as w2n
 
-from opndb.constants.base import DIRECTIONS, STREET_SUFFIXES, SECONDARY_KEYWORDS, CORE_NAME_KEYS, TRUSTS_STRINGS, \
-    TRUSTS, CORP_WORDS, PO_BOXES
-
+from opndb.constants.base import (
+    DIRECTIONS,
+    STREET_SUFFIXES,
+    SECONDARY_KEYWORDS,
+    CORE_NAME_KEYS,
+    TRUSTS_STRINGS,
+    TRUSTS,
+    CORP_WORDS,
+    PO_BOXES
+)
 
 class CleanStringBase:
 
