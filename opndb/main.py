@@ -4,10 +4,12 @@ import click
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
-
+from click.core import Context
 from opndb.constants.base import DATA_ROOT
+from opndb.constants.files import Dirs
 from opndb.services.config import ConfigManager
 from opndb.services.terminal_printers import TerminalBase as t, TerminalInteract as ti
+from opndb.utils import UtilsBase as utils
 from opndb.workflows.base import WorkflowBase as w
 
 console = Console()
@@ -20,26 +22,59 @@ REQUIRED_DATA_TYPES = [
 root = Path(DATA_ROOT)
 RAW_DATA_DIR = root / "raw"
 
-# This creates the cli function that pyproject.toml is looking for
-@click.group()
-def cli():
-    """OPNDB command line interface"""
-    pass
+@click.group()  # This creates the main cli group of functions that pyproject.toml is looking for
+@click.pass_context  # passes context object into the function - passes data into different commands in this group
+def cli(ctx: Context):
+    """
+    OPNDB command line interface
 
+    Main CLI group. The ctx parameter is of type click.Context.
+    ctx.obj can store any object you want to share between commands.
+    """
+    ctx.obj = ConfigManager()  # ctx.obj stores python object of any type
+
+@cli.command()
+@click.argument("data_root", type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path))
+@click.pass_obj
+def init(config_manager: ConfigManager, data_root: Path):
+    """Initialize OPNDB with a data directory"""
+    # todo: add check for whether or not the configs file and/or data dirs already exist
+    config_manager.generate(data_root)
+    utils.generate_data_dirs(data_root)
+    console.print("\n")
+    console.print(f"Initialized OPNDB with data directory: \n{data_root}")
+    console.print("\n")
+    console.print(f"Config file location: \n{config_manager.path}")
+    console.print("\n")
+    console.print("Project data directories created.\n")
+    t.print_data_root_tree(data_root)
+    console.print("\n")
+    raw_data_dir: Path = t.get_raw_data_input()
+    console.print("\n")
+    utils.copy_raw_data(raw_data_dir, data_root)
+
+
+
+@cli.command()
+@click.pass_obj
+def start(config_manager: ConfigManager):
+    t.print_welcome()
+    if not t.press_enter_to_continue():
+        console.print("Exiting program...", style="yellow")
+        return
+    console.print("Searching for project settings...")
+    if config_manager.exists:
+        console.print("Configs file located. Loading...")
+        config_manager.load()
+    else:
+        console.print("No configs file was found. Run `opndb init /path/to/your/root/data/dir`")
+        return
+    t.print_test()
 
 
 # This makes "start" a subcommand of cli (ex: running "opndb start" in command line executes start() command)
 @cli.command()
-def start_new():
-    while True:
-        configs = w.load_configs()
-        wkfl = w.create_workflow(configs)
-        wkfl.execute()
-
-
-# This makes "start" a subcommand of cli (ex: running "opndb start" in command line executes start() command)
-@cli.command()
-def start():
+def start_old():
     """Start the OPNDB workflow"""
     t.print_welcome()
     # ask to generate directory structure in the same path as the raw data if running locally
@@ -59,10 +94,6 @@ def start():
         # input = paste root directory where project will be created
         root = ""
         configs.generate("root")
-
-    # check if directories exist
-    # create directories if they don't already exist
-
 
 
     # Get directory path from user

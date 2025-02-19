@@ -1,12 +1,15 @@
 import os
 from pathlib import Path
-
+import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import IntPrompt
 from rich.table import Table
 from rich.text import Text
 import shutil
+from rich.progress import track
+from time import sleep
+from rich.tree import Tree
 
 from opndb.constants.base import DATA_ROOT
 
@@ -15,6 +18,86 @@ console = Console()
 
 class TerminalBase:
     """Messages & statements printed during stage 1 of the opndb workflow"""
+    #
+    # @staticmethod
+    # def
+
+    @classmethod
+    def press_enter_to_continue(cls) -> bool:
+        """
+        Prompts user to press enter to continue or 'q' to quit.
+
+        Returns:
+            bool: True if user wants to continue, False if user wants to quit
+        """
+        response = input("\nPress ENTER to continue or \"q\" + ENTER to quit: ").lower()
+        return response != "q"
+
+    @classmethod
+    def get_raw_data_input(cls) -> Path:
+        while True:
+            response: str = input("\n Enter the path to the raw data directory: ").lower()
+            try:
+                path: Path = Path(response).resolve().absolute()
+                if path.exists():
+                    return path
+                else:
+                    console.print(f"Path does not exist: {path}")
+                    continue
+            except Exception as e:
+                console.print(f"Invalid path: {e}")
+                continue
+
+    @classmethod
+    # After generating directories:
+    def print_data_root_tree(cls, root):
+        tree = Tree(f"[bold blue]{root}[/]")
+        for dir_path in sorted(root.glob("**/")):  # Recursively get all directories
+            if dir_path != root:  # Skip root itself
+                # Calculate relative path for proper tree structure
+                relative = dir_path.relative_to(root)
+                # Add to tree with proper nesting
+                current = tree
+                for part in relative.parts:
+                    current = current.add(f"[green]{part}[/]")
+        console.print(tree)
+
+
+    @classmethod
+    def print_test(cls):
+        """
+        Demonstrate various ways to print styled output using Click and Rich.
+        """
+        # Basic Click output
+        click.echo("Basic Click message")
+        click.secho("Colored Click message", fg='green')
+        click.secho("Bold Click message", bold=True)
+
+        # Click with different colors and styles
+        click.secho("Error message", fg='red', bold=True)
+        click.secho("Warning message", fg='yellow')
+        click.secho("Success message", fg='green', bg='black')
+
+        # Rich printing
+        console.print("Basic Rich message")
+        console.print("Styled Rich message", style="bold blue")
+        console.print("[red]Colored[/red] [green]Rich[/green] [blue]message[/blue]")
+
+        # Rich panels
+        console.print(Panel("Important information in a panel"))
+        console.print(Panel("Error message in a panel", style="red"))
+
+        # Rich progress bar
+        for _ in track(range(5), description="Processing..."):
+            sleep(0.2)  # Simulate work
+
+        # Rich tables and other formatting
+        console.print("\n[bold]Status Summary:[/bold]")
+        console.print("✅ Task 1 completed", style="green")
+        console.print("⚠️  Task 2 pending", style="yellow")
+        console.print("❌ Task 3 failed", style="red")
+
+
     @classmethod
     def print_welcome(cls):
         """Display a stylized welcome message"""

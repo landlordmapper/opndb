@@ -3,16 +3,17 @@ from pathlib import Path
 from typing import Any, IO
 
 from opndb.types.base import WorkflowConfigs
+from opndb.utils import console
 
 
 class ConfigManager:
 
-    def __init__(self, config_path: Path | None = None):
-        self._config_path = config_path or Path(__file__).parent.parent / "config.json"
-        self._config: dict[str, Any] = {}
+    def __init__(self, configs_path: Path | None = None):
+        self._configs_path = configs_path or Path(__file__).parent.parent / "configs.json"
+        self._configs: dict[str, Any] = {}
         self.load()
 
-    def generate(self, root: str) -> None:
+    def generate(self, data_root: Path) -> None:
         """
         Generates new configs.json file.
 
@@ -25,17 +26,16 @@ class ConfigManager:
         try:
             # Create config dictionary with typed structure
             configs: WorkflowConfigs = {
-                "root": Path(root),
+                "data_root": data_root,
             }
             json_configs = {
-                "root": str(configs["root"].absolute())
+                "data_root": str(configs["data_root"].absolute())
             }
             # Write configs to file with pretty printing
-            with open(self._config_path, 'w', encoding='utf-8') as f:
+            with open(self._configs_path, "w", encoding="utf-8") as f:
                 json.dump(json_configs, f, indent=2)
             # Update internal config state
-            self._config = configs
-
+            self._configs = configs
         except OSError as e:
             raise OSError(f"Failed to create config file: {e}")
         except json.JSONDecodeError as e:
@@ -45,13 +45,13 @@ class ConfigManager:
 
     def load(self) -> None:
         """Load configuration from file"""
-        if self._config_path.exists():
-            with open(self._config_path) as f:
+        if self._configs_path.exists():
+            with open(self._configs_path) as f:
                 self._config = json.load(f)
 
     def save(self) -> None:
         """Save current configuration to file"""
-        with open(str(self._config_path), "w", encoding="utf-8") as f:
+        with open(str(self._configs_path), "w", encoding="utf-8") as f:
             json.dump(self._config, f, indent=2)
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -64,10 +64,22 @@ class ConfigManager:
         self.save()
 
     @property
-    def exists(self) -> bool:
-        return self._config_path.exists()
+    def path(self) -> str:
+        return str(self._configs_path)
 
     @property
-    def config(self) -> dict[str, Any]:
+    def exists(self) -> bool:
+        console.print(f"configs file path: {self._configs_path}")
+        found = self._configs_path.exists()
+        if found:
+            console.print("configs file found")
+            console.print(self._configs_path)
+            return found
+        else:
+            console.print("configs file not found")
+        # return self._configs_path.exists()
+
+    @property
+    def configs(self) -> dict[str, Any]:
         """Public read-only access to configuration"""
-        return self._config.copy()
+        return self._configs.copy()

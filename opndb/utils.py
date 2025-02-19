@@ -1,12 +1,13 @@
+import shutil
 from datetime import datetime
 from pathlib import Path
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, FileSizeColumn, TotalFileSizeColumn, TimeRemainingColumn
 
 from opndb.constants.base import DATA_ROOT
 from rich.console import Console
 
 from opndb.constants.files import Dirs, Raw, Processed, Geocodio, Analysis
-from opndb.types.base import FileExt, WorkflowConfigs
-from opndb.workflows.base import WorkflowStage
+from opndb.types.base import FileExt, WorkflowConfigs, WorkflowStage
 
 console = Console()
 
@@ -44,6 +45,81 @@ class UtilsBase(object):
             # Check if string contains mostly non-printable characters
             return any(ord(c) < 32 for c in x)
         return False
+
+    @classmethod
+    def generate_data_dirs(cls, root: Path):
+        """
+        Check if required directories exist and create them if they don't.
+        Args:
+            root (Path): Root directory path where all subdirectories should be created
+        Raises:
+            ValueError: If root path is not provided or is invalid
+        """
+        if not root:
+            raise ValueError("Root directory path must be provided")
+        # define required directories
+        directories = [
+            Dirs.RAW,
+            Dirs.PROCESSED,
+            Dirs.ANALYSIS,
+            Dirs.GEOCODIO,
+            Path(Dirs.GEOCODIO) / "partials",
+            Dirs.FINAL_OUTPUTS,
+            Dirs.SUMMARY_STATS
+        ]
+        # create directories if they don't exist
+
+        for dir_name in directories:
+            dir_path: Path = root / dir_name
+            if not dir_path.exists():
+                try:
+                    # print to console # dir_name not found. creating...
+                    dir_path.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    raise RuntimeError(f"Failed to create directory {dir_path}: {str(e)}")
+
+    @classmethod
+    def copy_raw_data(cls, raw_data_dir: Path, data_root: Path):
+        file_names = [
+            Raw.TAXPAYER_RECORDS,
+            Raw.CORPS,
+            Raw.LLCS,
+            Raw.CLASS_CODES
+        ]
+        with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TotalFileSizeColumn(),
+                TimeRemainingColumn(),
+        ) as progress:
+            console.print("Copying raw data files to project data directory...\n")
+            for file_name in file_names:
+                source_file = raw_data_dir / f"{file_name}.csv"
+                dest_file = data_root / "raw" / f"{file_name}.csv"
+                if not source_file.exists():
+                    console.print(f"[red]Error: Source file \"{file_name}.csv\" not found.[/red]")
+                    return
+                try:
+                    file_size = source_file.stat().st_size
+                    task = progress.add_task(
+                        f"Copying {file_name}...",
+                        total=file_size,
+                        completed=0
+                    )
+                    with open(source_file, "rb") as src, open(dest_file, "wb") as dst:
+                        while chunk := src.read(8192):
+                            dst.write(chunk)
+                            progress.update(task, advance=len(chunk))
+                except PermissionError:
+                    console.print(f"[red]Error: Permission denied when copying {file_name}[/red]")
+                    return
+                except Exception as e:
+                    console.print(f"[red]Error copying {file_name}: {str(e)}[/red]")
+                    return
+
+        console.print("\nData successfully copied.")
+
 
 
 class PathGenerators(UtilsBase):

@@ -22,7 +22,7 @@ class WorkflowStage(IntEnum):
 
 
 class WorkflowConfigs(TypedDict, total=False):
-    root: Path
+    data_root: Path
     load_ext: FileExt
     prev_stage: WorkflowStage | None
     stage: WorkflowStage  # might be redundant if we have wkfl type
