@@ -12,4 +12,7 @@ Very WIP!!
 
 # how to run
 - install uv on your computer
-- `uv run -m opndb.schema.20250207_init` as example
+- `uv sync`
+
+# testing
+- `uv run pytest`

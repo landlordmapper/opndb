@@ -12,13 +12,21 @@ dependencies = [
     "word2number==1.1",
     "networkx==3.4.2",
     "scikit-learn==1.6.1",
-    "Levenshtein==0.25.1"
+    "Levenshtein==0.25.1",
+    "markdown>=3.7",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.9.6",
+    "hypothesis[pandas]>=6.126.0",
+    "pytest>=8.3.4",
 ]
 
 [project.scripts]
 opndb = "opndb.main:cli"
+
+[pytest]
+testpaths = "opndb/tests"
+python_files = "test_*.py"
+

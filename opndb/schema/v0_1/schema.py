@@ -4,6 +4,7 @@ from typing import Final
 
 import pandas as pd
 import pandera as pa
+from pandas import CategoricalDtype
 from pandera import DateTime
 
 from opndb.validator.df_model import OPNDFModel, OPNDFStrEnum
@@ -15,9 +16,6 @@ VALID_ZIP_CODE_REGEX: Final[re] = r"^\d{5}(-\d{4})?$"
 class CodeViolationStatus(OPNDFStrEnum):
     OPEN = "open"
     CLOSED = "closed"
-
-CodeViolationDType = CodeViolationStatus.to_categorical_dtype()
-
 
 class Building(OPNDFModel):
     """
@@ -123,6 +121,6 @@ class CodeViolation(OPNDFModel):
         description="Whether the respondent was found liable for the violation",
         nullable=True,
     )
-    status: Series[CodeViolationDType] = pa.Field(
+    status: CategoricalDtype(categories=list(CodeViolationStatus)) = pa.Field(
         description="Status of the violation"
     )
