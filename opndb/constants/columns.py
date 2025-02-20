@@ -193,6 +193,8 @@ class LLCs:
 
 
 class ValidatedAddrs:
+    RAW_ADDRESS: str = "raw_address"
+    CLEAN_ADDRESS: str = "clean_address"
     NUMBER: str = "number"
     PREDIRECTIONAL: str = "predirectional"
     PREFIX: str = "prefix"

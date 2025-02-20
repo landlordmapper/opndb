@@ -1,15 +1,6 @@
 from pathlib import Path
 from typing import Any, Callable, Type
-
 import pandas as pd
-
-from opndb.constants.columns import (
-    TaxpayerRecords as tr,
-    ValidatedAddrs as va,
-    ClassCodes as cc,
-    Properties as p,
-    UnvalidatedAddrs as ua
-)
 from opndb.services.string_clean import (
     CleanStringBase as clean_base,
     CleanStringName as clean_name,
@@ -21,9 +12,7 @@ from rich.progress import (
     SpinnerColumn,
     TextColumn,
     BarColumn,
-    FileSizeColumn,
     TotalFileSizeColumn,
-    TimeRemainingColumn
 )
 from rich.console import Console
 
@@ -31,6 +20,12 @@ from rich.console import Console
 console = Console()
 
 class DataFrameOpsBase(object):
+
+    """
+    Base dataframe operations class. Low-level dataframe functions that can be imported/used in other services classes
+    without circular import issues. High-level dataframe operations that import from other services classes belong in
+    services/dataframe/ops.py
+    """
 
     @classmethod
     def load_df(cls, path: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame:
@@ -140,197 +135,6 @@ class DataFrameOpsBase(object):
         Checks class codes and returns True if at least one of them is a rental class code. Returns false if none are.
         """
         return any(code in rental_classes for code in class_codes)
-
-
-class DataFrameMergers(DataFrameOpsBase):
-    """
-    Dataframe operations that merge multiple dataframes and handle post-merge cleanup (dropping duplicates, combining
-    columns, etc.)
-    """
-    @classmethod
-    def merge_orgs(cls, df_taxpayers: pd.DataFrame, df_orgs: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    @classmethod
-    def merge_validated_addrs(cls, df: pd.DataFrame, df_addrs: pd.DataFrame, clean_addr_cols: list[str]) -> pd.DataFrame:
-        """Merges validated address data into property taxpayer dataset."""
-        # todo: remove repeated cols (combine columns function from old workflow)
-        # todo: remove unnecessary columns before returning
-        # todo: test to confirm whether we should drop duplicates here
-        return pd.merge(
-            df,
-            df_addrs[[va.CLEAN_ADDRESS, va.FORMATTED_ADDRESS]],
-            how="left",
-            left_on=clean_addr_cols[0],
-            right_on=va.CLEAN_ADDRESS
-        )
-
-
-class DataFrameColumnGenerators(DataFrameOpsBase):
-    """Dataframe operations that generate new columns."""
-    @classmethod
-    def set_is_rental(cls, df_props: pd.DataFrame, df_class_codes: pd.DataFrame) -> pd.DataFrame:
-        """
-        Subsets property dataframe to only include properties associated with rental class codes. Handles situations in
-        which multiple class codes are associated with a single property and are separated by commas.
-        :param df_props: Dataframe containing entire property taxpayer dataset
-        :param df_class_codes: Dataframe containing building class code descriptions
-        :return: D
-        """
-        df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes[cc.IS_RENTAL] == True]
-        rental_codes: list[str] = list(df_rental_codes[cc.IS_RENTAL])
-        df_props[tr.IS_RENTAL] = df_props[p.CLASS_CODE].apply(
-            lambda codes: cls.rental_class_check(
-                [code.strip() for code in codes.split(",")],
-                rental_codes
-            )
-        )
-        return df_props
-
-    @classmethod
-    def set_core_name(cls, df: pd.DataFrame, name_col: str) -> pd.DataFrame:
-        """
-        Adds core_name column to dataframe.
-
-        :param df: Dataframe to add column to
-        :param name_col: Column in the dataframe to be used to derive core name
-        """
-        df["core_name"] = df[name_col].apply(lambda name: clean_base.core_name(name))
-        return df
-
-    @classmethod
-    def set_is_bank(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
-        """
-        Adds is_bank boolean column to dataframe.
-
-        :param df: Dataframe to add column to
-        :param name_col: Column in the dataframe to be used to set is_bank
-        :param suffix: Suffix to add to column name (ex: is_bank_president, is_bank_agent, etc.)
-        """
-        is_bank_col: str = f"is_bank_{suffix}" if suffix else "is_bank"
-        df[is_bank_col] = df[col].apply(lambda name: clean_base.get_is_bank(name))
-        return df
-
-    @classmethod
-    def set_is_trust(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
-        """
-        Adds is_trust boolean column to dataframe.
-
-        :param df: Dataframe to add column to
-        :param name_col: Column in the dataframe to be used to set is_trust
-        :param suffix: Suffix to add to column name (ex: is_trust_president, is_trust_agent, etc.)
-        """
-        is_trust_col: str = f"is_trust_{suffix}" if suffix else "is_trust"
-        df[is_trust_col] = df[col].apply(lambda name: clean_base.get_is_trust(name))
-        return df
-
-    @classmethod
-    def set_is_person(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
-        """
-        Adds is_person boolean column to dataframe.
-
-        :param df: Dataframe to add column to
-        :param name_col: Column in the dataframe to be used to set is_person
-        :param suffix: Suffix to add to column name (ex: is_person_president, is_person_agent, etc.)
-        """
-        is_person_col: str = f"is_person_{suffix}" if suffix else "is_person"
-        df[is_person_col] = df[col].apply(lambda name: clean_base.get_is_person(name))
-        return df
-
-    @classmethod
-    def set_is_common_name(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
-        """
-        Adds is_common_name boolean column to dataframe.
-
-        :param df: Dataframe to add column to
-        :param name_col: Column in the dataframe to be used to set is_common_name
-        :param suffix: Suffix to add to column name (ex: is_common_name_president, is_common_name_agent, etc.)
-        """
-        is_common_name_col: str = f"is_common_name_{suffix}" if suffix else "is_common_name"
-        df[is_common_name_col] = df[col].apply(lambda name: clean_base.get_is_common_name(name))
-        return df
-
-    @classmethod
-    def set_is_org(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
-        """
-        Adds is_org boolean column to dataframe.
-
-        :param df: Dataframe to add column to
-        :param name_col: Column in the dataframe to be used to set is_org
-        :param suffix: Suffix to add to column name (ex: is_org_president, is_org_agent, etc.)
-        """
-        is_org_col: str = f"is_org_{suffix}" if suffix else "is_org"
-        df[is_org_col] = df[col].apply(lambda name: clean_base.get_is_org(name))
-        return df
-
-    @classmethod
-    def set_is_llc(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
-        """
-        Adds is_llc boolean column to dataframe.
-
-        :param df: Dataframe to add column to
-        :param name_col: Column in the dataframe to be used to set is_llc
-        :param suffix: Suffix to add to column name (ex: is_llc_president, is_llc_agent, etc.)
-        """
-        is_llc_col: str = f"is_llc_{suffix}" if suffix else "is_llc"
-        df[is_llc_col] = df[col].apply(lambda name: clean_base.get_is_llc(name))
-        return df
-
-    @classmethod
-    def set_is_pobox(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
-        """
-        Adds is_pobox boolean column to dataframe.
-
-        :param df: Dataframe to add column to
-        :param col: Column in the dataframe to be used to set is_pobox
-        """
-        df["is_pobox"] = df[col].apply(lambda addr: clean_base.get_is_pobox(addr))
-        return df
-
-    @classmethod
-    def set_name_address_concat(cls, df: pd.DataFrame, col_map: dict[str, str]) -> pd.DataFrame:
-        df[col_map["name_addr"]]: pd.DataFrame = df.apply(
-            lambda row: f"{row[col_map['name']]} -- {row[col_map['addr']]}", axis=1
-        )
-        return df
-
-
-class DataFrameSubsetters(DataFrameOpsBase):
-    """Dataframe operations that return subsets."""
-    @classmethod
-    def get_nonrentals_from_addrs(cls, df_all: pd.DataFrame, df_rentals_initial: pd.DataFrame) -> pd.DataFrame:
-        """
-        Extracts properties whose class codes are NOT associated with rental class codes, but whose taxpayer mailing
-        address matches with an address from the rental property subset.
-
-        :param df_all: Dataframe containing entire property taxpayer dataset
-        :param df_rentals_initial: Dataframe containing initial rental subset
-        :return: Dataframe containing properties excluded from initial rental subset with matching validated taxpayer addresses
-        """
-        rental_addrs: list[str] = list(df_rentals_initial[tr.FORMATTED_ADDRESS].dropna().unique())
-        df_nonrentals: pd.DataFrame = df_all[df_all[tr.IS_RENTAL] == False]
-        return df_nonrentals[df_nonrentals[tr.FORMATTED_ADDRESS].isin(rental_addrs)]
-
-    @classmethod
-    def get_active(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
-        pass
-
-    @classmethod
-    def get_is_pobox(cls, df: pd.DataFrame) -> pd.DataFrame:
-        """Subsets dataframe to include only addresses identified as matching a PO Box pattern."""
-        return df[df["is_pobox"] == True]
-
-    @classmethod
-    def update_unvalidated_addrs(cls, df: pd.DataFrame, addrs: list[str]) -> pd.DataFrame:
-        """
-        Removes addresses from the unvalidated_addrs master dataset. This should be called after validating new
-        addresses.
-
-        :param df: Dataframe containing the previous unvalidated addresses dataset
-        :param addrs: Addresses to remove from the unvalidated_addrs master dataset
-        """
-        # todo: figure out how to handle saving dfs, whether or not it should be done in the workflows or in these
-        return df[~df[ua.TAX_FULL_ADDRESS].isin(addrs)]
 
 
 class DataFrameCleaners(DataFrameOpsBase):

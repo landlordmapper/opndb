@@ -36,13 +36,15 @@ from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
 # 6. Services (these can depend on everything else)
 from opndb.services.match import StringMatch, NetworkMatchBase, MatchBase
 from opndb.services.address import AddressBase as addr
-from opndb.services.terminal_printers import TerminalBase as terminal, TerminalBase
-from opndb.services.dataframe import (
+from opndb.services.terminal_printers import TerminalBase as t
+from opndb.services.dataframe.base import (
     DataFrameOpsBase as ops_df,
     DataFrameBaseCleaners as clean_df_base,
     DataFrameNameCleaners as clean_df_name,
     DataFrameAddressCleaners as clean_df_addr,
-    DataFrameCleanersAccuracy as clean_df_acc,
+    DataFrameCleanersAccuracy as clean_df_acc
+)
+from opndb.services.dataframe.ops import (
     DataFrameMergers as merge_df,
     DataFrameSubsetters as subset_df,
     DataFrameColumnGenerators as cols_df,
@@ -86,7 +88,7 @@ class WorkflowBase(ABC):
                 "file_size": utils.sizeof_fmt(memory_usage),
                 "record_count": len(df)
             })
-        TerminalBase.display_table(table_data)
+        t.display_table(table_data)
         return dfs
 
     @classmethod
@@ -247,27 +249,27 @@ class WkflDataClean(WorkflowStandardBase):
                 ],
             },
         },
-        # "accuracy": {
-        #     "name": {
-        #         "taxpayer_records": [],
-        #         "corps": [],
-        #         "llcs": [],
-        #     },
-        #     "address": {
-        #         "taxpayer_records": {
-        #             "street": [p.TAX_STREET],
-        #             "zip": [p.TAX_ZIP],
-        #         },
-        #         "corps": {
-        #             "street": [p.TAX_STREET],
-        #             "zip": [p.TAX_ZIP],
-        #         },
-        #         "llcs": {
-        #             "street": [p.TAX_STREET],
-        #             "zip": [p.TAX_ZIP],
-        #         },
-        #     }
-        # }
+        "accuracy": {
+            "name": {
+                "props_taxpayers": [],
+                "corps": [],
+                "llcs": [],
+            },
+            "address": {
+                "props_taxpayers": {
+                    "street": [],
+                    "zip": [],
+                },
+                "corps": {
+                    "street": [],
+                    "zip": [],
+                },
+                "llcs": {
+                    "street": [],
+                    "zip": [],
+                },
+            }
+        }
     }
     RAW_CLEAN_COL_MAP = {
         "props_taxpayers": [
@@ -325,6 +327,17 @@ class WkflDataClean(WorkflowStandardBase):
             l.MANAGER_MEMBER_ADDRESS: "manager_member",
             l.AGENT_ADDRESS: "agent",
             l.OFFICE_ADDRESS: "office"
+        }
+    }
+    AVAILABLE_ADDRESS_COL_MAP = {
+        "props_taxpayers": {
+
+        },
+        "corps": {
+
+        },
+        "llcs": {
+
         }
     }
     UNVALIDATED_COL_MAP = {
@@ -514,21 +527,8 @@ class WkflDataClean(WorkflowStandardBase):
     def exclude_raw_cols(self, df: pd.DataFrame) -> list[str]:
         return list(filter(lambda x: not x.startswith("raw"), df.columns))
 
-    # todo: move to dataframe service
-    def set_full_address_fields(self, df: pd.DataFrame, address_fields: dict[str, str]) -> pd.DataFrame:
-        for field in address_fields.keys():
-            if field not in df.columns:
-                df = df.apply(lambda row: ops_df.get_full_address(row, address_fields[field]), axis=1)
-        return df
-
-    # todo: move to dataframe service
-    def generate_raw_columns(self, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-        for col in cols:
-            df[f"raw_{col[4:]}"] = df[col].copy()
-        return df
-
     def execute_basic_cleaning(self, id: str, df: pd.DataFrame, exclude_raw: bool = True) -> pd.DataFrame:
-        console.print(f"Executing preliminary string cleaning on {id} (all columns)...")
+        t.print_with_dots(f"Executing preliminary string cleaning on {id} (all columns)...")
         if exclude_raw:
             cols: list[str] = self.exclude_raw_cols(df)
         else:
@@ -576,64 +576,16 @@ class WkflDataClean(WorkflowStandardBase):
         console.print(f"{id} address field cleaning complete.")
         return df
 
-    # todo: move to dataframe service
-    def split_props_taxpayers(self, df: pd.DataFrame):
-        df: pd.DataFrame = cols_df.set_name_address_concat(
-            df,
-            {
-                "name_addr": p.CLEAN_NAME_ADDRESS,
-                "name": pt.TAX_NAME,
-                "addr": pt.TAX_ADDRESS,
-            }
-        )
-        # pull out required columns for each final dataset
-        # separate out properties dataset from props_taxpayers, handling for cases in which NUM_UNITS is missing
-        df_props: pd.DataFrame = df[self.DF_OUT_COL_MAP["properties"]].copy()
-        df_taxpayers: pd.DataFrame = df[self.DF_OUT_COL_MAP["taxpayer_records"]].copy()
-        # rename columns with clean_ prefix
-        df_taxpayers.rename(columns={
-            pt.TAX_NAME: tr.CLEAN_NAME,
-            pt.TAX_ADDRESS: tr.CLEAN_ADDRESS,
-            pt.TAX_STREET: tr.CLEAN_STREET,
-            pt.TAX_CITY: tr.CLEAN_CITY,
-            pt.TAX_STATE: tr.CLEAN_STATE,
-            pt.TAX_ZIP: tr.CLEAN_ZIP,
-        })
-        df_taxpayers.drop_duplicates(subset=[tr.RAW_NAME_ADDRESS], inplace=True)
-        return df_props, df_taxpayers
-
-    # todo: move to dataframe service
-    def generate_unvalidated_df(self, dfs: dict[str, pd.DataFrame]) -> pd.DataFrame:
-        dfs_to_concat: list[pd.DataFrame] = []
-        for id, df in dfs.items():
-            if id == "class_codes":
-                continue
-            elif id == "properties":
-                continue
-            elif id == "taxpayer_records":
-                df = df[self.DF_OUT_COL_MAP[id]]
-                df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
-                dfs_to_concat.append(df)
-            else:
-                for key in self.DF_OUT_COL_MAP[id].keys():
-                    df = df[self.DF_OUT_COL_MAP[id][key].keys()]
-                    df.rename(columns=self.DF_OUT_COL_MAP[id][key], inplace=True)
-                    df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
-                    dfs_to_concat.append(df)
-        df_out: pd.DataFrame = pd.concat(dfs_to_concat, ignore_index=True)
-        df_out.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
-        return df_out
-
-    # def execute_accuracy_implications(self, id: str, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-    #     if self.configs["accuracy"] == "low":
-    #         console.print(f"Accuracy set to low. Executing additional string cleaners with accuracy implications on {id}")
-    #         df = clean_df_acc.remove_secondary_component(df, cols)
-    #         df = clean_df_acc.convert_mixed(df, cols)
-    #         df = clean_df_acc.drop_letters(df, cols)
-    #         console.print(f"{id} additional string cleaning complete.")
-    #     else:
-    #         console.print(f"Skipping additional string cleaning.")
-    #     return df
+    def execute_accuracy_implications(self, id: str, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+        if self.configs["accuracy"] == "low":
+            console.print(f"Accuracy set to low. Executing additional string cleaners with accuracy implications on {id}")
+            df = clean_df_acc.remove_secondary_component(df, cols)
+            df = clean_df_acc.convert_mixed(df, cols)
+            df = clean_df_acc.drop_letters(df, cols)
+            console.print(f"{id} additional string cleaning complete.")
+        else:
+            console.print(f"Skipping additional string cleaning.")
+        return df
 
     def load(self):
         load_map: dict[str, Path] = {
@@ -660,9 +612,11 @@ class WkflDataClean(WorkflowStandardBase):
                 dfs_out[id] = df
                 continue
 
+            # -------------------------------
+            # ----PRE-CLEANING OPERATIONS----
+            # -------------------------------
             # create tax_address col if NOT present
-            df: pd.DataFrame = self.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id])
-
+            df: pd.DataFrame = cols_df.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id])
             # props_taxpayers-specific logic - concatenate raw name + raw address
             if id == "props_taxpayers":
                 df: pd.DataFrame = cols_df.set_name_address_concat(
@@ -673,10 +627,12 @@ class WkflDataClean(WorkflowStandardBase):
                         "addr": pt.TAX_ADDRESS,
                     }
                 )
-
             # generate raw_prefixed columns
-            df: pd.DataFrame = self.generate_raw_columns(df, self.RAW_CLEAN_COL_MAP[id])
-            # execute cleaning
+            df: pd.DataFrame = cols_df.set_raw_columns(df, self.RAW_CLEAN_COL_MAP[id])
+
+            # ------------------------
+            # ----EXECUTE CLEANING----
+            # ------------------------
             df: pd.DataFrame = self.execute_basic_cleaning(id, df)
             df: pd.DataFrame = self.execute_name_column_cleaning(id, df, self.CLEANING_COL_MAP["name"][id])
             df: pd.DataFrame = self.execute_address_column_cleaning(
@@ -687,15 +643,28 @@ class WkflDataClean(WorkflowStandardBase):
             )
             # df_pt: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df_pt)
 
+            # --------------------------------
+            # ----POST-CLEANING OPERATIONS----
+            # --------------------------------
+            # add clean full address fields
+            df: pd.DataFrame = cols_df.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id], "clean")
             # props_taxpayers-specific logic - split into
             if id == "props_taxpayers":
-                df_props, df_taxpayers = self.split_props_taxpayers(df)
+                df_props, df_taxpayers = subset_df.split_props_taxpayers(
+                    df,
+                    self.DF_OUT_COL_MAP["properties"],
+                    self.DF_OUT_COL_MAP["taxpayer_records"]
+                )
                 dfs_out["properties"] = df_props
                 dfs_out["taxpayers"] = df_taxpayers
             else:
                 dfs_out[id] = df[self.DF_OUT_COL_MAP[id]]
 
-        dfs_out["unvalidated_addrs"] = self.generate_unvalidated_df(dfs_out)
+        # --------------------------------------------
+        # ----GENERATE UNVALIDATED ADDRESS DATASET----
+        # --------------------------------------------
+        dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(dfs_out, self.DF_OUT_COL_MAP)
+
         return dfs_out
 
     def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
@@ -802,9 +771,9 @@ class WkflAddressGeocodio(WorkflowStandardBase):
 
     def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         # print out address count to be validated using geocodio
-        terminal.print_geocodio_warning(dfs["unvalidated_addrs"])
+        t.print_geocodio_warning(dfs["unvalidated_addrs"])
         # prompt user for api key and display warning with number of calls and estimated cost
-        self.api_key = terminal.enter_geocodio_api_key()
+        self.api_key = t.enter_geocodio_api_key()
         # call geocodio or exit
         addr.run_geocodio(self.api_key, dfs["unvalidated_addrs"], ua.TAX_FULL_ADDRESS)  # have it return the dfs?
         # add validated addrs to the master files and save to data dirs

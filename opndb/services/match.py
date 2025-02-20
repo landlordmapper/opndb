@@ -10,7 +10,7 @@ import re
 
 from opndb.constants.columns import AddressAnalysis
 from opndb.types.base import StringMatchParams, NetworkMatchParams
-from opndb.services.dataframe import DataFrameOpsBase as df_ops
+from opndb.services.dataframe.base import DataFrameOpsBase as df_ops
 from opndb.utils import UtilsBase as utils
 
 # todo: add type hints and docstrings where missing

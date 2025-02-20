@@ -60,21 +60,21 @@ def start(config_manager: ConfigManager):
     if not t.press_enter_to_continue("continue "):
         console.print("Exiting program...", style="yellow")
         return
-    console.print("Searching for project settings...")
+    t.print_with_dots("Searching for project settings...")
     if config_manager.exists:
-        console.print("Configs file located. Loading...")
+        t.print_with_dots("Configs file located. Loading...")
         config_manager.load()
-        console.print("Configs successfully loaded.")
+        t.print_with_dots("Configs successfully loaded.")
     else:
-        console.print("No configs file was found. Run `opndb init /path/to/your/root/data/dir`")
+        t.print_with_dots("No configs file was found. Run `opndb init /path/to/your/root/data/dir`")
         return
-    console.print("Launching workflows...")
+    t.print_with_dots("Launching workflows...")
     console.print("\n")
     while True:
         wkfl = WorkflowBase.create_workflow(config_manager.configs)
         wkfl.load()
         if not t.press_enter_to_continue("execute string cleaning workflow "):
-            console.print("Exiting program...", style="yellow")
+            t.print_with_dots("Exiting program...", style="yellow")
             return
         # print out summary stats of data found in raw datasets
         # press enter to begin cleaning

@@ -1,6 +1,5 @@
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
-from pathlib import Path
 import time
 import traceback
 
@@ -8,7 +7,6 @@ import pandas as pd
 import requests as req
 
 from opndb.constants.base import GEOCODIO_URL
-from opndb.constants.files import Dirs, Processed, Geocodio
 from opndb.types.base import (
     RawAddress,
     GeocodioResult,
@@ -16,9 +14,9 @@ from opndb.types.base import (
     GeocodioResultProcessed,
     GeocodioResultFlat
 )
-from opndb.services.dataframe import (
-    DataFrameOpsBase as df_ops,
-    DataFrameBaseCleaners
+from opndb.services.dataframe.base import (
+    DataFrameOpsBase as ops_df,
+    DataFrameBaseCleaners as clean_df
 )
 from opndb.utils import UtilsBase as utils
 
@@ -55,7 +53,7 @@ class AddressBase:
 
     @classmethod
     def save_validated_addrs_initial(cls, df: pd.DataFrame) -> str:
-        return df_ops.save_df(df, cls.validated_addrs_path)
+        return ops_df.save_df(df, cls.validated_addrs_path)
 
     @classmethod
     def call_geocodio(cls, api_key: str, address_search_string: str) -> list[GeocodioResult] | None:
@@ -74,7 +72,7 @@ class AddressBase:
     def save_geocodio_partial(cls, results: list[dict]):
         timestamp = utils.get_timestamp()
         df_partial = pd.DataFrame(results)
-        DataFrameOpsBase.save_df(df_partial, cls.gcd_partials_dir_path / f"partial_geocodio_({timestamp}).csv")
+        ops_df.save_df(df_partial, cls.gcd_partials_dir_path / f"partial_geocodio_({timestamp}).csv")
 
     @classmethod
     def check_matching_addrs(cls, df: pd.DataFrame) -> bool:
@@ -257,7 +255,7 @@ class AddressBase:
         # convert results to df and perform basic cleaning
         df_results: pd.DataFrame = pd.DataFrame(results, dtype=str)
         df_results = df_results.fillna("")
-        df_results = DataFrameBaseCleaners.make_upper(df_results)
+        df_results = clean_df.make_upper(df_results)
 
         # run remaining results through filters
         df_filtered = cls.apply_filters(df_results)
@@ -376,6 +374,43 @@ class AddressBase:
         """Checks for valid zip codes and city names in cleaned PO Box values."""
         pass
 
+    @classmethod
+    def get_full_address(
+        cls,
+        row: pd.Series,
+        df_cols: list[str],
+        full_addr_key: str,
+        raw_clean_prefix: str | None = None
+    ) -> str:
+        """
+        Returns concatenated string containing all address components. Accounts for missing city and state address
+        fields.
+
+        NOTE: Column validation should already have happened at this point, so this should NOT throw a key
+        error for missing columns.
+
+        NOTE: Commas are added between state and zip code to allow for splitting.
+
+        :param row: Dataframe row containing address fields
+        :param df_cols: List of column names associated with the row
+        :param full_addr_key: Key to prefix address columns (ex: "tax" > "tax_street", "president" > "president_street", etc.)
+        :param raw_clean_prefix: Optional prefix string to specify address column names (ex: "clean" > "clean_tax_city", "raw" > "raw_agent_street")
+        """
+        street: str = f"{raw_clean_prefix}_{full_addr_key}_street" if raw_clean_prefix else f"{full_addr_key}_street"
+        city: str = f"{raw_clean_prefix}_{full_addr_key}_city" if raw_clean_prefix else f"{full_addr_key}_city"
+        state: str = f"{raw_clean_prefix}_{full_addr_key}_state" if raw_clean_prefix else f"{full_addr_key}_state"
+        zip_: str = f"{raw_clean_prefix}_{full_addr_key}_zip" if raw_clean_prefix else f"{full_addr_key}_zip"
+        address_fields: list[str] = [street, city, state, zip_]
+        # if all address fields are present, concatenate like normal
+        if all(field in df_cols for field in address_fields):
+            return f"{row[street]}, {row[city]}, {row[state]}, {row[zip_]}"
+        # if city or state fields are missing, return value accordingly
+        elif city not in row.columns:
+            return f"{row[street]}, {row[state]}, {row[zip_]}"
+        else:
+            return f"{row[street]}, {row[zip_]}"
+
+
 
 class AddressValidatorBase(AddressBase):
 
@@ -383,8 +418,8 @@ class AddressValidatorBase(AddressBase):
 
     def __init__(self):
         super().__init__()
-        self.df_validated: pd.DataFrame = df_ops.load_df(self.validated_addrs_path, str)
-        self.df_unvalidated: pd.DataFrame = df_ops.load_df(self.unvalidated_addrs_path, str)
+        self.df_validated: pd.DataFrame = ops_df.load_df(self.validated_addrs_path, str)
+        self.df_unvalidated: pd.DataFrame = ops_df.load_df(self.unvalidated_addrs_path, str)
 
     def add_to_df_validated(self):
         # pass row of validated address data - pandera object?
@@ -396,8 +431,8 @@ class AddressValidatorBase(AddressBase):
 
 
     def save(self) -> dict[str, str]:
-        validated_path = df_ops.save_df(self.df_validated, self.validated_addrs_path)
-        unvalidated_path = df_ops.save_df(self.df_unvalidated, self.unvalidated_addrs_path)
+        validated_path = ops_df.save_df(self.df_validated, self.validated_addrs_path)
+        unvalidated_path = ops_df.save_df(self.df_unvalidated, self.unvalidated_addrs_path)
         return {
             "validated_path": validated_path,
             "unvalidated_path": unvalidated_path,

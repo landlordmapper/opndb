@@ -81,7 +81,7 @@ class UtilsBase(object):
     @classmethod
     def copy_raw_data(cls, raw_data_dir: Path, data_root: Path):
         file_names = [
-            Raw.TAXPAYER_RECORDS,
+            Raw.PROPS_TAXPAYERS,
             Raw.CORPS,
             Raw.LLCS,
             Raw.CLASS_CODES

@@ -10,6 +10,7 @@ import shutil
 from rich.progress import track
 from time import sleep
 from rich.tree import Tree
+from rich.style import Style
 
 from opndb.constants.base import DATA_ROOT
 
@@ -18,9 +19,36 @@ console = Console()
 
 class TerminalBase:
     """Messages & statements printed during stage 1 of the opndb workflow"""
-    #
-    # @staticmethod
-    # def
+
+    @classmethod
+    def print_with_dots(cls, message: str, console: Console = Console(), style: Style = None) -> None:
+        """
+        Print a message and fill the remaining space to the end of the line with dots.
+
+        Args:
+            message: The message to print
+            console: Rich Console instance to use for printing
+            style: Optional Rich style to apply to the entire line
+        """
+        # Get the console width
+        width = console.width
+
+        # Calculate how many dots we need
+        # Account for the message length and leave space for one character at the end
+        dots_needed = width - len(message) - 1
+
+        # Create the full line with dots
+        if dots_needed > 0:
+            full_line = message + "." * dots_needed
+        else:
+            # If message is too long, truncate it
+            full_line = message[:width - 4] + "..."
+
+        # Print with optional style
+        if style:
+            console.print(full_line, style=style)
+        else:
+            console.print(full_line)
 
     @classmethod
     def press_enter_to_continue(cls, specify_text: str = "") -> bool:
