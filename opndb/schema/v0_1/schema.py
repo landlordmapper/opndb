@@ -20,6 +20,9 @@ CodeViolationDType = CodeViolationStatus.to_categorical_dtype()
 
 
 class Building(OPNDFModel):
+    """
+    A standing structure that people live in
+    """
     pin: Series[str] = pa.Field(description="Property PIN / unique tax ID")
     class_code: Series[str] = pa.Field(
         description="Property class code"
