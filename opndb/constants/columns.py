@@ -213,13 +213,11 @@ class ValidatedAddrs:
 
 
 class UnvalidatedAddrs:
-
     RAW_ADDRESS: str = "raw_address"
     RAW_STREET: str = "raw_street"
     RAW_CITY: str = "raw_city"
     RAW_STATE: str = "raw_state"
     RAW_ZIP: str = "raw_zip"
-
     CLEAN_ADDRESS: str = "raw_address"
     CLEAN_STREET: str = "raw_street"
     CLEAN_CITY: str = "raw_city"

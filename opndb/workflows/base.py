@@ -96,10 +96,6 @@ class WorkflowBase(ABC):
             ops_df.save_df(dfs[id], path)
 
     @classmethod
-    def exclude_raw_cols(cls, df: pd.DataFrame) -> list[str]:
-        return list(filter(lambda x: not x.startswith("raw"), df.columns))
-
-    @classmethod
     def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
         """Instantiates workflow object based on last saved progress (config['wkfl_stage'])."""
         if configs["wkfl_type"] == "data_clean":
@@ -196,6 +192,7 @@ class WkflDataClean(WorkflowStandardBase):
             - 'ROOT/processed/class_codes[FileExt]'
             - 'ROOT/processed/unvalidated_addrs[FileExt]'
     """
+
     CLEANING_COL_MAP = {
         "name": {
             "props_taxpayers": [
@@ -272,177 +269,144 @@ class WkflDataClean(WorkflowStandardBase):
         #     }
         # }
     }
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
-
-    def load(self):
-        load_map: dict[str, Path] = {
-            "props_taxpayers": path_gen.raw_props_taxpayers(self.configs),
-            "corps": path_gen.raw_corps(self.configs),
-            "llcs": path_gen.raw_llcs(self.configs),
-            "class_codes": path_gen.raw_class_codes(self.configs)
+    RAW_CLEAN_COL_MAP = {
+        "props_taxpayers": [
+            pt.TAX_NAME,
+            pt.TAX_ADDRESS,
+            pt.TAX_STREET,
+            pt.TAX_CITY,
+            pt.TAX_STATE,
+            pt.TAX_ZIP,
+        ],
+        "corps": [
+            c.NAME,
+            c.PRESIDENT_NAME,
+            c.PRESIDENT_ADDRESS,
+            c.PRESIDENT_STREET,
+            c.PRESIDENT_CITY,
+            c.PRESIDENT_STATE,
+            c.PRESIDENT_ZIP,
+            c.SECRETARY_NAME,
+            c.SECRETARY_ADDRESS,
+            c.SECRETARY_STREET,
+            c.SECRETARY_CITY,
+            c.SECRETARY_STATE,
+            c.SECRETARY_ZIP,
+        ],
+        "llcs": [
+            l.NAME,
+            l.MANAGER_MEMBER_NAME,
+            l.MANAGER_MEMBER_ADDRESS,
+            l.MANAGER_MEMBER_STREET,
+            l.MANAGER_MEMBER_CITY,
+            l.MANAGER_MEMBER_STATE,
+            l.MANAGER_MEMBER_ZIP,
+            l.AGENT_NAME,
+            l.AGENT_ADDRESS,
+            l.AGENT_STREET,
+            l.AGENT_CITY,
+            l.AGENT_ZIP,
+            l.OFFICE_ADDRESS,
+            l.OFFICE_STREET,
+            l.OFFICE_CITY,
+            l.OFFICE_STATE,
+            l.OFFICE_ZIP,
+        ],
+    }
+    FULL_ADDRESS_COL_MAP = {
+        "props_taxpayers": {
+            pt.TAX_ADDRESS: "tax"
+        },
+        "corps": {
+            c.PRESIDENT_ADDRESS: "president",
+            c.SECRETARY_ADDRESS: "secretary",
+        },
+        "llcs": {
+            l.MANAGER_MEMBER_ADDRESS: "manager_member",
+            l.AGENT_ADDRESS: "agent",
+            l.OFFICE_ADDRESS: "office"
         }
-        return self.set_working_dfs(load_map)
-
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-
-        # todo: add validator that checks for required columns, throw error/failure immediately if not
-        # todo: add to columns validator: if _ADDRESS is empty, _STREET and _ZIP must be present; otherwise, if _ADDRESS exists, all others can be empty/missing
-        # todo: add to properties/taxpayer records validator: unique column constraint on PIN
-
-        # -------------------------------
-        # ----PRE-CLEANING OPERATIONS----
-        # -------------------------------
-        # creating formatted complete raw address if doesn't already exist
-        if pt.TAX_ADDRESS not in dfs["props_taxpayers"].columns:
-            dfs["props_taxpayers"][pt.TAX_ADDRESS] = dfs["props_taxpayers"].apply(
-                lambda row: f"{row[pt.TAX_STREET]}, {row[pt.TAX_CITY]}, {row[pt.TAX_STATE]} {row[pt.TAX_ZIP]}"
-            )
-        # concatenate raw taxpayer name+address
-        dfs["props_taxpayers"][p.RAW_NAME_ADDRESS] = dfs["props_taxpayers"].apply(
-            lambda row: row[pt.TAX_NAME] + " -- " + row[pt.TAX_ADDRESS],
-        )
-        # generate raw-prefixed columns - store raw data
-        dfs["props_taxpayers"][tr.RAW_NAME] = dfs["props_taxpayers"][pt.TAX_NAME].copy()
-        dfs["props_taxpayers"][tr.RAW_ADDRESS] = dfs["props_taxpayers"][pt.TAX_ADDRESS].copy()
-        dfs["props_taxpayers"][tr.RAW_STREET] = dfs["props_taxpayers"][pt.TAX_STREET].copy()
-        dfs["props_taxpayers"][tr.RAW_CITY] = dfs["props_taxpayers"][pt.TAX_CITY].copy()
-        dfs["props_taxpayers"][tr.RAW_STATE] = dfs["props_taxpayers"][pt.TAX_STATE].copy()
-        dfs["props_taxpayers"][tr.RAW_ZIP] = dfs["props_taxpayers"][pt.TAX_ZIP].copy()
-        dfs["corps"][c.RAW_NAME] = dfs["corps"][c.NAME].copy()
-        dfs["corps"][c.RAW_PRESIDENT_NAME] = dfs["corps"][c.PRESIDENT_NAME].copy()
-        dfs["corps"][c.RAW_PRESIDENT_ADDRESS] = dfs["corps"][c.PRESIDENT_ADDRESS].copy()
-        dfs["corps"][c.RAW_PRESIDENT_STREET] = dfs["corps"][c.PRESIDENT_STREET].copy()
-        dfs["corps"][c.RAW_PRESIDENT_CITY] = dfs["corps"][c.PRESIDENT_CITY].copy()
-        dfs["corps"][c.RAW_PRESIDENT_STATE] = dfs["corps"][c.PRESIDENT_STATE].copy()
-        dfs["corps"][c.RAW_PRESIDENT_ZIP] = dfs["corps"][c.PRESIDENT_ZIP].copy()
-        dfs["corps"][c.RAW_SECRETARY_NAME] = dfs["corps"][c.SECRETARY_NAME].copy()
-        dfs["corps"][c.RAW_SECRETARY_ADDRESS] = dfs["corps"][c.SECRETARY_ADDRESS].copy()
-        dfs["corps"][c.RAW_SECRETARY_STREET] = dfs["corps"][c.SECRETARY_STREET].copy()
-        dfs["corps"][c.RAW_SECRETARY_CITY] = dfs["corps"][c.SECRETARY_CITY].copy()
-        dfs["corps"][c.RAW_SECRETARY_STATE] = dfs["corps"][c.SECRETARY_STATE].copy()
-        dfs["corps"][c.RAW_SECRETARY_ZIP] = dfs["corps"][c.SECRETARY_ZIP].copy()
-        dfs["llcs"][l.RAW_NAME] = dfs["llcs"][l.NAME].copy()
-        dfs["llcs"][l.RAW_MANAGER_MEMBER_NAME] = dfs["llcs"][l.MANAGER_MEMBER_NAME].copy()
-        dfs["llcs"][l.RAW_MANAGER_MEMBER_ADDRESS] = dfs["llcs"][l.MANAGER_MEMBER_ADDRESS].copy()
-        dfs["llcs"][l.RAW_MANAGER_MEMBER_STREET] = dfs["llcs"][l.MANAGER_MEMBER_STREET].copy()
-        dfs["llcs"][l.RAW_MANAGER_MEMBER_CITY] = dfs["llcs"][l.MANAGER_MEMBER_CITY].copy()
-        dfs["llcs"][l.RAW_MANAGER_MEMBER_STATE] = dfs["llcs"][l.MANAGER_MEMBER_STATE].copy()
-        dfs["llcs"][l.RAW_MANAGER_MEMBER_ZIP] = dfs["llcs"][l.MANAGER_MEMBER_ZIP].copy()
-        dfs["llcs"][l.RAW_AGENT_NAME] = dfs["llcs"][l.AGENT_NAME].copy()
-        dfs["llcs"][l.RAW_AGENT_ADDRESS] = dfs["llcs"][l.AGENT_ADDRESS].copy()
-        dfs["llcs"][l.RAW_AGENT_STREET] = dfs["llcs"][l.AGENT_STREET].copy()
-        dfs["llcs"][l.RAW_AGENT_CITY] = dfs["llcs"][l.AGENT_CITY].copy()
-        dfs["llcs"][l.RAW_AGENT_STATE] = dfs["llcs"][l.AGENT_STATE].copy()
-        dfs["llcs"][l.RAW_AGENT_ZIP] = dfs["llcs"][l.AGENT_ZIP].copy()
-        dfs["llcs"][l.RAW_OFFICE_ADDRESS] = dfs["llcs"][l.OFFICE_ADDRESS].copy()
-        dfs["llcs"][l.RAW_OFFICE_STREET] = dfs["llcs"][l.OFFICE_STREET].copy()
-        dfs["llcs"][l.RAW_OFFICE_CITY] = dfs["llcs"][l.OFFICE_CITY].copy()
-        dfs["llcs"][l.RAW_OFFICE_STATE] = dfs["llcs"][l.OFFICE_STATE].copy()
-        dfs["llcs"][l.RAW_OFFICE_ZIP] = dfs["llcs"][l.OFFICE_ZIP].copy()
-
-        # ----------------------------------
-        # ----BASIC CLEANING: ALL COLUMNS---
-        # ----------------------------------
-        console.print("Executing preliminary string cleaning on all columns...")
-        for id, df in dfs.items():
-            # todo: change clean_df_base functions to not return anything?
-            console.print(f"Cleaning {id}...")
-            df = clean_df_base.make_upper(df, self.exclude_raw_cols(df))
-            df = clean_df_base.remove_symbols_punctuation(df, self.exclude_raw_cols(df))
-            df = clean_df_base.trim_whitespace(df, self.exclude_raw_cols(df))
-            df = clean_df_base.remove_extra_spaces(df, self.exclude_raw_cols(df))
-            df = clean_df_base.words_to_num(df, self.exclude_raw_cols(df))
-            df = clean_df_base.deduplicate(df, self.exclude_raw_cols(df))
-            df = clean_df_base.convert_ordinals(df, self.exclude_raw_cols(df))
-            df = clean_df_base.take_first(df, self.exclude_raw_cols(df))
-            df = clean_df_base.combine_numbers(df, self.exclude_raw_cols(df))
-            console.print(f"{id} preliminary cleaning complete.")
-
-        # -----------------------------------------
-        # ----BASIC CLEANING: NAME COLUMNS ONLY----
-        # -----------------------------------------
-        # NOTE - unlike the address columns, all of these must be present
-        console.print("Executing string cleaning on all datasets (name columns only)...")
-        for id, df in dfs.items():
-            if id == "class_codes":  # no more cleaning necessary for class code descriptions
-                continue
-            console.print(f"Cleaning {id}...")
-            dfs[id] = clean_df_name.switch_the(
-                dfs[id],
-                self.CLEANING_COL_MAP["name"][id],
-            )
-            console.print(f"{id} name field cleaning complete.")
-
-        # --------------------------------------------
-        # ----BASIC CLEANING: ADDRESS COLUMNS ONLY----
-        # --------------------------------------------
-        # NOTE - must take into account variation in available address columns
-        # Ex: datasets may have single, unparsed address field, as opposed to having the fields broken out into street, city, state and zip (TAX_ADDRESS, PRESIDENT_ADDRESS, etc.)
-        # Ex: datasets may have separate fields for zip codes, but not city or state
-        console.print("Executing string cleaning on all datasets (address columns only)...")
-        for id, df in dfs.items():
-            if id == "class_codes":  # no more cleaning necessary for class code descriptions
-                continue
-
-            # clean street columns if they exist
-            for col in self.CLEANING_COL_MAP["address"][id]["street"]:
-                if col not in df.columns:
-                    console.print(f"WARNING: column \"{col}\" not found in \"{id}\" dataframe.")
-                    continue
-                dfs[id] = clean_df_addr.convert_nsew(dfs[id], [col])
-                dfs[id] = clean_df_addr.remove_secondary_designators(dfs[id], [col])
-                dfs[id] = clean_df_addr.convert_street_suffixes(dfs[id], [col])
-
-            # clean zip code columns if they exist
-            for col in self.CLEANING_COL_MAP["address"][id]["zip"]:
-                if col not in df.columns:
-                    console.print(f"WARNING: column \"{col}\" not found in \"{id}\" dataframe.")
-                    continue
-                dfs[id] = clean_df_addr.fix_zip(dfs[id], [col])
-
-        # ------------------------------------------------
-        # ----OPTIONAL CLEANING: ACCURACY IMPLICATIONS----
-        # ------------------------------------------------
-        # can customize level of accuracy by including/excluding which string cleaning functions get called
-        # todo: add user input here to determine whether these should be executed, add explanation to documentation
-        if self.configs["accuracy"] == "low":
-            # execute on address columns only
-            for id, df in dfs.items():
-                dfs[id] = clean_df_acc.remove_secondary_component(
-                    dfs[id],
-                    self.CLEANING_COL_MAP["accuracy"]["address"]
-                )
-                dfs[id] = clean_df_acc.convert_mixed(
-                    dfs[id],
-                    self.CLEANING_COL_MAP["accuracy"]["address"]
-                )
-                dfs[id] = clean_df_acc.drop_letters(
-                    dfs[id],
-                    self.CLEANING_COL_MAP["accuracy"]["address"]
-                )
-
-        # ----------------------------
-        # ----DATAFRAME OPERATIONS----
-        # ----------------------------
-        # get clean name+address concatenation
-        dfs["props_taxpayers"][p.CLEAN_NAME_ADDRESS] = dfs["props_taxpayers"].apply(
-            lambda row: row[pt.TAX_NAME] + " -- " + row[pt.TAX_ADDRESS],
-        )
-        # separate out properties dataset from props_taxpayers, handling for cases in which NUM_UNITS is missing
-        properties_cols: list[str] = [
-            p.PIN,
-            p.RAW_NAME_ADDRESS,
-            p.CLEAN_NAME_ADDRESS,
-            p.CLASS_CODE,
-        ]
-        if p.NUM_UNITS in dfs["properties"].columns:
-            properties_cols.append(p.NUM_UNITS)
-        # properties dataframe to be saved to ROOT/processed/properties[FileExt]
-        df_props: pd.DataFrame = dfs["props_taxpayers"][properties_cols].copy()
-
-        # separate out taxpayer records
-        taxpayers_cols : list[str] = [
+    }
+    UNVALIDATED_COL_MAP = {
+        "taxpayer_records": [
+            tr.RAW_ADDRESS,
+            tr.RAW_STREET,
+            tr.RAW_CITY,
+            tr.RAW_STATE,
+            tr.RAW_ZIP,
+            tr.CLEAN_ADDRESS,
+            tr.CLEAN_STREET,
+            tr.CLEAN_CITY,
+            tr.CLEAN_STATE,
+            tr.CLEAN_ZIP,
+        ],
+        "corps": {
+            "president": {
+                c.RAW_PRESIDENT_ADDRESS: ua.RAW_ADDRESS,
+                c.RAW_PRESIDENT_STREET: ua.RAW_STREET,
+                c.RAW_PRESIDENT_CITY: ua.RAW_CITY,
+                c.RAW_PRESIDENT_STATE: ua.RAW_STATE,
+                c.RAW_PRESIDENT_ZIP: ua.RAW_ZIP,
+                c.CLEAN_PRESIDENT_ADDRESS: ua.CLEAN_ADDRESS,
+                c.CLEAN_PRESIDENT_STREET: ua.CLEAN_STREET,
+                c.CLEAN_PRESIDENT_CITY: ua.CLEAN_CITY,
+                c.CLEAN_PRESIDENT_STATE: ua.CLEAN_STATE,
+                c.CLEAN_PRESIDENT_ZIP: ua.CLEAN_ZIP,
+            },
+            "secretary": {
+                c.RAW_SECRETARY_ADDRESS: ua.RAW_ADDRESS,
+                c.RAW_SECRETARY_STREET: ua.RAW_STREET,
+                c.RAW_SECRETARY_CITY: ua.RAW_CITY,
+                c.RAW_SECRETARY_STATE: ua.RAW_STATE,
+                c.RAW_SECRETARY_ZIP: ua.RAW_ZIP,
+                c.CLEAN_SECRETARY_ADDRESS: ua.CLEAN_ADDRESS,
+                c.CLEAN_SECRETARY_STREET: ua.CLEAN_STREET,
+                c.CLEAN_SECRETARY_CITY: ua.CLEAN_CITY,
+                c.CLEAN_SECRETARY_STATE: ua.CLEAN_STATE,
+                c.CLEAN_SECRETARY_ZIP: ua.CLEAN_ZIP,
+            },
+        },
+        "llcs": {
+            "manager_member": {
+                l.RAW_MANAGER_MEMBER_ADDRESS: ua.RAW_ADDRESS,
+                l.RAW_MANAGER_MEMBER_STREET: ua.RAW_STREET,
+                l.RAW_MANAGER_MEMBER_CITY: ua.RAW_CITY,
+                l.RAW_MANAGER_MEMBER_STATE: ua.RAW_STATE,
+                l.RAW_MANAGER_MEMBER_ZIP: ua.RAW_ZIP,
+                l.CLEAN_MANAGER_MEMBER_ADDRESS: ua.CLEAN_ADDRESS,
+                l.CLEAN_MANAGER_MEMBER_STREET: ua.CLEAN_STREET,
+                l.CLEAN_MANAGER_MEMBER_CITY: ua.CLEAN_CITY,
+                l.CLEAN_MANAGER_MEMBER_STATE: ua.CLEAN_STATE,
+                l.CLEAN_MANAGER_MEMBER_ZIP: ua.CLEAN_ZIP,
+            },
+            "agent": {
+                l.RAW_AGENT_ADDRESS: ua.RAW_ADDRESS,
+                l.RAW_AGENT_STREET: ua.RAW_STREET,
+                l.RAW_AGENT_CITY: ua.RAW_CITY,
+                l.RAW_AGENT_STATE: ua.RAW_STATE,
+                l.RAW_AGENT_ZIP: ua.RAW_ZIP,
+                l.CLEAN_AGENT_ADDRESS: ua.CLEAN_ADDRESS,
+                l.CLEAN_AGENT_STREET: ua.CLEAN_STREET,
+                l.CLEAN_AGENT_CITY: ua.CLEAN_CITY,
+                l.CLEAN_AGENT_STATE: ua.CLEAN_STATE,
+                l.CLEAN_AGENT_ZIP: ua.CLEAN_ZIP,
+            },
+            "office": {
+                l.RAW_OFFICE_ADDRESS: ua.RAW_ADDRESS,
+                l.RAW_OFFICE_STREET: ua.RAW_STREET,
+                l.RAW_OFFICE_CITY: ua.RAW_CITY,
+                l.RAW_OFFICE_STATE: ua.RAW_STATE,
+                l.RAW_OFFICE_ZIP: ua.RAW_ZIP,
+                l.CLEAN_OFFICE_ADDRESS: ua.CLEAN_ADDRESS,
+                l.CLEAN_OFFICE_STREET: ua.CLEAN_STREET,
+                l.CLEAN_OFFICE_CITY: ua.CLEAN_CITY,
+                l.CLEAN_OFFICE_STATE: ua.CLEAN_STATE,
+                l.CLEAN_OFFICE_ZIP: ua.CLEAN_ZIP,
+            },
+        },
+    }
+    DF_OUT_COL_MAP = {
+        "taxpayer_records": [
             # raw columns
             tr.RAW_NAME_ADDRESS,
             tr.RAW_NAME,
@@ -459,8 +423,173 @@ class WkflDataClean(WorkflowStandardBase):
             pt.TAX_CITY,
             pt.TAX_STATE,
             pt.TAX_ZIP,
-        ]
-        df_taxpayers: pd.DataFrame = dfs["props_taxpayers"][taxpayers_cols].copy()
+        ],
+        "properties": [
+            p.PIN,
+            p.RAW_NAME_ADDRESS,
+            p.CLEAN_NAME_ADDRESS,
+            p.CLASS_CODE,
+            p.NUM_UNITS
+        ],
+        "corps": [
+            c.FILE_NUMBER,
+            c.DATE_INCORPORATED,
+            c.DATE_DISSOLVED,
+            c.STATUS,
+            c.RAW_NAME,
+            c.RAW_PRESIDENT_NAME,
+            c.RAW_PRESIDENT_ADDRESS,
+            c.RAW_PRESIDENT_STREET,
+            c.RAW_PRESIDENT_CITY,
+            c.RAW_PRESIDENT_STATE,
+            c.RAW_PRESIDENT_ZIP,
+            c.RAW_SECRETARY_NAME,
+            c.RAW_SECRETARY_ADDRESS,
+            c.RAW_SECRETARY_STREET,
+            c.RAW_SECRETARY_CITY,
+            c.RAW_SECRETARY_STATE,
+            c.RAW_SECRETARY_ZIP,
+            c.CLEAN_NAME,
+            c.CLEAN_PRESIDENT_NAME,
+            c.CLEAN_PRESIDENT_ADDRESS,
+            c.CLEAN_PRESIDENT_STREET,
+            c.CLEAN_PRESIDENT_CITY,
+            c.CLEAN_PRESIDENT_STATE,
+            c.CLEAN_PRESIDENT_ZIP,
+            c.CLEAN_SECRETARY_NAME,
+            c.CLEAN_SECRETARY_ADDRESS,
+            c.CLEAN_SECRETARY_STREET,
+            c.CLEAN_SECRETARY_CITY,
+            c.CLEAN_SECRETARY_STATE,
+            c.CLEAN_SECRETARY_ZIP,
+        ],
+        "llcs": [
+            l.FILE_NUMBER,
+            l.DATE_INCORPORATED,
+            l.DATE_DISSOLVED,
+            l.STATUS,
+            l.RAW_NAME,
+            l.RAW_MANAGER_MEMBER_NAME,
+            l.RAW_MANAGER_MEMBER_ADDRESS,
+            l.RAW_MANAGER_MEMBER_STREET,
+            l.RAW_MANAGER_MEMBER_CITY,
+            l.RAW_MANAGER_MEMBER_STATE,
+            l.RAW_MANAGER_MEMBER_ZIP,
+            l.RAW_AGENT_NAME,
+            l.RAW_AGENT_ADDRESS,
+            l.RAW_AGENT_STREET,
+            l.RAW_AGENT_CITY,
+            l.RAW_AGENT_STATE,
+            l.RAW_AGENT_ZIP,
+            l.RAW_OFFICE_ADDRESS,
+            l.RAW_OFFICE_STREET,
+            l.RAW_OFFICE_CITY,
+            l.RAW_OFFICE_STATE,
+            l.RAW_OFFICE_ZIP,
+            l.CLEAN_NAME,
+            l.CLEAN_MANAGER_MEMBER_NAME,
+            l.CLEAN_MANAGER_MEMBER_ADDRESS,
+            l.CLEAN_MANAGER_MEMBER_STREET,
+            l.CLEAN_MANAGER_MEMBER_CITY,
+            l.CLEAN_MANAGER_MEMBER_STATE,
+            l.CLEAN_MANAGER_MEMBER_ZIP,
+            l.CLEAN_AGENT_NAME,
+            l.CLEAN_AGENT_ADDRESS,
+            l.CLEAN_AGENT_STREET,
+            l.CLEAN_AGENT_CITY,
+            l.CLEAN_AGENT_STATE,
+            l.CLEAN_AGENT_ZIP,
+            l.CLEAN_OFFICE_ADDRESS,
+            l.CLEAN_OFFICE_STREET,
+            l.CLEAN_OFFICE_CITY,
+            l.CLEAN_OFFICE_STATE,
+            l.CLEAN_OFFICE_ZIP,
+        ],
+        "unvalidated_addrs": []
+    }
+
+    def __init__(self, configs: WorkflowConfigs):
+        super().__init__(configs)
+
+    def exclude_raw_cols(self, df: pd.DataFrame) -> list[str]:
+        return list(filter(lambda x: not x.startswith("raw"), df.columns))
+
+    # todo: move to dataframe service
+    def set_full_address_fields(self, df: pd.DataFrame, address_fields: dict[str, str]) -> pd.DataFrame:
+        for field in address_fields.keys():
+            if field not in df.columns:
+                df = df.apply(lambda row: ops_df.get_full_address(row, address_fields[field]), axis=1)
+        return df
+
+    # todo: move to dataframe service
+    def generate_raw_columns(self, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+        for col in cols:
+            df[f"raw_{col[4:]}"] = df[col].copy()
+        return df
+
+    def execute_basic_cleaning(self, id: str, df: pd.DataFrame, exclude_raw: bool = True) -> pd.DataFrame:
+        console.print(f"Executing preliminary string cleaning on {id} (all columns)...")
+        if exclude_raw:
+            cols: list[str] = self.exclude_raw_cols(df)
+        else:
+            cols: list[str] = list(df.columns)
+        df = clean_df_base.make_upper(df, cols)
+        df = clean_df_base.remove_symbols_punctuation(df, cols)
+        df = clean_df_base.trim_whitespace(df, cols)
+        df = clean_df_base.remove_extra_spaces(df, cols)
+        df = clean_df_base.words_to_num(df, cols)
+        df = clean_df_base.deduplicate(df, cols)
+        df = clean_df_base.convert_ordinals(df, cols)
+        df = clean_df_base.take_first(df, cols)
+        df = clean_df_base.combine_numbers(df, cols)
+        console.print(f"{id} preliminary cleaning complete.")
+        return df
+
+    def execute_name_column_cleaning(self, id: str, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+        console.print(f"Executing string cleaning on {id} (name columns only)...")
+        df = clean_df_name.switch_the(df, cols)
+        console.print(f"{id} name field cleaning complete.")
+        return df
+
+    def execute_address_column_cleaning(
+        self,
+        id: str,
+        df: pd.DataFrame,
+        street_cols: list[str],
+        zip_cols: list[str]
+    ) -> pd.DataFrame:
+        console.print(f"Executing string cleaning on {id} (address columns only)...")
+        # clean street columns if they exist
+        for col in street_cols:
+            if col not in df.columns:
+                console.print(f"WARNING: column \"{col}\" not found in {id} dataframe.")
+                continue
+            df = clean_df_addr.convert_nsew(df, [col])
+            df = clean_df_addr.remove_secondary_designators(df, [col])
+            df = clean_df_addr.convert_street_suffixes(df, [col])
+        # clean zip code columns if they exist
+        for col in zip_cols:
+            if col not in df.columns:
+                console.print(f"WARNING: column \"{col}\" not found in {id} dataframe.")
+                continue
+            df = clean_df_addr.fix_zip(df, [col])
+        console.print(f"{id} address field cleaning complete.")
+        return df
+
+    # todo: move to dataframe service
+    def split_props_taxpayers(self, df: pd.DataFrame):
+        df: pd.DataFrame = cols_df.set_name_address_concat(
+            df,
+            {
+                "name_addr": p.CLEAN_NAME_ADDRESS,
+                "name": pt.TAX_NAME,
+                "addr": pt.TAX_ADDRESS,
+            }
+        )
+        # pull out required columns for each final dataset
+        # separate out properties dataset from props_taxpayers, handling for cases in which NUM_UNITS is missing
+        df_props: pd.DataFrame = df[self.DF_OUT_COL_MAP["properties"]].copy()
+        df_taxpayers: pd.DataFrame = df[self.DF_OUT_COL_MAP["taxpayer_records"]].copy()
         # rename columns with clean_ prefix
         df_taxpayers.rename(columns={
             pt.TAX_NAME: tr.CLEAN_NAME,
@@ -471,30 +600,103 @@ class WkflDataClean(WorkflowStandardBase):
             pt.TAX_ZIP: tr.CLEAN_ZIP,
         })
         df_taxpayers.drop_duplicates(subset=[tr.RAW_NAME_ADDRESS], inplace=True)
+        return df_props, df_taxpayers
 
-        unvalidated_addrs_cols: list[str] = [
-            tr.RAW_ADDRESS,
-            tr.RAW_STREET,
-            tr.RAW_CITY,
-            tr.RAW_STATE,
-            tr.RAW_ZIP,
-            tr.CLEAN_ADDRESS,
-            tr.CLEAN_STREET,
-            tr.CLEAN_CITY,
-            tr.CLEAN_STATE,
-            tr.CLEAN_ZIP,
-        ]
-        df_unvalidated: pd.DataFrame = df_taxpayers[unvalidated_addrs_cols].copy()
-        df_unvalidated.drop_duplicates(subset=[tr.RAW_NAME_ADDRESS], inplace=True)
+    # todo: move to dataframe service
+    def generate_unvalidated_df(self, dfs: dict[str, pd.DataFrame]) -> pd.DataFrame:
+        dfs_to_concat: list[pd.DataFrame] = []
+        for id, df in dfs.items():
+            if id == "class_codes":
+                continue
+            elif id == "properties":
+                continue
+            elif id == "taxpayer_records":
+                df = df[self.DF_OUT_COL_MAP[id]]
+                df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
+                dfs_to_concat.append(df)
+            else:
+                for key in self.DF_OUT_COL_MAP[id].keys():
+                    df = df[self.DF_OUT_COL_MAP[id][key].keys()]
+                    df.rename(columns=self.DF_OUT_COL_MAP[id][key], inplace=True)
+                    df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
+                    dfs_to_concat.append(df)
+        df_out: pd.DataFrame = pd.concat(dfs_to_concat, ignore_index=True)
+        df_out.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
+        return df_out
 
-        return {
-            "properties": df_props,
-            "taxpayer_records": df_taxpayers,
-            "corps": dfs["corps"],
-            "llcs": dfs["llcs"],
-            "class_codes": dfs["class_codes"],
-            "unvalidated_addrs": df_unvalidated,
+    # def execute_accuracy_implications(self, id: str, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    #     if self.configs["accuracy"] == "low":
+    #         console.print(f"Accuracy set to low. Executing additional string cleaners with accuracy implications on {id}")
+    #         df = clean_df_acc.remove_secondary_component(df, cols)
+    #         df = clean_df_acc.convert_mixed(df, cols)
+    #         df = clean_df_acc.drop_letters(df, cols)
+    #         console.print(f"{id} additional string cleaning complete.")
+    #     else:
+    #         console.print(f"Skipping additional string cleaning.")
+    #     return df
+
+    def load(self):
+        load_map: dict[str, Path] = {
+            "props_taxpayers": path_gen.raw_props_taxpayers(self.configs),
+            "corps": path_gen.raw_corps(self.configs),
+            "llcs": path_gen.raw_llcs(self.configs),
+            "class_codes": path_gen.raw_class_codes(self.configs)
         }
+        return self.set_working_dfs(load_map)
+
+    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+
+        # todo: add validator that checks for required columns, throw error/failure immediately if not
+        # todo: add to columns validator: if _ADDRESS is empty, _STREET and _ZIP must be present; otherwise, if _ADDRESS exists, all others can be empty/missing
+        # todo: add to properties/taxpayer records validator: unique column constraint on PIN
+
+        dfs_out: dict[str, pd.DataFrame] = {}
+
+        for id, df in dfs.items():
+
+            # specific logic for class_codes
+            if id == "class_codes":
+                df: pd.DataFrame = self.execute_basic_cleaning(id, df)
+                dfs_out[id] = df
+                continue
+
+            # create tax_address col if NOT present
+            df: pd.DataFrame = self.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id])
+
+            # props_taxpayers-specific logic - concatenate raw name + raw address
+            if id == "props_taxpayers":
+                df: pd.DataFrame = cols_df.set_name_address_concat(
+                    df,
+                    {
+                        "name_addr": p.RAW_NAME_ADDRESS,
+                        "name": pt.TAX_NAME,
+                        "addr": pt.TAX_ADDRESS,
+                    }
+                )
+
+            # generate raw_prefixed columns
+            df: pd.DataFrame = self.generate_raw_columns(df, self.RAW_CLEAN_COL_MAP[id])
+            # execute cleaning
+            df: pd.DataFrame = self.execute_basic_cleaning(id, df)
+            df: pd.DataFrame = self.execute_name_column_cleaning(id, df, self.CLEANING_COL_MAP["name"][id])
+            df: pd.DataFrame = self.execute_address_column_cleaning(
+                "props_taxpayers",
+                df,
+                self.CLEANING_COL_MAP["address"][id]["street"],
+                self.CLEANING_COL_MAP["address"][id]["zip"],
+            )
+            # df_pt: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df_pt)
+
+            # props_taxpayers-specific logic - split into
+            if id == "props_taxpayers":
+                df_props, df_taxpayers = self.split_props_taxpayers(df)
+                dfs_out["properties"] = df_props
+                dfs_out["taxpayers"] = df_taxpayers
+            else:
+                dfs_out[id] = df[self.DF_OUT_COL_MAP[id]]
+
+        dfs_out["unvalidated_addrs"] = self.generate_unvalidated_df(dfs_out)
+        return dfs_out
 
     def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
         pass

@@ -287,6 +287,13 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         df["is_pobox"] = df[col].apply(lambda addr: clean_base.get_is_pobox(addr))
         return df
 
+    @classmethod
+    def set_name_address_concat(cls, df: pd.DataFrame, col_map: dict[str, str]) -> pd.DataFrame:
+        df[col_map["name_addr"]]: pd.DataFrame = df.apply(
+            lambda row: f"{row[col_map['name']]} -- {row[col_map['addr']]}", axis=1
+        )
+        return df
+
 
 class DataFrameSubsetters(DataFrameOpsBase):
     """Dataframe operations that return subsets."""
