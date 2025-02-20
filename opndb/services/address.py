@@ -380,7 +380,6 @@ class AddressBase:
         row: pd.Series,
         df_cols: list[str],
         full_addr_key: str,
-        raw_clean_prefix: str | None = None
     ) -> str:
         """
         Returns concatenated string containing all address components. Accounts for missing city and state address
@@ -396,20 +395,26 @@ class AddressBase:
         :param full_addr_key: Key to prefix address columns (ex: "tax" > "tax_street", "president" > "president_street", etc.)
         :param raw_clean_prefix: Optional prefix string to specify address column names (ex: "clean" > "clean_tax_city", "raw" > "raw_agent_street")
         """
-        street: str = f"{raw_clean_prefix}_{full_addr_key}_street" if raw_clean_prefix else f"{full_addr_key}_street"
-        city: str = f"{raw_clean_prefix}_{full_addr_key}_city" if raw_clean_prefix else f"{full_addr_key}_city"
-        state: str = f"{raw_clean_prefix}_{full_addr_key}_state" if raw_clean_prefix else f"{full_addr_key}_state"
-        zip_: str = f"{raw_clean_prefix}_{full_addr_key}_zip" if raw_clean_prefix else f"{full_addr_key}_zip"
+        street: str = f"{full_addr_key}_street"
+        city: str = f"{full_addr_key}_city"
+        state: str = f"{full_addr_key}_state"
+        zip_: str = f"{full_addr_key}_zip"
         address_fields: list[str] = [street, city, state, zip_]
+        # if no specific address fields are found,
+        if all(field not in df_cols for field in address_fields):
+            return f"{full_addr_key}_address"
         # if all address fields are present, concatenate like normal
-        if all(field in df_cols for field in address_fields):
+        elif all(field in df_cols for field in address_fields):
             return f"{row[street]}, {row[city]}, {row[state]}, {row[zip_]}"
         # if city or state fields are missing, return value accordingly
-        elif city not in row.columns:
-            return f"{row[street]}, {row[state]}, {row[zip_]}"
-        else:
+        elif city not in df_cols and state not in df_cols:
             return f"{row[street]}, {row[zip_]}"
-
+        elif city not in df_cols:
+            return f"{row[street]}, {row[state]}, {row[zip_]}"
+        elif state not in df_cols:
+            return f"{row[street]}, {row[city]}, {row[zip_]}"
+        else:
+            raise f"full address generation problem. row: {row}"
 
 
 class AddressValidatorBase(AddressBase):

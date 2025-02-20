@@ -181,10 +181,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def set_name_address_concat(cls, df: pd.DataFrame, col_map: dict[str, str]) -> pd.DataFrame:
-        t.print_with_dots(f"")
-        df[col_map["name_addr"]]: pd.DataFrame = df.apply(
-            lambda row: f"{row[col_map['name']]} -- {row[col_map['addr']]}", axis=1
-        )
+        df[col_map["name_addr"]] = df[col_map["name"]] + " -- " + df[col_map["addr"]]
         return df
 
     @classmethod
@@ -210,26 +207,44 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         :param full_addr_fields: Dictionary whose keys are the names of the full address fields for the specific dataset (ex: "tax_address", "president_address", etc.), and whose values are used to prefix the column names (ex: "tax", "president", etc.).
         :param raw_clean_prefix: Optional address column prefix, either "raw" or "clean" (ex: "raw" > "raw_tax_address")
         """
-        for field in full_addr_fields.keys():
-            field_prefixed: str = f"{raw_clean_prefix}_{field}" if raw_clean_prefix else field
-            if field_prefixed not in df.columns:
-                df = df.apply(
-                    lambda row: AddressBase.get_full_address(
-                        row,
-                        list(df.columns),
-                        full_addr_fields[field],
-                        raw_clean_prefix
-                    ), axis=1
-                )
+        try:
+            for field in full_addr_fields.keys():
+                field_prefixed: str = f"{raw_clean_prefix}_{field}" if raw_clean_prefix else field
+                if field_prefixed not in df.columns:
+                    print(f"field not found: {field_prefixed}")
+                    df[field_prefixed] = df.apply(
+                        lambda row: AddressBase.get_full_address(
+                            row,
+                            list(df.columns),
+                            full_addr_fields[field],
+                        ), axis=1
+                    )
+        except KeyError as e:
+            print(f"Key error")
+            for col in df.columns:
+                print(col)
+            raise
+
         return df
 
     @classmethod
-    def set_raw_columns(cls, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    def set_raw_columns(cls, df: pd.DataFrame, cols: list[str], required: list[str]) -> pd.DataFrame:
+        # todo: this will have to be handled more gracefully to account for optional columns
         for col in cols:
-            if col[:3] == "tax":  # exception for props_taxpayer records fields
-                df[f"raw_{col[4:]}"] = df[col].copy()
+            if col in required:
+                if col[:3] == "tax":  # exception for props_taxpayer records fields
+                    df[f"raw_{col[4:]}"] = df[col].copy()
+                else:
+                    df[f"raw_{col}"] = df[col].copy()
             else:
-                df[f"raw_{col}"] = df[col].copy()
+                try:
+                    if col[:3] == "tax":  # exception for props_taxpayer records fields
+                        df[f"raw_{col[4:]}"] = df[col].copy()
+                    else:
+                        df[f"raw_{col}"] = df[col].copy()
+                except KeyError:
+                    console.print(f"WARNING: column \"{col}\" not found in dataframe.")
+                    continue
         return df
 
 
@@ -275,29 +290,35 @@ class DataFrameSubsetters(DataFrameOpsBase):
         """
         Splits up the cleaned 'props_taxpayers' dataset into two separate datasets: 'taxpayer_records' and 'properties'
         """
-        df: pd.DataFrame = DataFrameColumnGenerators.set_name_address_concat(
-            df,
-            {
-                "name_addr": p.CLEAN_NAME_ADDRESS,
-                "name": pt.TAX_NAME,
-                "addr": pt.TAX_ADDRESS,
-            }
-        )
-        # pull out required columns for each final dataset
-        # separate out properties dataset from props_taxpayers, handling for cases in which NUM_UNITS is missing
-        df_props: pd.DataFrame = df[props_cols].copy()
-        df_taxpayers: pd.DataFrame = df[taxpayer_cols].copy()
-        # rename columns with clean_ prefix
-        df_taxpayers.rename(columns={
-            pt.TAX_NAME: tr.CLEAN_NAME,
-            pt.TAX_ADDRESS: tr.CLEAN_ADDRESS,
-            pt.TAX_STREET: tr.CLEAN_STREET,
-            pt.TAX_CITY: tr.CLEAN_CITY,
-            pt.TAX_STATE: tr.CLEAN_STATE,
-            pt.TAX_ZIP: tr.CLEAN_ZIP,
-        })
-        df_taxpayers.drop_duplicates(subset=[tr.RAW_NAME_ADDRESS], inplace=True)
-        return df_props, df_taxpayers
+        try:
+            df: pd.DataFrame = DataFrameColumnGenerators.set_name_address_concat(
+                df,
+                {
+                    "name_addr": p.CLEAN_NAME_ADDRESS,
+                    "name": pt.TAX_NAME,
+                    "addr": pt.TAX_ADDRESS,
+                }
+            )
+            # pull out required columns for each final dataset
+            # separate out properties dataset from props_taxpayers, handling for cases in which NUM_UNITS is missing
+            df_props: pd.DataFrame = df[props_cols].copy()
+            df_taxpayers: pd.DataFrame = df[taxpayer_cols].copy()
+            # rename columns with clean_ prefix
+            df_taxpayers.rename(columns={
+                pt.TAX_NAME: tr.CLEAN_NAME,
+                pt.TAX_ADDRESS: tr.CLEAN_ADDRESS,
+                pt.TAX_STREET: tr.CLEAN_STREET,
+                pt.TAX_CITY: tr.CLEAN_CITY,
+                pt.TAX_STATE: tr.CLEAN_STATE,
+                pt.TAX_ZIP: tr.CLEAN_ZIP,
+            })
+            df_taxpayers.drop_duplicates(subset=[tr.RAW_NAME_ADDRESS], inplace=True)
+            return df_props, df_taxpayers
+        except KeyError as e:
+            print("KEY ERROR")
+            for col in df.columns:
+                print(col)
+            raise
 
     @classmethod
     def generate_unvalidated_df(cls, dfs: dict[str, pd.DataFrame], col_map: dict[str, Any]) -> pd.DataFrame:
@@ -328,3 +349,6 @@ class DataFrameSubsetters(DataFrameOpsBase):
         df_out.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
         return df_out
 
+    # @classmethod
+    # def filter_missing_optional_columns(cls, df: pd.DataFrame, required: list[str]) -> pd.DataFrame:
+    #

@@ -70,8 +70,9 @@ class WorkflowBase(ABC):
         self.dfs_out: dict[str, pd.DataFrame] = {}
 
     def load_dfs(self, load_map: dict[str, Path]) -> None:
-        for id, path in load_map:
+        for id, path in load_map.items():
             self.dfs_in[id] = ops_df.load_df(path, str)
+            t.print_with_dots(f"\"id\" successfully loaded from: \n{path}")
         # prep data for summary table printing
         table_data = []
         for id, df in self.dfs_in.items():  # todo: standardize this, enforce types
@@ -88,6 +89,7 @@ class WorkflowBase(ABC):
         """Saves dataframes to their specified paths."""
         for id, path in save_map.items():
             ops_df.save_df(self.dfs_out[id], path)
+            t.print_with_dots(f"\"{id}\" successfully saved to: \n{path}")
 
     @classmethod
     def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
@@ -263,48 +265,96 @@ class WkflDataClean(WorkflowStandardBase):
         }
     }
     RAW_CLEAN_COL_MAP = {
-        "props_taxpayers": [
-            pt.TAX_NAME,
-            pt.TAX_ADDRESS,
-            pt.TAX_STREET,
-            pt.TAX_CITY,
-            pt.TAX_STATE,
-            pt.TAX_ZIP,
-        ],
-        "corps": [
-            c.NAME,
-            c.PRESIDENT_NAME,
-            c.PRESIDENT_ADDRESS,
-            c.PRESIDENT_STREET,
-            c.PRESIDENT_CITY,
-            c.PRESIDENT_STATE,
-            c.PRESIDENT_ZIP,
-            c.SECRETARY_NAME,
-            c.SECRETARY_ADDRESS,
-            c.SECRETARY_STREET,
-            c.SECRETARY_CITY,
-            c.SECRETARY_STATE,
-            c.SECRETARY_ZIP,
-        ],
-        "llcs": [
-            l.NAME,
-            l.MANAGER_MEMBER_NAME,
-            l.MANAGER_MEMBER_ADDRESS,
-            l.MANAGER_MEMBER_STREET,
-            l.MANAGER_MEMBER_CITY,
-            l.MANAGER_MEMBER_STATE,
-            l.MANAGER_MEMBER_ZIP,
-            l.AGENT_NAME,
-            l.AGENT_ADDRESS,
-            l.AGENT_STREET,
-            l.AGENT_CITY,
-            l.AGENT_ZIP,
-            l.OFFICE_ADDRESS,
-            l.OFFICE_STREET,
-            l.OFFICE_CITY,
-            l.OFFICE_STATE,
-            l.OFFICE_ZIP,
-        ],
+        "props_taxpayers": {
+            "all": [
+                pt.TAX_NAME,
+                pt.TAX_ADDRESS,
+                pt.TAX_STREET,
+                pt.TAX_CITY,
+                pt.TAX_STATE,
+                pt.TAX_ZIP,
+            ],
+            "required": [
+                pt.TAX_NAME,
+                pt.TAX_ADDRESS,
+                pt.TAX_STREET,
+                pt.TAX_CITY,
+                pt.TAX_STATE,
+                pt.TAX_ZIP,
+            ]
+        },
+        "corps": {
+            "all": [
+                c.NAME,
+                c.PRESIDENT_NAME,
+                c.PRESIDENT_ADDRESS,
+                c.PRESIDENT_STREET,
+                c.PRESIDENT_CITY,
+                c.PRESIDENT_STATE,
+                c.PRESIDENT_ZIP,
+                c.SECRETARY_NAME,
+                c.SECRETARY_ADDRESS,
+                c.SECRETARY_STREET,
+                c.SECRETARY_CITY,
+                c.SECRETARY_STATE,
+                c.SECRETARY_ZIP,
+            ],
+            "required": [
+                c.NAME,
+                c.PRESIDENT_NAME,
+                c.PRESIDENT_ADDRESS,
+                # c.PRESIDENT_STREET,  # todo: this will need to be addressed
+                # c.PRESIDENT_CITY,
+                # c.PRESIDENT_STATE,
+                # c.PRESIDENT_ZIP,
+                c.SECRETARY_NAME,
+                c.SECRETARY_ADDRESS,
+                # c.SECRETARY_STREET,
+                # c.SECRETARY_CITY,
+                # c.SECRETARY_STATE,
+                # c.SECRETARY_ZIP,
+            ]
+        },
+        "llcs": {
+            "all": [
+                l.NAME,
+                l.MANAGER_MEMBER_NAME,
+                l.MANAGER_MEMBER_ADDRESS,
+                l.MANAGER_MEMBER_STREET,
+                l.MANAGER_MEMBER_CITY,
+                l.MANAGER_MEMBER_STATE,
+                l.MANAGER_MEMBER_ZIP,
+                l.AGENT_NAME,
+                l.AGENT_ADDRESS,
+                l.AGENT_STREET,
+                l.AGENT_CITY,
+                l.AGENT_ZIP,
+                l.OFFICE_ADDRESS,
+                l.OFFICE_STREET,
+                l.OFFICE_CITY,
+                l.OFFICE_STATE,
+                l.OFFICE_ZIP,
+            ],
+            "required": [
+                l.NAME,
+                l.MANAGER_MEMBER_NAME,
+                # l.MANAGER_MEMBER_ADDRESS,  # todo: this will need to be addressed
+                l.MANAGER_MEMBER_STREET,
+                l.MANAGER_MEMBER_CITY,
+                # l.MANAGER_MEMBER_STATE,
+                l.MANAGER_MEMBER_ZIP,
+                l.AGENT_NAME,
+                # l.AGENT_ADDRESS,
+                l.AGENT_STREET,
+                # l.AGENT_CITY,
+                l.AGENT_ZIP,
+                # l.OFFICE_ADDRESS,
+                l.OFFICE_STREET,
+                l.OFFICE_CITY,
+                # l.OFFICE_STATE,
+                l.OFFICE_ZIP,
+            ]
+        },
     }
     FULL_ADDRESS_COL_MAP = {
         "props_taxpayers": {
@@ -410,105 +460,167 @@ class WkflDataClean(WorkflowStandardBase):
         },
     }
     DF_OUT_COL_MAP = {
-        "taxpayer_records": [
-            # raw columns
-            tr.RAW_NAME_ADDRESS,
-            tr.RAW_NAME,
-            tr.RAW_ADDRESS,
-            tr.RAW_STREET,
-            tr.RAW_CITY,
-            tr.RAW_STATE,
-            tr.RAW_ZIP,
-            # cleaned columns
-            tr.CLEAN_NAME_ADDRESS,
-            pt.TAX_NAME,
-            pt.TAX_ADDRESS,
-            pt.TAX_STREET,
-            pt.TAX_CITY,
-            pt.TAX_STATE,
-            pt.TAX_ZIP,
-        ],
-        "properties": [
-            p.PIN,
-            p.RAW_NAME_ADDRESS,
-            p.CLEAN_NAME_ADDRESS,
-            p.CLASS_CODE,
-            p.NUM_UNITS
-        ],
-        "corps": [
-            c.FILE_NUMBER,
-            c.DATE_INCORPORATED,
-            c.DATE_DISSOLVED,
-            c.STATUS,
-            c.RAW_NAME,
-            c.RAW_PRESIDENT_NAME,
-            c.RAW_PRESIDENT_ADDRESS,
-            c.RAW_PRESIDENT_STREET,
-            c.RAW_PRESIDENT_CITY,
-            c.RAW_PRESIDENT_STATE,
-            c.RAW_PRESIDENT_ZIP,
-            c.RAW_SECRETARY_NAME,
-            c.RAW_SECRETARY_ADDRESS,
-            c.RAW_SECRETARY_STREET,
-            c.RAW_SECRETARY_CITY,
-            c.RAW_SECRETARY_STATE,
-            c.RAW_SECRETARY_ZIP,
-            c.CLEAN_NAME,
-            c.CLEAN_PRESIDENT_NAME,
-            c.CLEAN_PRESIDENT_ADDRESS,
-            c.CLEAN_PRESIDENT_STREET,
-            c.CLEAN_PRESIDENT_CITY,
-            c.CLEAN_PRESIDENT_STATE,
-            c.CLEAN_PRESIDENT_ZIP,
-            c.CLEAN_SECRETARY_NAME,
-            c.CLEAN_SECRETARY_ADDRESS,
-            c.CLEAN_SECRETARY_STREET,
-            c.CLEAN_SECRETARY_CITY,
-            c.CLEAN_SECRETARY_STATE,
-            c.CLEAN_SECRETARY_ZIP,
-        ],
-        "llcs": [
-            l.FILE_NUMBER,
-            l.DATE_INCORPORATED,
-            l.DATE_DISSOLVED,
-            l.STATUS,
-            l.RAW_NAME,
-            l.RAW_MANAGER_MEMBER_NAME,
-            l.RAW_MANAGER_MEMBER_ADDRESS,
-            l.RAW_MANAGER_MEMBER_STREET,
-            l.RAW_MANAGER_MEMBER_CITY,
-            l.RAW_MANAGER_MEMBER_STATE,
-            l.RAW_MANAGER_MEMBER_ZIP,
-            l.RAW_AGENT_NAME,
-            l.RAW_AGENT_ADDRESS,
-            l.RAW_AGENT_STREET,
-            l.RAW_AGENT_CITY,
-            l.RAW_AGENT_STATE,
-            l.RAW_AGENT_ZIP,
-            l.RAW_OFFICE_ADDRESS,
-            l.RAW_OFFICE_STREET,
-            l.RAW_OFFICE_CITY,
-            l.RAW_OFFICE_STATE,
-            l.RAW_OFFICE_ZIP,
-            l.CLEAN_NAME,
-            l.CLEAN_MANAGER_MEMBER_NAME,
-            l.CLEAN_MANAGER_MEMBER_ADDRESS,
-            l.CLEAN_MANAGER_MEMBER_STREET,
-            l.CLEAN_MANAGER_MEMBER_CITY,
-            l.CLEAN_MANAGER_MEMBER_STATE,
-            l.CLEAN_MANAGER_MEMBER_ZIP,
-            l.CLEAN_AGENT_NAME,
-            l.CLEAN_AGENT_ADDRESS,
-            l.CLEAN_AGENT_STREET,
-            l.CLEAN_AGENT_CITY,
-            l.CLEAN_AGENT_STATE,
-            l.CLEAN_AGENT_ZIP,
-            l.CLEAN_OFFICE_ADDRESS,
-            l.CLEAN_OFFICE_STREET,
-            l.CLEAN_OFFICE_CITY,
-            l.CLEAN_OFFICE_STATE,
-            l.CLEAN_OFFICE_ZIP,
-        ],
+        "taxpayer_records": {
+            "all": [
+                # raw columns
+                tr.RAW_NAME_ADDRESS,
+                tr.RAW_NAME,
+                tr.RAW_ADDRESS,
+                tr.RAW_STREET,
+                tr.RAW_CITY,
+                tr.RAW_STATE,
+                tr.RAW_ZIP,
+                # cleaned columns
+                tr.CLEAN_NAME_ADDRESS,
+                pt.TAX_NAME,
+                pt.TAX_ADDRESS,
+                pt.TAX_STREET,
+                pt.TAX_CITY,
+                pt.TAX_STATE,
+                pt.TAX_ZIP,
+            ],
+            "required": []
+        },
+        "properties": {
+            "all": [
+                p.PIN,
+                p.RAW_NAME_ADDRESS,
+                p.CLEAN_NAME_ADDRESS,
+                p.CLASS_CODE,
+                p.NUM_UNITS
+            ],
+            "required": [
+                p.PIN,
+                p.RAW_NAME_ADDRESS,
+                p.CLEAN_NAME_ADDRESS,
+                p.CLASS_CODE,
+            ]
+        },
+        "corps": {
+            "all": [
+                c.FILE_NUMBER,
+                c.DATE_INCORPORATED,
+                c.DATE_DISSOLVED,
+                c.STATUS,
+                c.RAW_NAME,
+                c.RAW_PRESIDENT_NAME,
+                c.RAW_PRESIDENT_ADDRESS,
+                c.RAW_PRESIDENT_STREET,
+                c.RAW_PRESIDENT_CITY,
+                c.RAW_PRESIDENT_STATE,
+                c.RAW_PRESIDENT_ZIP,
+                c.RAW_SECRETARY_NAME,
+                c.RAW_SECRETARY_ADDRESS,
+                c.RAW_SECRETARY_STREET,
+                c.RAW_SECRETARY_CITY,
+                c.RAW_SECRETARY_STATE,
+                c.RAW_SECRETARY_ZIP,
+                c.CLEAN_NAME,
+                c.CLEAN_PRESIDENT_NAME,
+                c.CLEAN_PRESIDENT_ADDRESS,
+                c.CLEAN_PRESIDENT_STREET,
+                c.CLEAN_PRESIDENT_CITY,
+                c.CLEAN_PRESIDENT_STATE,
+                c.CLEAN_PRESIDENT_ZIP,
+                c.CLEAN_SECRETARY_NAME,
+                c.CLEAN_SECRETARY_ADDRESS,
+                c.CLEAN_SECRETARY_STREET,
+                c.CLEAN_SECRETARY_CITY,
+                c.CLEAN_SECRETARY_STATE,
+                c.CLEAN_SECRETARY_ZIP,
+            ],
+            "required": [
+                c.FILE_NUMBER,
+                c.STATUS,
+                c.RAW_NAME,
+                c.RAW_PRESIDENT_NAME,
+                c.RAW_PRESIDENT_ADDRESS,
+                c.RAW_SECRETARY_NAME,
+                c.RAW_SECRETARY_ADDRESS,
+                c.CLEAN_NAME,  # rename to clean_name
+                c.CLEAN_PRESIDENT_NAME,  # rename to clean_president_name
+                c.CLEAN_PRESIDENT_ADDRESS,
+                c.CLEAN_SECRETARY_NAME,  # rename to clean_secretary_name
+                c.CLEAN_SECRETARY_ADDRESS,
+
+            ]
+        },
+        "llcs": {
+            "all": [
+                l.FILE_NUMBER,
+                l.DATE_INCORPORATED,
+                l.DATE_DISSOLVED,
+                l.STATUS,
+                l.RAW_NAME,
+                l.RAW_MANAGER_MEMBER_NAME,
+                l.RAW_MANAGER_MEMBER_ADDRESS,
+                l.RAW_MANAGER_MEMBER_STREET,
+                l.RAW_MANAGER_MEMBER_CITY,
+                l.RAW_MANAGER_MEMBER_STATE,
+                l.RAW_MANAGER_MEMBER_ZIP,
+                l.RAW_AGENT_NAME,
+                l.RAW_AGENT_ADDRESS,
+                l.RAW_AGENT_STREET,
+                l.RAW_AGENT_CITY,
+                l.RAW_AGENT_STATE,
+                l.RAW_AGENT_ZIP,
+                l.RAW_OFFICE_ADDRESS,
+                l.RAW_OFFICE_STREET,
+                l.RAW_OFFICE_CITY,
+                l.RAW_OFFICE_STATE,
+                l.RAW_OFFICE_ZIP,
+                l.CLEAN_NAME,
+                l.CLEAN_MANAGER_MEMBER_NAME,
+                l.CLEAN_MANAGER_MEMBER_ADDRESS,
+                l.CLEAN_MANAGER_MEMBER_STREET,
+                l.CLEAN_MANAGER_MEMBER_CITY,
+                l.CLEAN_MANAGER_MEMBER_STATE,
+                l.CLEAN_MANAGER_MEMBER_ZIP,
+                l.CLEAN_AGENT_NAME,
+                l.CLEAN_AGENT_ADDRESS,
+                l.CLEAN_AGENT_STREET,
+                l.CLEAN_AGENT_CITY,
+                l.CLEAN_AGENT_STATE,
+                l.CLEAN_AGENT_ZIP,
+                l.CLEAN_OFFICE_ADDRESS,
+                l.CLEAN_OFFICE_STREET,
+                l.CLEAN_OFFICE_CITY,
+                l.CLEAN_OFFICE_STATE,
+                l.CLEAN_OFFICE_ZIP,
+            ],
+            "required": [
+                l.FILE_NUMBER,
+                l.STATUS,
+                l.RAW_NAME,
+                l.RAW_MANAGER_MEMBER_NAME,
+                l.RAW_MANAGER_MEMBER_ADDRESS,
+                l.RAW_MANAGER_MEMBER_STREET,
+                l.RAW_MANAGER_MEMBER_CITY,
+                l.RAW_MANAGER_MEMBER_ZIP,
+                l.RAW_AGENT_NAME,
+                l.RAW_AGENT_ADDRESS,
+                l.RAW_AGENT_STREET,
+                l.RAW_AGENT_ZIP,
+                l.RAW_OFFICE_ADDRESS,
+                l.RAW_OFFICE_STREET,
+                l.RAW_OFFICE_CITY,
+                l.RAW_OFFICE_ZIP,
+                l.CLEAN_NAME,  # rename to clean_name
+                l.CLEAN_MANAGER_MEMBER_NAME,  # rename to clean_manager_member_name
+                l.CLEAN_MANAGER_MEMBER_ADDRESS,
+                l.CLEAN_MANAGER_MEMBER_STREET,
+                l.CLEAN_MANAGER_MEMBER_CITY,
+                l.CLEAN_MANAGER_MEMBER_ZIP,
+                l.CLEAN_AGENT_NAME,
+                l.CLEAN_AGENT_ADDRESS,
+                l.CLEAN_AGENT_STREET,
+                l.CLEAN_AGENT_ZIP,
+                l.CLEAN_OFFICE_ADDRESS,
+                l.CLEAN_OFFICE_STREET,
+                l.CLEAN_OFFICE_CITY,
+                l.CLEAN_OFFICE_ZIP,
+            ]
+        },
         "unvalidated_addrs": []
     }
 
@@ -516,14 +628,11 @@ class WkflDataClean(WorkflowStandardBase):
         super().__init__(configs)
         self.dfs_out: dict[str, pd.DataFrame] = {}
 
-    def exclude_raw_cols(self, df: pd.DataFrame) -> list[str]:
-        return list(filter(lambda x: not x.startswith("raw"), df.columns))
-
-    def execute_precleaning(self, id: str, df: pd.DataFrame) -> pd.DataFrame:
+    def execute_pre_cleaning(self, id: str, df: pd.DataFrame) -> pd.DataFrame:
         # create tax_address col if NOT present
-        t.print_with_dots(f"Generating full address columns for \"{id}\" (if not already present)")
+        t.print_with_dots(f"Generating full raw address columns for \"{id}\" (if not already present)")
         df: pd.DataFrame = cols_df.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id])
-        t.print_with_dots(f"Full address columns for \"{id}\" generated.")
+        t.print_with_dots(f"Full raw address columns for \"{id}\" generated.")
         # props_taxpayers-specific logic - concatenate raw name + raw address
         if id == "props_taxpayers":
             t.print_with_dots(f"Concatenating raw name and address fields for {id}...")
@@ -538,21 +647,34 @@ class WkflDataClean(WorkflowStandardBase):
             t.print_with_dots(f"\"name_address\" field generated for \"{id}\".")
         # generate raw_prefixed columns
         t.print_with_dots(f"Setting raw columns for \"{id}\"...")
-        df: pd.DataFrame = cols_df.set_raw_columns(df, self.RAW_CLEAN_COL_MAP[id])
+        df: pd.DataFrame = cols_df.set_raw_columns(
+            df,
+            self.RAW_CLEAN_COL_MAP[id]["all"],
+            self.RAW_CLEAN_COL_MAP[id]["required"]
+        )
         t.print_with_dots(f"Raw columns for \"{id}\" generated.")
         return df
 
     def execute_basic_cleaning(self, id: str, df: pd.DataFrame) -> pd.DataFrame:
         t.print_with_dots(f"Executing preliminary string cleaning on {id} (all columns)...")
-        cols: list[str] = self.exclude_raw_cols(df)
+        cols: list[str] = ops_df.exclude_raw_cols(df)
+        t.print_with_dots("Converting letters to uppercase...")
         df = clean_df_base.make_upper(df, cols)
+        t.print_with_dots("Removing symbols and punctuation...")
         df = clean_df_base.remove_symbols_punctuation(df, cols)
+        t.print_with_dots("Trimming whitespace...")
         df = clean_df_base.trim_whitespace(df, cols)
+        t.print_with_dots("Removing extra spaces...")
         df = clean_df_base.remove_extra_spaces(df, cols)
+        t.print_with_dots("Converting number words to digits...")
         df = clean_df_base.words_to_num(df, cols)
+        t.print_with_dots("Deduplicating repeated words...")
         df = clean_df_base.deduplicate(df, cols)
+        t.print_with_dots("Converting ordinal numbers to digits...")
         df = clean_df_base.convert_ordinals(df, cols)
+        t.print_with_dots("Replacing number ranges with first number in range...")
         df = clean_df_base.take_first(df, cols)
+        t.print_with_dots("Combining numbers separated by spaces...")
         df = clean_df_base.combine_numbers(df, cols)
         console.print(f"{id} preliminary cleaning complete.")
         return df
@@ -609,15 +731,35 @@ class WkflDataClean(WorkflowStandardBase):
             t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
             df_props, df_taxpayers = subset_df.split_props_taxpayers(
                 df,
-                self.DF_OUT_COL_MAP["properties"],
-                self.DF_OUT_COL_MAP["taxpayer_records"]
+                self.DF_OUT_COL_MAP["properties"]["all"],
+                self.DF_OUT_COL_MAP["taxpayer_records"]["all"]
             )
             self.dfs_out["properties"] = df_props
             self.dfs_out["taxpayers"] = df_taxpayers
             t.print_with_dots(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\".")
         else:
+            if id == "corps":
+                df.rename(columns={
+                    c.NAME: c.CLEAN_NAME,
+                    c.PRESIDENT_NAME: c.CLEAN_PRESIDENT_NAME,
+                    c.SECRETARY_NAME: c.CLEAN_SECRETARY_NAME,
+                }, inplace=True)
+            if id == "llcs":
+                df.rename(columns={
+                    l.NAME: l.CLEAN_NAME,
+                    l.MANAGER_MEMBER_NAME: l.CLEAN_MANAGER_MEMBER_NAME,
+                    l.AGENT_NAME: l.CLEAN_AGENT_NAME,
+                    l.MANAGER_MEMBER_STREET: l.CLEAN_MANAGER_MEMBER_STREET,
+                    l.MANAGER_MEMBER_CITY: l.CLEAN_MANAGER_MEMBER_CITY,
+                    l.MANAGER_MEMBER_ZIP: l.CLEAN_MANAGER_MEMBER_ZIP,
+                    l.AGENT_STREET: l.CLEAN_AGENT_STREET,
+                    l.AGENT_ZIP: l.CLEAN_AGENT_ZIP,
+                    l.OFFICE_STREET: l.CLEAN_OFFICE_STREET,
+                    l.OFFICE_CITY: l.CLEAN_OFFICE_CITY,
+                    l.OFFICE_ZIP: l.CLEAN_OFFICE_ZIP,
+                }, inplace=True)
             t.print_with_dots(f"Setting final dataframe for \"{id}\"...")
-            self.dfs_out[id] = df[self.DF_OUT_COL_MAP[id]]
+            self.dfs_out[id] = df[self.DF_OUT_COL_MAP[id]["required"]]
             t.print_with_dots(f"Final dataframe for \"{id}\" set.")
 
     def execute_unvalidated_generator(self) -> None:
@@ -625,6 +767,9 @@ class WkflDataClean(WorkflowStandardBase):
         self.dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(self.dfs_out, self.DF_OUT_COL_MAP)
         t.print_with_dots("\"unvalidated_addrs\" successfully generated.\"")
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self):
         load_map: dict[str, Path] = {
             "props_taxpayers": path_gen.raw_props_taxpayers(self.configs),
@@ -634,6 +779,9 @@ class WkflDataClean(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
 
         # todo: add validator that checks for required columns, throw error/failure immediately if not
@@ -652,12 +800,12 @@ class WkflDataClean(WorkflowStandardBase):
                 continue
 
             # PRE-CLEANING OPERATIONS
-            df: pd.DataFrame = self.execute_precleaning(id, df)
+            df: pd.DataFrame = self.execute_pre_cleaning(id, df)
             # MAIN CLEANING OPERATIONS
             df: pd.DataFrame = self.execute_basic_cleaning(id, df)
             df: pd.DataFrame = self.execute_name_column_cleaning(id, df, self.CLEANING_COL_MAP["name"][id])
             df: pd.DataFrame = self.execute_address_column_cleaning(
-                "props_taxpayers",
+                id,
                 df,
                 self.CLEANING_COL_MAP["address"][id]["street"],
                 self.CLEANING_COL_MAP["address"][id]["zip"],
@@ -668,9 +816,15 @@ class WkflDataClean(WorkflowStandardBase):
 
         self.execute_unvalidated_generator()
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self):
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         save_map: dict[str, Path] = {
             "properties": path_gen.processed_properties(self.configs),
@@ -682,7 +836,10 @@ class WkflDataClean(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
         pass
 
 

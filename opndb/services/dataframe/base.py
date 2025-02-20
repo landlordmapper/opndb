@@ -136,6 +136,10 @@ class DataFrameOpsBase(object):
         """
         return any(code in rental_classes for code in class_codes)
 
+    @classmethod
+    def exclude_raw_cols(cls, df: pd.DataFrame) -> list[str]:
+        return list(filter(lambda x: not x.startswith("raw"), df.columns))
+
 
 class DataFrameCleaners(DataFrameOpsBase):
     """Base dataframe cleaning methods."""

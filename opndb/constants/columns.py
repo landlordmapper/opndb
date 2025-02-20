@@ -24,7 +24,7 @@ class Properties:
     NUM_UNITS: str = "num_units"  # todo: add documentation: optional - ideal but will work without it
 
 class TaxpayerRecords:
-    RAW_NAME_ADDRESS: str = "name_address"  # todo: add documentation: this is the unique value to merge with the final property dataset
+    RAW_NAME_ADDRESS: str = "raw_name_address"  # todo: add documentation: this is the unique value to merge with the final property dataset
     RAW_NAME: str = "raw_name"
     RAW_ADDRESS: str = "raw_address"
     RAW_STREET: str = "raw_street"
@@ -139,7 +139,7 @@ class LLCs:
     OFFICE_STREET: str = "office_street"
     OFFICE_CITY: str = "office_city"
     OFFICE_STATE: str = "office_state"  # todo: add documentation: optional - sometimes missing, not ideal
-    OFFICE_ZIP: str = "office_addr_zip"
+    OFFICE_ZIP: str = "office_zip"
 
     RAW_NAME: str = "raw_name"
     RAW_MANAGER_MEMBER_NAME: str = "raw_manager_member_name"
@@ -158,7 +158,7 @@ class LLCs:
     RAW_OFFICE_STREET: str = "raw_office_street"
     RAW_OFFICE_CITY: str = "raw_office_city"
     RAW_OFFICE_STATE: str = "raw_office_state"  # todo: add documentation: optional - sometimes missing, not ideal
-    RAW_OFFICE_ZIP: str = "raw_office_addr_zip"
+    RAW_OFFICE_ZIP: str = "raw_office_zip"
 
     CLEAN_NAME: str = "clean_name"
     CLEAN_MANAGER_MEMBER_NAME: str = "clean_manager_member_name"
@@ -177,7 +177,7 @@ class LLCs:
     CLEAN_OFFICE_STREET: str = "clean_office_street"
     CLEAN_OFFICE_CITY: str = "clean_office_city"
     CLEAN_OFFICE_STATE: str = "clean_office_state"  # todo: add documentation: optional - sometimes missing, not ideal
-    CLEAN_OFFICE_ZIP: str = "clean_office_addr_zip"
+    CLEAN_OFFICE_ZIP: str = "clean_office_zip"
 
     CORE_NAME: str = "core_name"
     IS_BANK_MANAGER_MEMBER: str = "is_bank_manager_member"

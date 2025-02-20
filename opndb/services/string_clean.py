@@ -127,6 +127,8 @@ class CleanStringBase:
             'Property Management' -> 'PROPERTY MANAGEMENT'
             'Main St.' -> 'MAIN ST.'
         """
+        if pd.isna(text):
+            return ""
         return text.upper()
 
     @classmethod
@@ -178,7 +180,7 @@ class CleanStringBase:
             'FIRST    SECOND   THIRD' -> 'FIRST SECOND THIRD'
             'TOO   MANY    SPACES' -> 'TOO MANY SPACES'
         """
-        return text.replace(r"\s+", " ", regex=True)
+        return re.sub(r"\s+", " ", text)
 
     @classmethod
     def words_to_num(cls, text: str) -> str | int:
@@ -256,6 +258,8 @@ class CleanStringBase:
             10 5 25 'ST' -> '10525 ST'
             'NO 1 2 WAY' -> 'NO 12 WAY'
         """
+        if pd.isna(text):
+            return ""
         text_list = text.split()
         whole_list = []
         start = False
