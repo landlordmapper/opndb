@@ -66,22 +66,15 @@ class WorkflowBase(ABC):
     """
     def __init__(self, configs: WorkflowConfigs):
         self.configs: WorkflowConfigs = configs
-        self._dfs: dict[str, pd.DataFrame] = {}
+        self.dfs_in: dict[str, pd.DataFrame] = {}
+        self.dfs_out: dict[str, pd.DataFrame] = {}
 
-    def load_dfs(self, key: str, path: Path, dtype: Any = str) -> pd.DataFrame:
-        """Lazy load dataframes only when needed and cache them."""
-        if key not in self._dfs:
-            self._dfs[key] = ops_df.load_df(path, dtype)
-        return self._dfs[key].copy()
-
-    def set_working_dfs(self, required_dfs: dict[str, Path]) -> dict[str, pd.DataFrame]:
-        """Loads required dataframes for a specific workflow."""
-        dfs = {}
-        for key, path in required_dfs.items():
-            dfs[key] = self.load_dfs(key, path)
+    def load_dfs(self, load_map: dict[str, Path]) -> None:
+        for id, path in load_map:
+            self.dfs_in[id] = ops_df.load_df(path, str)
         # prep data for summary table printing
         table_data = []
-        for id, df in self._dfs.items():  # todo: standardize this, enforce types
+        for id, df in self.dfs_in.items():  # todo: standardize this, enforce types
             memory_usage = df.memory_usage(deep=True).sum()
             table_data.append({
                 "dataset_name": id,
@@ -89,13 +82,12 @@ class WorkflowBase(ABC):
                 "record_count": len(df)
             })
         t.display_table(table_data)
-        return dfs
+        # todo: add summary tables listing columns found in each table
 
-    @classmethod
-    def save_dfs(cls, dfs: dict[str, pd.DataFrame], save_map: dict[str, Path]) -> None:
+    def save_dfs(self, save_map: dict[str, Path]) -> None:
         """Saves dataframes to their specified paths."""
         for id, path in save_map.items():
-            ops_df.save_df(dfs[id], path)
+            ops_df.save_df(self.dfs_out[id], path)
 
     @classmethod
     def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
@@ -132,35 +124,34 @@ class WorkflowStandardBase(WorkflowBase):
     def execute(self) -> None:
         """Template method implementation"""
         try:
-            dfs_load = self.load()
-            dfs_process = self.process(dfs_load)
-            summary_stats = self.summary_stats(dfs_load, dfs_process)
-            self.save(dfs_process, summary_stats)
-            self.update_configs(self.configs)
+            self.load()
+            self.process()
+            self.summary_stats()
+            self.save()
+            self.update_configs()
         except Exception as e:
             raise
 
     @abstractmethod
-    def load(self) -> dict[str, pd.DataFrame]:
+    def load(self) -> None:
         """Loads data files into dataframes. Returns dictionary mapping dataframes to IDs."""
         pass
 
     @abstractmethod
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    def process(self) -> None:
         """
-        Executes business & transformation logic for the workflow. Returns dictionary mapping processed dataframes to
-        IDs, ready to be saved. Returned dictionary keys must EXACTLY match the keys of the save_map object in save().
+        Executes business & transformation logic for the workflow. Saves and stores processed dataframes in self.dfs_out.
         """
         pass
 
     @abstractmethod
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+    def summary_stats(self):
         """Executes summary stats builder for the workflow."""
         # todo: determine summary stats data type (return data hint)
         pass
 
     @abstractmethod
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
+    def save(self) -> None:
         """
         Saves processed dataframes. Keys of save_map object must match EXACTLY those of the dataframe dictionary
         returned by process().
@@ -169,7 +160,7 @@ class WorkflowStandardBase(WorkflowBase):
         pass
 
     @abstractmethod
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    def update_configs(self) -> None:
         """Updates configurations based on current workflow stage."""
         pass
 
@@ -523,16 +514,37 @@ class WkflDataClean(WorkflowStandardBase):
 
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
+        self.dfs_out: dict[str, pd.DataFrame] = {}
 
     def exclude_raw_cols(self, df: pd.DataFrame) -> list[str]:
         return list(filter(lambda x: not x.startswith("raw"), df.columns))
 
-    def execute_basic_cleaning(self, id: str, df: pd.DataFrame, exclude_raw: bool = True) -> pd.DataFrame:
+    def execute_precleaning(self, id: str, df: pd.DataFrame) -> pd.DataFrame:
+        # create tax_address col if NOT present
+        t.print_with_dots(f"Generating full address columns for \"{id}\" (if not already present)")
+        df: pd.DataFrame = cols_df.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id])
+        t.print_with_dots(f"Full address columns for \"{id}\" generated.")
+        # props_taxpayers-specific logic - concatenate raw name + raw address
+        if id == "props_taxpayers":
+            t.print_with_dots(f"Concatenating raw name and address fields for {id}...")
+            df: pd.DataFrame = cols_df.set_name_address_concat(
+                df,
+                {
+                    "name_addr": p.RAW_NAME_ADDRESS,
+                    "name": pt.TAX_NAME,
+                    "addr": pt.TAX_ADDRESS,
+                }
+            )
+            t.print_with_dots(f"\"name_address\" field generated for \"{id}\".")
+        # generate raw_prefixed columns
+        t.print_with_dots(f"Setting raw columns for \"{id}\"...")
+        df: pd.DataFrame = cols_df.set_raw_columns(df, self.RAW_CLEAN_COL_MAP[id])
+        t.print_with_dots(f"Raw columns for \"{id}\" generated.")
+        return df
+
+    def execute_basic_cleaning(self, id: str, df: pd.DataFrame) -> pd.DataFrame:
         t.print_with_dots(f"Executing preliminary string cleaning on {id} (all columns)...")
-        if exclude_raw:
-            cols: list[str] = self.exclude_raw_cols(df)
-        else:
-            cols: list[str] = list(df.columns)
+        cols: list[str] = self.exclude_raw_cols(df)
         df = clean_df_base.make_upper(df, cols)
         df = clean_df_base.remove_symbols_punctuation(df, cols)
         df = clean_df_base.trim_whitespace(df, cols)
@@ -587,6 +599,32 @@ class WkflDataClean(WorkflowStandardBase):
             console.print(f"Skipping additional string cleaning.")
         return df
 
+    def execute_post_cleaning(self, id: str, df: pd.DataFrame) -> None:
+        # add clean full address fields
+        t.print_with_dots(f"Setting clean full address fields for \"{id}\"...")
+        df: pd.DataFrame = cols_df.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id], "clean")
+        t.print_with_dots(f"Full clean address fields for \"{id}\" generated.")
+        # props_taxpayers-specific logic - split into
+        if id == "props_taxpayers":
+            t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
+            df_props, df_taxpayers = subset_df.split_props_taxpayers(
+                df,
+                self.DF_OUT_COL_MAP["properties"],
+                self.DF_OUT_COL_MAP["taxpayer_records"]
+            )
+            self.dfs_out["properties"] = df_props
+            self.dfs_out["taxpayers"] = df_taxpayers
+            t.print_with_dots(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\".")
+        else:
+            t.print_with_dots(f"Setting final dataframe for \"{id}\"...")
+            self.dfs_out[id] = df[self.DF_OUT_COL_MAP[id]]
+            t.print_with_dots(f"Final dataframe for \"{id}\" set.")
+
+    def execute_unvalidated_generator(self) -> None:
+        t.print_with_dots(f"Generating \"unvalidated_addrs\"...")
+        self.dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(self.dfs_out, self.DF_OUT_COL_MAP)
+        t.print_with_dots("\"unvalidated_addrs\" successfully generated.\"")
+
     def load(self):
         load_map: dict[str, Path] = {
             "props_taxpayers": path_gen.raw_props_taxpayers(self.configs),
@@ -594,45 +632,28 @@ class WkflDataClean(WorkflowStandardBase):
             "llcs": path_gen.raw_llcs(self.configs),
             "class_codes": path_gen.raw_class_codes(self.configs)
         }
-        return self.set_working_dfs(load_map)
+        self.load_dfs(load_map)
 
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    def process(self) -> None:
 
         # todo: add validator that checks for required columns, throw error/failure immediately if not
         # todo: add to columns validator: if _ADDRESS is empty, _STREET and _ZIP must be present; otherwise, if _ADDRESS exists, all others can be empty/missing
         # todo: add to properties/taxpayer records validator: unique column constraint on PIN
+        # todo: add checks to confirm that dfs_in were loaded correctly that stop this workflow from executing if not
 
-        dfs_out: dict[str, pd.DataFrame] = {}
+        for id, df_in in self.dfs_in.items():
 
-        for id, df in dfs.items():
+            df: pd.DataFrame = df_in.copy()  # make copy to preserve the loaded dataframes
 
             # specific logic for class_codes
             if id == "class_codes":
                 df: pd.DataFrame = self.execute_basic_cleaning(id, df)
-                dfs_out[id] = df
+                self.dfs_out[id] = df
                 continue
 
-            # -------------------------------
-            # ----PRE-CLEANING OPERATIONS----
-            # -------------------------------
-            # create tax_address col if NOT present
-            df: pd.DataFrame = cols_df.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id])
-            # props_taxpayers-specific logic - concatenate raw name + raw address
-            if id == "props_taxpayers":
-                df: pd.DataFrame = cols_df.set_name_address_concat(
-                    df,
-                    {
-                        "name_addr": p.RAW_NAME_ADDRESS,
-                        "name": pt.TAX_NAME,
-                        "addr": pt.TAX_ADDRESS,
-                    }
-                )
-            # generate raw_prefixed columns
-            df: pd.DataFrame = cols_df.set_raw_columns(df, self.RAW_CLEAN_COL_MAP[id])
-
-            # ------------------------
-            # ----EXECUTE CLEANING----
-            # ------------------------
+            # PRE-CLEANING OPERATIONS
+            df: pd.DataFrame = self.execute_precleaning(id, df)
+            # MAIN CLEANING OPERATIONS
             df: pd.DataFrame = self.execute_basic_cleaning(id, df)
             df: pd.DataFrame = self.execute_name_column_cleaning(id, df, self.CLEANING_COL_MAP["name"][id])
             df: pd.DataFrame = self.execute_address_column_cleaning(
@@ -642,35 +663,15 @@ class WkflDataClean(WorkflowStandardBase):
                 self.CLEANING_COL_MAP["address"][id]["zip"],
             )
             # df_pt: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df_pt)
+            # POST-CLEANING OPERATIONS
+            self.execute_post_cleaning(id, df)
 
-            # --------------------------------
-            # ----POST-CLEANING OPERATIONS----
-            # --------------------------------
-            # add clean full address fields
-            df: pd.DataFrame = cols_df.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id], "clean")
-            # props_taxpayers-specific logic - split into
-            if id == "props_taxpayers":
-                df_props, df_taxpayers = subset_df.split_props_taxpayers(
-                    df,
-                    self.DF_OUT_COL_MAP["properties"],
-                    self.DF_OUT_COL_MAP["taxpayer_records"]
-                )
-                dfs_out["properties"] = df_props
-                dfs_out["taxpayers"] = df_taxpayers
-            else:
-                dfs_out[id] = df[self.DF_OUT_COL_MAP[id]]
+        self.execute_unvalidated_generator()
 
-        # --------------------------------------------
-        # ----GENERATE UNVALIDATED ADDRESS DATASET----
-        # --------------------------------------------
-        dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(dfs_out, self.DF_OUT_COL_MAP)
-
-        return dfs_out
-
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+    def summary_stats(self):
         pass
 
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
+    def save(self) -> None:
         save_map: dict[str, Path] = {
             "properties": path_gen.processed_properties(self.configs),
             "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
@@ -679,7 +680,7 @@ class WkflDataClean(WorkflowStandardBase):
             "class_codes": path_gen.processed_class_codes(self.configs),
             "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
         }
-        self.save_dfs(dfs, save_map)
+        self.save_dfs(save_map)
 
     def update_configs(self, configs: WorkflowConfigs) -> None:
         pass

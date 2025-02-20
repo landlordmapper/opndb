@@ -198,6 +198,7 @@ class TerminalBase:
 
     @classmethod
     def display_table(cls, table_data):
+        # todo: format large numbers to have commas
         table = Table(title="Dataframes Loaded")
         table.add_column("Dataset Name", justify="right", style="cyan")
         table.add_column("File Size", justify="right", style="green")
