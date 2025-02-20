@@ -30,6 +30,7 @@ from rich.progress import (
 )
 from rich.console import Console
 
+from opndb.services.terminal_printers import TerminalBase as t
 
 console = Console()
 
@@ -180,6 +181,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def set_name_address_concat(cls, df: pd.DataFrame, col_map: dict[str, str]) -> pd.DataFrame:
+        t.print_with_dots(f"")
         df[col_map["name_addr"]]: pd.DataFrame = df.apply(
             lambda row: f"{row[col_map['name']]} -- {row[col_map['addr']]}", axis=1
         )
