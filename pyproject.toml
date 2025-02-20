@@ -13,6 +13,7 @@ dependencies = [
     "networkx==3.4.2",
     "scikit-learn==1.6.1",
     "Levenshtein==0.25.1",
+    "markdown>=3.7",
 ]
 
 [dependency-groups]

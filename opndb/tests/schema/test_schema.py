@@ -1,3 +1,5 @@
+
+import markdown
 from typing import Final
 import pytest
 
@@ -26,4 +28,13 @@ class TestSchema:
             for v in values:
                 assert schema == create_report_for_schema(v).version_code
             assert schema == create_report_for_schema(schema).version_code
+    class TestToMd:
+
+        def test_basic(self):
+            """
+            basic test to ensure that a report can be made
+            """
+            report = create_report_for_schema(EXAMPLE_SCHEMA)
+            report_md = report.to_md()
+            assert markdown.markdown(report_md), "Markdown should be returned"
 
