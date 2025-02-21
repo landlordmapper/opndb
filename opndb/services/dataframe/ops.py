@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Any, Callable, Type
-
+from pprint import pprint
 import pandas as pd
 
 from opndb.constants.columns import (
@@ -336,19 +336,36 @@ class DataFrameSubsetters(DataFrameOpsBase):
             elif id == "properties":
                 continue
             elif id == "taxpayer_records":
-                df = df[col_map[id]]
-                df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
-                dfs_to_concat.append(df)
-            else:
-                for key in col_map[id].keys():
-                    df = df[col_map[id][key].keys()]
-                    df.rename(columns=col_map[id][key], inplace=True)
+                try:
+                    # df.rename(columns=col_map[id], inplace=True)
+                    df = df[col_map[id].keys()]
                     df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
                     dfs_to_concat.append(df)
+                except KeyError as e:
+                    print("Key error")
+                    print("id:", id)
+                    print("col_map:", pprint(col_map))
+                    print("cols")
+                    for col in df.columns:
+                        print(col)
+                    raise
+            else:
+                for key in col_map[id].keys():
+                    try:
+                        df = df[col_map[id][key].keys()]
+                        df.rename(columns=col_map[id][key], inplace=True)
+                        df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
+                        dfs_to_concat.append(df)
+                    except KeyError:
+                        print("Key error")
+                        print("id:", id)
+                        print("cols")
+                        for col in df.columns:
+                            print(col)
+                        raise
         df_out: pd.DataFrame = pd.concat(dfs_to_concat, ignore_index=True)
         df_out.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
         return df_out
 
     # @classmethod
     # def filter_missing_optional_columns(cls, df: pd.DataFrame, required: list[str]) -> pd.DataFrame:
-    #

@@ -71,8 +71,8 @@ class WorkflowBase(ABC):
 
     def load_dfs(self, load_map: dict[str, Path]) -> None:
         for id, path in load_map.items():
-            self.dfs_in[id] = ops_df.load_df(path, str)
-            t.print_with_dots(f"\"id\" successfully loaded from: \n{path}")
+            self.dfs_out[id] = ops_df.load_df(path, str)  # todo: change back to dfs_in
+            t.print_with_dots(f"\"{id}\" successfully loaded from: \n{path}")
         # prep data for summary table printing
         table_data = []
         for id, df in self.dfs_in.items():  # todo: standardize this, enforce types
@@ -382,42 +382,42 @@ class WkflDataClean(WorkflowStandardBase):
         }
     }
     UNVALIDATED_COL_MAP = {
-        "taxpayer_records": [
-            tr.RAW_ADDRESS,
-            tr.RAW_STREET,
-            tr.RAW_CITY,
-            tr.RAW_STATE,
-            tr.RAW_ZIP,
-            tr.CLEAN_ADDRESS,
-            tr.CLEAN_STREET,
-            tr.CLEAN_CITY,
-            tr.CLEAN_STATE,
-            tr.CLEAN_ZIP,
-        ],
+        "taxpayer_records": {
+            tr.RAW_ADDRESS: tr.RAW_ADDRESS,
+            tr.RAW_STREET: tr.RAW_STREET,
+            tr.RAW_CITY: tr.RAW_CITY,
+            tr.RAW_STATE: tr.RAW_STATE,
+            tr.RAW_ZIP: tr.RAW_ZIP,
+            pt.TAX_ADDRESS: tr.CLEAN_ADDRESS,
+            pt.TAX_STREET: tr.CLEAN_STREET,
+            pt.TAX_CITY: tr.CLEAN_CITY,
+            pt.TAX_STATE: tr.CLEAN_STATE,
+            pt.TAX_ZIP: tr.CLEAN_ZIP,
+        },
         "corps": {
             "president": {
                 c.RAW_PRESIDENT_ADDRESS: ua.RAW_ADDRESS,
-                c.RAW_PRESIDENT_STREET: ua.RAW_STREET,
-                c.RAW_PRESIDENT_CITY: ua.RAW_CITY,
-                c.RAW_PRESIDENT_STATE: ua.RAW_STATE,
-                c.RAW_PRESIDENT_ZIP: ua.RAW_ZIP,
+                # c.RAW_PRESIDENT_STREET: ua.RAW_STREET,
+                # c.RAW_PRESIDENT_CITY: ua.RAW_CITY,
+                # c.RAW_PRESIDENT_STATE: ua.RAW_STATE,
+                # c.RAW_PRESIDENT_ZIP: ua.RAW_ZIP,
                 c.CLEAN_PRESIDENT_ADDRESS: ua.CLEAN_ADDRESS,
-                c.CLEAN_PRESIDENT_STREET: ua.CLEAN_STREET,
-                c.CLEAN_PRESIDENT_CITY: ua.CLEAN_CITY,
-                c.CLEAN_PRESIDENT_STATE: ua.CLEAN_STATE,
-                c.CLEAN_PRESIDENT_ZIP: ua.CLEAN_ZIP,
+                # c.CLEAN_PRESIDENT_STREET: ua.CLEAN_STREET,
+                # c.CLEAN_PRESIDENT_CITY: ua.CLEAN_CITY,
+                # c.CLEAN_PRESIDENT_STATE: ua.CLEAN_STATE,
+                # c.CLEAN_PRESIDENT_ZIP: ua.CLEAN_ZIP,
             },
             "secretary": {
                 c.RAW_SECRETARY_ADDRESS: ua.RAW_ADDRESS,
-                c.RAW_SECRETARY_STREET: ua.RAW_STREET,
-                c.RAW_SECRETARY_CITY: ua.RAW_CITY,
-                c.RAW_SECRETARY_STATE: ua.RAW_STATE,
-                c.RAW_SECRETARY_ZIP: ua.RAW_ZIP,
+                # c.RAW_SECRETARY_STREET: ua.RAW_STREET,
+                # c.RAW_SECRETARY_CITY: ua.RAW_CITY,
+                # c.RAW_SECRETARY_STATE: ua.RAW_STATE,
+                # c.RAW_SECRETARY_ZIP: ua.RAW_ZIP,
                 c.CLEAN_SECRETARY_ADDRESS: ua.CLEAN_ADDRESS,
-                c.CLEAN_SECRETARY_STREET: ua.CLEAN_STREET,
-                c.CLEAN_SECRETARY_CITY: ua.CLEAN_CITY,
-                c.CLEAN_SECRETARY_STATE: ua.CLEAN_STATE,
-                c.CLEAN_SECRETARY_ZIP: ua.CLEAN_ZIP,
+                # c.CLEAN_SECRETARY_STREET: ua.CLEAN_STREET,
+                # c.CLEAN_SECRETARY_CITY: ua.CLEAN_CITY,
+                # c.CLEAN_SECRETARY_STATE: ua.CLEAN_STATE,
+                # c.CLEAN_SECRETARY_ZIP: ua.CLEAN_ZIP,
             },
         },
         "llcs": {
@@ -425,36 +425,36 @@ class WkflDataClean(WorkflowStandardBase):
                 l.RAW_MANAGER_MEMBER_ADDRESS: ua.RAW_ADDRESS,
                 l.RAW_MANAGER_MEMBER_STREET: ua.RAW_STREET,
                 l.RAW_MANAGER_MEMBER_CITY: ua.RAW_CITY,
-                l.RAW_MANAGER_MEMBER_STATE: ua.RAW_STATE,
+                # l.RAW_MANAGER_MEMBER_STATE: ua.RAW_STATE,
                 l.RAW_MANAGER_MEMBER_ZIP: ua.RAW_ZIP,
                 l.CLEAN_MANAGER_MEMBER_ADDRESS: ua.CLEAN_ADDRESS,
                 l.CLEAN_MANAGER_MEMBER_STREET: ua.CLEAN_STREET,
                 l.CLEAN_MANAGER_MEMBER_CITY: ua.CLEAN_CITY,
-                l.CLEAN_MANAGER_MEMBER_STATE: ua.CLEAN_STATE,
+                # l.CLEAN_MANAGER_MEMBER_STATE: ua.CLEAN_STATE,
                 l.CLEAN_MANAGER_MEMBER_ZIP: ua.CLEAN_ZIP,
             },
             "agent": {
                 l.RAW_AGENT_ADDRESS: ua.RAW_ADDRESS,
                 l.RAW_AGENT_STREET: ua.RAW_STREET,
-                l.RAW_AGENT_CITY: ua.RAW_CITY,
-                l.RAW_AGENT_STATE: ua.RAW_STATE,
+                # l.RAW_AGENT_CITY: ua.RAW_CITY,
+                # l.RAW_AGENT_STATE: ua.RAW_STATE,
                 l.RAW_AGENT_ZIP: ua.RAW_ZIP,
                 l.CLEAN_AGENT_ADDRESS: ua.CLEAN_ADDRESS,
                 l.CLEAN_AGENT_STREET: ua.CLEAN_STREET,
-                l.CLEAN_AGENT_CITY: ua.CLEAN_CITY,
-                l.CLEAN_AGENT_STATE: ua.CLEAN_STATE,
+                # l.CLEAN_AGENT_CITY: ua.CLEAN_CITY,
+                # l.CLEAN_AGENT_STATE: ua.CLEAN_STATE,
                 l.CLEAN_AGENT_ZIP: ua.CLEAN_ZIP,
             },
             "office": {
                 l.RAW_OFFICE_ADDRESS: ua.RAW_ADDRESS,
                 l.RAW_OFFICE_STREET: ua.RAW_STREET,
                 l.RAW_OFFICE_CITY: ua.RAW_CITY,
-                l.RAW_OFFICE_STATE: ua.RAW_STATE,
+                # l.RAW_OFFICE_STATE: ua.RAW_STATE,
                 l.RAW_OFFICE_ZIP: ua.RAW_ZIP,
                 l.CLEAN_OFFICE_ADDRESS: ua.CLEAN_ADDRESS,
                 l.CLEAN_OFFICE_STREET: ua.CLEAN_STREET,
                 l.CLEAN_OFFICE_CITY: ua.CLEAN_CITY,
-                l.CLEAN_OFFICE_STATE: ua.CLEAN_STATE,
+                # l.CLEAN_OFFICE_STATE: ua.CLEAN_STATE,
                 l.CLEAN_OFFICE_ZIP: ua.CLEAN_ZIP,
             },
         },
@@ -621,7 +621,32 @@ class WkflDataClean(WorkflowStandardBase):
                 l.CLEAN_OFFICE_ZIP,
             ]
         },
-        "unvalidated_addrs": []
+        "unvalidated_addrs": {
+            "all": [
+                ua.RAW_ADDRESS,
+                ua.RAW_STREET,
+                ua.RAW_CITY,
+                ua.RAW_STATE,
+                ua.RAW_ZIP,
+                ua.CLEAN_ADDRESS,
+                ua.CLEAN_STREET,
+                ua.CLEAN_CITY,
+                ua.CLEAN_STATE,
+                ua.CLEAN_ZIP,
+            ],
+            "required": [
+                ua.RAW_ADDRESS,
+                ua.RAW_STREET,
+                ua.RAW_CITY,
+                ua.RAW_STATE,
+                ua.RAW_ZIP,
+                ua.CLEAN_ADDRESS,
+                ua.CLEAN_STREET,
+                ua.CLEAN_CITY,
+                ua.CLEAN_STATE,
+                ua.CLEAN_ZIP,
+            ]
+        }
     }
 
     def __init__(self, configs: WorkflowConfigs):
@@ -735,7 +760,7 @@ class WkflDataClean(WorkflowStandardBase):
                 self.DF_OUT_COL_MAP["taxpayer_records"]["all"]
             )
             self.dfs_out["properties"] = df_props
-            self.dfs_out["taxpayers"] = df_taxpayers
+            self.dfs_out["taxpayer_records"] = df_taxpayers
             t.print_with_dots(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\".")
         else:
             if id == "corps":
@@ -764,18 +789,18 @@ class WkflDataClean(WorkflowStandardBase):
 
     def execute_unvalidated_generator(self) -> None:
         t.print_with_dots(f"Generating \"unvalidated_addrs\"...")
-        self.dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(self.dfs_out, self.DF_OUT_COL_MAP)
+        self.dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(self.dfs_out, self.UNVALIDATED_COL_MAP)
         t.print_with_dots("\"unvalidated_addrs\" successfully generated.\"")
 
     # --------------
     # ----LOADER----
     # --------------
     def load(self):
-        load_map: dict[str, Path] = {
-            "props_taxpayers": path_gen.raw_props_taxpayers(self.configs),
-            "corps": path_gen.raw_corps(self.configs),
-            "llcs": path_gen.raw_llcs(self.configs),
-            "class_codes": path_gen.raw_class_codes(self.configs)
+        load_map: dict[str, Path] = {  # todo: change these back
+            "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
+            "corps": path_gen.processed_corps(self.configs),
+            "llcs": path_gen.processed_llcs(self.configs),
+            "class_codes": path_gen.processed_class_codes(self.configs)
         }
         self.load_dfs(load_map)
 
@@ -789,30 +814,30 @@ class WkflDataClean(WorkflowStandardBase):
         # todo: add to properties/taxpayer records validator: unique column constraint on PIN
         # todo: add checks to confirm that dfs_in were loaded correctly that stop this workflow from executing if not
 
-        for id, df_in in self.dfs_in.items():
-
-            df: pd.DataFrame = df_in.copy()  # make copy to preserve the loaded dataframes
-
-            # specific logic for class_codes
-            if id == "class_codes":
-                df: pd.DataFrame = self.execute_basic_cleaning(id, df)
-                self.dfs_out[id] = df
-                continue
-
-            # PRE-CLEANING OPERATIONS
-            df: pd.DataFrame = self.execute_pre_cleaning(id, df)
-            # MAIN CLEANING OPERATIONS
-            df: pd.DataFrame = self.execute_basic_cleaning(id, df)
-            df: pd.DataFrame = self.execute_name_column_cleaning(id, df, self.CLEANING_COL_MAP["name"][id])
-            df: pd.DataFrame = self.execute_address_column_cleaning(
-                id,
-                df,
-                self.CLEANING_COL_MAP["address"][id]["street"],
-                self.CLEANING_COL_MAP["address"][id]["zip"],
-            )
-            # df_pt: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df_pt)
-            # POST-CLEANING OPERATIONS
-            self.execute_post_cleaning(id, df)
+        # for id, df_in in self.dfs_in.items():
+        #
+        #     df: pd.DataFrame = df_in.copy()  # make copy to preserve the loaded dataframes
+        #
+        #     # specific logic for class_codes
+        #     if id == "class_codes":
+        #         df: pd.DataFrame = self.execute_basic_cleaning(id, df)
+        #         self.dfs_out[id] = df
+        #         continue
+        #
+        #     # PRE-CLEANING OPERATIONS
+        #     df: pd.DataFrame = self.execute_pre_cleaning(id, df)
+        #     # MAIN CLEANING OPERATIONS
+        #     df: pd.DataFrame = self.execute_basic_cleaning(id, df)
+        #     df: pd.DataFrame = self.execute_name_column_cleaning(id, df, self.CLEANING_COL_MAP["name"][id])
+        #     df: pd.DataFrame = self.execute_address_column_cleaning(
+        #         id,
+        #         df,
+        #         self.CLEANING_COL_MAP["address"][id]["street"],
+        #         self.CLEANING_COL_MAP["address"][id]["zip"],
+        #     )
+        #     # df_pt: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df_pt)
+        #     # POST-CLEANING OPERATIONS
+        #     self.execute_post_cleaning(id, df)
 
         self.execute_unvalidated_generator()
 
@@ -832,7 +857,7 @@ class WkflDataClean(WorkflowStandardBase):
             "corps": path_gen.processed_corps(self.configs),
             "llcs": path_gen.processed_llcs(self.configs),
             "class_codes": path_gen.processed_class_codes(self.configs),
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
+            # "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
         }
         self.save_dfs(save_map)
 
