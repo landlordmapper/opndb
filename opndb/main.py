@@ -73,11 +73,12 @@ def start(config_manager: ConfigManager):
     while True:
         wkfl = WorkflowBase.create_workflow(config_manager.configs)
         wkfl.load()
-        if not t.press_enter_to_continue("execute string cleaning workflow "):
-            t.print_with_dots("Exiting program...", style="yellow")
-            return
+        # if not t.press_enter_to_continue("execute string cleaning workflow "):
+        #     t.print_with_dots("Exiting program...", style="yellow")
+        #     return
         wkfl.process()
         wkfl.save()
+        break
         # print out summary stats of data found in raw datasets
         # press enter to begin cleaning
 

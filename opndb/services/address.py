@@ -375,46 +375,13 @@ class AddressBase:
         pass
 
     @classmethod
-    def get_full_address(
-        cls,
-        row: pd.Series,
-        df_cols: list[str],
-        full_addr_key: str,
-    ) -> str:
-        """
-        Returns concatenated string containing all address components. Accounts for missing city and state address
-        fields.
-
-        NOTE: Column validation should already have happened at this point, so this should NOT throw a key
-        error for missing columns.
-
-        NOTE: Commas are added between state and zip code to allow for splitting.
-
-        :param row: Dataframe row containing address fields
-        :param df_cols: List of column names associated with the row
-        :param full_addr_key: Key to prefix address columns (ex: "tax" > "tax_street", "president" > "president_street", etc.)
-        :param raw_clean_prefix: Optional prefix string to specify address column names (ex: "clean" > "clean_tax_city", "raw" > "raw_agent_street")
-        """
-        street: str = f"{full_addr_key}_street"
-        city: str = f"{full_addr_key}_city"
-        state: str = f"{full_addr_key}_state"
-        zip_: str = f"{full_addr_key}_zip"
-        address_fields: list[str] = [street, city, state, zip_]
-        # if no specific address fields are found,
-        if all(field not in df_cols for field in address_fields):
-            return f"{full_addr_key}_address"
-        # if all address fields are present, concatenate like normal
-        elif all(field in df_cols for field in address_fields):
-            return f"{row[street]}, {row[city]}, {row[state]}, {row[zip_]}"
-        # if city or state fields are missing, return value accordingly
-        elif city not in df_cols and state not in df_cols:
-            return f"{row[street]}, {row[zip_]}"
-        elif city not in df_cols:
-            return f"{row[street]}, {row[state]}, {row[zip_]}"
-        elif state not in df_cols:
-            return f"{row[street]}, {row[city]}, {row[zip_]}"
-        else:
-            raise f"full address generation problem. row: {row}"
+    def get_full_address(cls, row: pd.Series, address_cols: list[str]) -> str:
+        address_parts = [
+            str(row[col])
+            for col in address_cols
+            if pd.notna(row[col]) and str(row[col])
+        ]
+        return ", ".join(address_parts)
 
 
 class AddressValidatorBase(AddressBase):

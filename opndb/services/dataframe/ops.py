@@ -185,66 +185,26 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df
 
     @classmethod
-    def set_full_address_fields(
-        cls,
-        df: pd.DataFrame,
-        full_addr_fields: dict[str, str],
-        raw_clean_prefix: str | None = None,
-    ) -> pd.DataFrame:
-        """
-        Concatenates address component fields into a single string and adds as new column to the dataframe. Dynamically
-        sets field names based on which full address is being calculated (taxpayer vs corp president vs LLC agent etc.)
-        and based on whether the raw or clean address is being concatenated.
-
-        EXAMPLE:
-            - TAX_STREET: 123 Oak St
-            - TAX_CITY: Chicago
-            - TAX_STATE: IL
-            - TAX_ZIP: 12345
-            - TAX_ADDRESS (output of AddressBase.get_full_address()): "123 Oak St, Chicago, IL, 12345"
-
-        :param df: Dataframe to add column to
-        :param full_addr_fields: Dictionary whose keys are the names of the full address fields for the specific dataset (ex: "tax_address", "president_address", etc.), and whose values are used to prefix the column names (ex: "tax", "president", etc.).
-        :param raw_clean_prefix: Optional address column prefix, either "raw" or "clean" (ex: "raw" > "raw_tax_address")
-        """
-        try:
-            for field in full_addr_fields.keys():
-                field_prefixed: str = f"{raw_clean_prefix}_{field}" if raw_clean_prefix else field
-                if field_prefixed not in df.columns:
-                    print(f"field not found: {field_prefixed}")
-                    df[field_prefixed] = df.apply(
-                        lambda row: AddressBase.get_full_address(
-                            row,
-                            list(df.columns),
-                            full_addr_fields[field],
-                        ), axis=1
-                    )
-        except KeyError as e:
-            print(f"Key error")
-            for col in df.columns:
-                print(col)
-            raise
-
+    def set_full_address_fields(cls, df: pd.DataFrame, raw_address_map) -> pd.DataFrame:
+        if raw_address_map is None:
+            return df
+        for map in raw_address_map:
+            df[map["full_address"]] = df.apply(
+                lambda row: AddressBase.get_full_address(
+                    row,
+                    map["address_cols"]
+                ), axis=1
+            )
         return df
 
     @classmethod
-    def set_raw_columns(cls, df: pd.DataFrame, cols: list[str], required: list[str]) -> pd.DataFrame:
+    def set_raw_columns(cls, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
         # todo: this will have to be handled more gracefully to account for optional columns
         for col in cols:
-            if col in required:
-                if col[:3] == "tax":  # exception for props_taxpayer records fields
-                    df[f"raw_{col[4:]}"] = df[col].copy()
-                else:
-                    df[f"raw_{col}"] = df[col].copy()
+            if col[:3] == "tax":  # exception for props_taxpayer records fields
+                df[f"raw_{col[4:]}"] = df[col].copy()
             else:
-                try:
-                    if col[:3] == "tax":  # exception for props_taxpayer records fields
-                        df[f"raw_{col[4:]}"] = df[col].copy()
-                    else:
-                        df[f"raw_{col}"] = df[col].copy()
-                except KeyError:
-                    console.print(f"WARNING: column \"{col}\" not found in dataframe.")
-                    continue
+                df[f"raw_{col}"] = df[col].copy()
         return df
 
 
