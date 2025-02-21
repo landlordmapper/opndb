@@ -3,19 +3,37 @@ class ColumnManagerBase:
         pass
 
 
+class ColumnClassCodes(ColumnManagerBase):
+
+    CODE: str = "code"
+    CATEGORY: str = "category"
+    DESCRIPTION: str = "description"
+    IS_RENTAL: str = "is_rental"
+
+    def __init__(self):
+        super().__init__()
+
+    @property
+    def basic_clean(self):
+        return [
+            self.CODE,
+            self.CATEGORY,
+            self.DESCRIPTION,
+            self.IS_RENTAL,
+        ]
+
+
 class ColumnPropsTaxpayers(ColumnManagerBase):
 
-    # raw data columns - required
+    # raw data columns
     PIN: str = "pin"
     TAX_NAME: str = "tax_name"
+    TAX_ADDRESS: str = "tax_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
     TAX_STREET: str = "tax_street"  # todo: add documentation: optional - addresses may come in a single string format and need to be parsed
     TAX_CITY: str = "tax_city"
     TAX_STATE: str = "tax_state"
     TAX_ZIP: str = "tax_zip"
     CLASS_CODE: str = "class_code"
-
-    # raw data columns - optional
-    TAX_ADDRESS: str = "tax_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
     NUM_UNITS: str = "num_units"  # todo: add documentation: optional - ideal but will work without it
 
     # processing columns
@@ -88,34 +106,74 @@ class ColumnPropsTaxpayers(ColumnManagerBase):
             }
         }
 
+    @property
+    def basic_clean(self):
+        return [
+            self.PIN,
+            self.NUM_UNITS,
+            self.CLASS_CODE,
+            self.CLEAN_NAME,
+            self.CLEAN_STREET,
+            self.CLEAN_CITY,
+            self.CLEAN_STATE,
+            self.CLEAN_ZIP,
+        ]
+
+    @property
+    def name_clean(self):
+        return [
+            self.CLEAN_NAME,
+        ]
+
+    @property
+    def address_clean(self):
+        return {
+            "street": [
+                self.CLEAN_STREET,
+            ],
+            "zip": [
+                self.CLEAN_ZIP,
+            ]
+        }
+
+    @property
+    def clean_address_map(self):
+        return [
+            {
+                "full_address": self.CLEAN_ADDRESS,
+                "address_cols": [
+                    self.CLEAN_STREET,
+                    self.CLEAN_CITY,
+                    self.CLEAN_STATE,
+                    self.CLEAN_ZIP,
+                ]
+            }
+        ]
+
+
 class ColumnCorps(ColumnManagerBase):
 
-    # raw data fields - required
+    # raw data fields
     NAME: str = "name"
     FILE_NUMBER: str = "file_number"
-    STATUS: str = "status"
-    PRESIDENT_NAME: str = "president_name"
-    SECRETARY_NAME: str = "secretary_name"
-
-    # raw data fields - required ONLY IF _street and _zip address fields are NOT present
-    PRESIDENT_ADDRESS: str = "president_address"
-    SECRETARY_ADDRESS: str = "secretary_address"
-
-    # raw data fields - required ONLY IF full address fields are NOT present
-    PRESIDENT_STREET: str = "president_street"
-    PRESIDENT_ZIP: str = "president_zip"
-    SECRETARY_STREET: str = "secretary_street"
-    SECRETARY_ZIP: str = "secretary_zip"
-
-    # raw data fields - optional
     DATE_INCORPORATED: str = "date_incorporated"
     DATE_DISSOLVED: str = "date_dissolved"  # todo: add documentation: optional may be active
+    STATUS: str = "status"
+
+    PRESIDENT_NAME: str = "president_name"
+    PRESIDENT_ADDRESS: str = "president_address"
+    PRESIDENT_STREET: str = "president_street"
     PRESIDENT_CITY: str = "president_city"
     PRESIDENT_STATE: str = "president_state"
+    PRESIDENT_ZIP: str = "president_zip"
+    SECRETARY_NAME: str = "secretary_name"
+    SECRETARY_ADDRESS: str = "secretary_address"
+    SECRETARY_STREET: str = "secretary_street"
     SECRETARY_CITY: str = "secretary_city"
     SECRETARY_STATE: str = "secretary_state"
+    SECRETARY_ZIP: str = "secretary_zip"
 
-    # processed dataset fields - should follow same "optional" pattens as above
+    # processed data fields
     RAW_NAME: str = "raw_name"
     RAW_PRESIDENT_NAME: str = "raw_president_name"
     RAW_PRESIDENT_ADDRESS: str = "raw_president_address"
@@ -184,42 +242,98 @@ class ColumnCorps(ColumnManagerBase):
     def raw_address_map(self):
         return None
 
+    @property
+    def basic_clean(self):
+        return [
+            self.FILE_NUMBER,
+            self.STATUS,
+            self.CLEAN_NAME,
+            self.CLEAN_PRESIDENT_NAME,
+            self.CLEAN_PRESIDENT_ADDRESS,
+            self.CLEAN_SECRETARY_NAME,
+            self.CLEAN_SECRETARY_ADDRESS,
+        ]
+
+    @property
+    def name_clean(self):
+        return [
+            self.CLEAN_NAME,
+            self.CLEAN_PRESIDENT_NAME,
+            self.CLEAN_SECRETARY_NAME,
+        ]
+
+    @property
+    def address_clean(self):
+        return {
+            "street": [
+                self.CLEAN_PRESIDENT_ADDRESS,
+                self.CLEAN_SECRETARY_ADDRESS,
+            ],
+            "zip": []
+        }
+
+    @property
+    def clean_address_map(self):
+        return None
+
+    @property
+    def out(self):
+        return [
+            self.FILE_NUMBER,
+            self.STATUS,
+            self.RAW_NAME,
+            self.RAW_PRESIDENT_NAME,
+            self.RAW_PRESIDENT_ADDRESS,
+            self.RAW_SECRETARY_NAME,
+            self.RAW_SECRETARY_ADDRESS,
+            self.CLEAN_NAME,
+            self.CLEAN_PRESIDENT_NAME,
+            self.CLEAN_PRESIDENT_ADDRESS,
+            self.CLEAN_SECRETARY_NAME,
+            self.CLEAN_SECRETARY_ADDRESS,
+        ]
+
+    @property
+    def unvalidated_col_objs(self):
+        return [
+            {
+                self.RAW_PRESIDENT_ADDRESS: "raw_address",
+                self.CLEAN_PRESIDENT_ADDRESS: "clean_address",
+            },
+            {
+                self.RAW_SECRETARY_ADDRESS: "raw_address",
+                self.CLEAN_SECRETARY_ADDRESS: "clean_address",
+            }
+        ]
+
 
 class ColumnLLCs(ColumnManagerBase):
 
     # raw data fields
     NAME: str = "name"
     FILE_NUMBER: str = "file_number"
-    STATUS: str = "status"  # todo: add documentation: optional - may be codes whose meanings will determine how the active filters are applied
-    MANAGER_MEMBER_NAME: str = "manager_member_name"
-    AGENT_NAME: str = "agent_name"
-
-    # raw data fields - required ONLY IF _street and _zip address fields are NOT present
-    MANAGER_MEMBER_ADDRESS: str = "manager_member_address"
-    AGENT_ADDRESS: str = "agent_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
-    OFFICE_ADDRESS: str = "office_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
-
-    # raw data fields - required ONLY IF full address fields are NOT present
-    MANAGER_MEMBER_STREET: str = "manager_member_street"
-    MANAGER_MEMBER_ZIP: str = "manager_member_zip"
-    AGENT_STREET: str = "agent_street"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
-    AGENT_ZIP: str = "agent_zip"
-    OFFICE_STREET: str = "office_street"
-    OFFICE_ZIP: str = "office_zip"
-
-    # raw data fields - optional
-    MANAGER_MEMBER_CITY: str = "manager_member_city"
-    MANAGER_MEMBER_STATE: str = "manager_member_state"  # todo: add documentation: optional - sometimes missing, not ideal
-    AGENT_CITY: str = "agent_city"
-    AGENT_STATE: str = "agent_state"  # todo: add documentation: optional - sometimes missing, not ideal
-    OFFICE_CITY: str = "office_city"
-    OFFICE_STATE: str = "office_state"  # todo: add documentation: optional - sometimes missing, not ideal
-
-    # raw data fields - optional
     DATE_INCORPORATED: str = "date_incorporated"
     DATE_DISSOLVED: str = "date_dissolved"  # todo: add documentation: optional may be active
+    STATUS: str = "status"  # todo: add documentation: optional - may be codes whose meanings will determine how the active filters are applied
 
-    # processed dataset fields - should follow same "optional" pattens as above
+    MANAGER_MEMBER_NAME: str = "manager_member_name"
+    MANAGER_MEMBER_ADDRESS: str = "manager_member_address"
+    MANAGER_MEMBER_STREET: str = "manager_member_street"
+    MANAGER_MEMBER_CITY: str = "manager_member_city"
+    MANAGER_MEMBER_STATE: str = "manager_member_state"  # todo: add documentation: optional - sometimes missing, not ideal
+    MANAGER_MEMBER_ZIP: str = "manager_member_zip"
+    AGENT_NAME: str = "agent_name"
+    AGENT_ADDRESS: str = "agent_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
+    AGENT_STREET: str = "agent_street"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
+    AGENT_CITY: str = "agent_city"
+    AGENT_STATE: str = "agent_state"  # todo: add documentation: optional - sometimes missing, not ideal
+    AGENT_ZIP: str = "agent_zip"
+    OFFICE_ADDRESS: str = "office_address"  # todo: add documentation: optional - addresses may come broken down already into street, city, state and zip
+    OFFICE_STREET: str = "office_street"
+    OFFICE_CITY: str = "office_city"
+    OFFICE_STATE: str = "office_state"  # todo: add documentation: optional - sometimes missing, not ideal
+    OFFICE_ZIP: str = "office_zip"
+
     RAW_NAME: str = "raw_name"
     RAW_MANAGER_MEMBER_NAME: str = "raw_manager_member_name"
     RAW_MANAGER_MEMBER_ADDRESS: str = "raw_manager_member_address"
@@ -333,6 +447,143 @@ class ColumnLLCs(ColumnManagerBase):
             },
         ]
 
+    @property
+    def basic_clean(self):
+        return [
+            self.FILE_NUMBER,
+            self.STATUS,
+            self.CLEAN_NAME,
+            self.CLEAN_MANAGER_MEMBER_NAME,
+            self.CLEAN_MANAGER_MEMBER_STREET,
+            self.CLEAN_MANAGER_MEMBER_CITY,
+            self.CLEAN_MANAGER_MEMBER_ZIP,
+            self.CLEAN_AGENT_NAME,
+            self.CLEAN_AGENT_STREET,
+            self.CLEAN_AGENT_ZIP,
+            self.CLEAN_OFFICE_STREET,
+            self.CLEAN_OFFICE_CITY,
+            self.CLEAN_OFFICE_ZIP,
+        ]
+
+    @property
+    def name_clean(self):
+        return [
+            self.CLEAN_NAME,
+            self.CLEAN_MANAGER_MEMBER_NAME,
+            self.CLEAN_AGENT_NAME,
+        ]
+
+    @property
+    def address_clean(self):
+        return {
+            "street": [
+                self.CLEAN_MANAGER_MEMBER_STREET,
+                self.CLEAN_AGENT_STREET,
+                self.CLEAN_OFFICE_STREET,
+            ],
+            "zip": [
+                self.CLEAN_MANAGER_MEMBER_ZIP,
+                self.CLEAN_AGENT_ZIP,
+                self.CLEAN_OFFICE_ZIP,
+            ]
+        }
+
+    @property
+    def clean_address_map(self):
+        return [
+            {
+                "full_address": self.CLEAN_MANAGER_MEMBER_ADDRESS,
+                "address_cols": [
+                    self.CLEAN_MANAGER_MEMBER_STREET,
+                    self.CLEAN_MANAGER_MEMBER_CITY,
+                    self.CLEAN_MANAGER_MEMBER_ZIP,
+                ]
+            },
+            {
+                "full_address": self.CLEAN_AGENT_ADDRESS,
+                "address_cols": [
+                    self.CLEAN_AGENT_STREET,
+                    self.CLEAN_AGENT_ZIP,
+                ]
+            },
+            {
+                "full_address": self.CLEAN_OFFICE_ADDRESS,
+                "address_cols": [
+                    self.CLEAN_OFFICE_STREET,
+                    self.CLEAN_OFFICE_CITY,
+                    self.CLEAN_OFFICE_ZIP,
+                ]
+            },
+        ]
+
+    @property
+    def out(self):
+        return [
+            self.FILE_NUMBER,
+            self.STATUS,
+            self.RAW_NAME,
+            self.RAW_MANAGER_MEMBER_NAME,
+            self.RAW_MANAGER_MEMBER_STREET,
+            self.RAW_MANAGER_MEMBER_CITY,
+            self.RAW_MANAGER_MEMBER_ZIP,
+            self.RAW_MANAGER_MEMBER_ADDRESS,
+            self.RAW_AGENT_NAME,
+            self.RAW_AGENT_STREET,
+            self.RAW_AGENT_ZIP,
+            self.RAW_AGENT_ADDRESS,
+            self.RAW_OFFICE_STREET,
+            self.RAW_OFFICE_CITY,
+            self.RAW_OFFICE_ZIP,
+            self.RAW_OFFICE_ADDRESS,
+            self.CLEAN_NAME,
+            self.CLEAN_MANAGER_MEMBER_NAME,
+            self.CLEAN_MANAGER_MEMBER_STREET,
+            self.CLEAN_MANAGER_MEMBER_CITY,
+            self.CLEAN_MANAGER_MEMBER_ZIP,
+            self.CLEAN_MANAGER_MEMBER_ADDRESS,
+            self.CLEAN_AGENT_NAME,
+            self.CLEAN_AGENT_STREET,
+            self.CLEAN_AGENT_ZIP,
+            self.CLEAN_AGENT_ADDRESS,
+            self.CLEAN_OFFICE_STREET,
+            self.CLEAN_OFFICE_CITY,
+            self.CLEAN_OFFICE_ZIP,
+            self.CLEAN_OFFICE_ADDRESS,
+        ]
+
+    @property
+    def unvalidated_col_objs(self):
+        return [
+            {
+                self.RAW_MANAGER_MEMBER_STREET: "raw_street",
+                self.RAW_MANAGER_MEMBER_CITY: "raw_city",
+                self.RAW_MANAGER_MEMBER_ZIP: "raw_zip",
+                self.RAW_MANAGER_MEMBER_ADDRESS: "raw_address",
+                self.CLEAN_MANAGER_MEMBER_STREET: "clean_street",
+                self.CLEAN_MANAGER_MEMBER_CITY: "clean_city",
+                self.CLEAN_MANAGER_MEMBER_ZIP: "clean_zip",
+                self.CLEAN_MANAGER_MEMBER_ADDRESS: "clean_address",
+            },
+            {
+                self.RAW_AGENT_STREET: "raw_street",
+                self.RAW_AGENT_ZIP: "raw_zip",
+                self.RAW_AGENT_ADDRESS: "raw_address",
+                self.CLEAN_AGENT_STREET: "clean_street",
+                self.CLEAN_AGENT_ZIP: "clean_zip",
+                self.CLEAN_AGENT_ADDRESS: "clean_address",
+            },
+            {
+                self.RAW_OFFICE_STREET: "raw_street",
+                self.RAW_OFFICE_CITY: "raw_city",
+                self.RAW_OFFICE_ZIP: "raw_zip",
+                self.RAW_OFFICE_ADDRESS: "raw_address",
+                self.CLEAN_OFFICE_STREET: "clean_street",
+                self.CLEAN_OFFICE_CITY: "clean_city",
+                self.CLEAN_OFFICE_ZIP: "clean_zip",
+                self.CLEAN_OFFICE_ADDRESS: "clean_address",
+            }
+        ]
+
 
 class ColumnTaxpayerRecords(ColumnManagerBase):
 
@@ -365,6 +616,40 @@ class ColumnTaxpayerRecords(ColumnManagerBase):
     def __init__(self):
         super().__init__()
 
+    @property
+    def out(self):
+        return [
+            self.RAW_NAME,
+            self.RAW_STREET,
+            self.RAW_CITY,
+            self.RAW_STATE,
+            self.RAW_ZIP,
+            self.RAW_ADDRESS,
+            self.RAW_NAME_ADDRESS,
+            self.CLEAN_NAME,
+            self.CLEAN_STREET,
+            self.CLEAN_CITY,
+            self.CLEAN_STATE,
+            self.CLEAN_ZIP,
+            self.CLEAN_ADDRESS,
+            self.CLEAN_NAME_ADDRESS,
+        ]
+
+    @property
+    def unvalidated_addr_cols(self):
+        return [
+            self.RAW_STREET,
+            self.RAW_CITY,
+            self.RAW_STATE,
+            self.RAW_ZIP,
+            self.RAW_ADDRESS,
+            self.CLEAN_STREET,
+            self.CLEAN_CITY,
+            self.CLEAN_STATE,
+            self.CLEAN_ZIP,
+            self.CLEAN_ADDRESS,
+        ]
+
 
 class ColumnProperties(ColumnManagerBase):
 
@@ -377,14 +662,80 @@ class ColumnProperties(ColumnManagerBase):
     def __init__(self):
         super().__init__()
 
+    @property
+    def out(self):
+        return [
+            self.PIN,
+            self.RAW_NAME_ADDRESS,
+            self.CLEAN_NAME_ADDRESS,
+            self.CLASS_CODE,
+            self.NUM_UNITS,
+        ]
+
 
 class ColumnUnvalidatedAddrs(ColumnManagerBase):
+
+    RAW_STREET: str = "raw_street"
+    RAW_CITY: str = "raw_city"
+    RAW_STATE: str = "raw_state"
+    RAW_ZIP: str = "raw_zip"
+    RAW_ADDRESS: str = "raw_address"
+    CLEAN_STREET: str = "raw_street"
+    CLEAN_CITY: str = "raw_city"
+    CLEAN_STATE: str = "raw_state"
+    CLEAN_ZIP: str = "raw_zip"
+    CLEAN_ADDRESS: str = "raw_address"
+
     def __init__(self):
         super().__init__()
 
 
 class ColumnValidatedAddrs(ColumnManagerBase):
+
+    RAW_ADDRESS: str = "raw_address"
+    CLEAN_ADDRESS: str = "clean_address"
+    NUMBER: str = "number"
+    PREDIRECTIONAL: str = "predirectional"
+    PREFIX: str = "prefix"
+    STREET: str = "street"
+    SUFFIX: str = "suffix"
+    POSTDIRECTIONAL: str = "postdirectional"
+    SECONDARYUNIT: str = "secondaryunit"
+    SECONDARYNUMBER: str = "secondarynumber"
+    CITY: str = "city"
+    COUNTY: str = "county"
+    STATE: str = "state"
+    ZIP: str = "zip"
+    COUNTRY: str = "country"
+    LNG: str = "lng"
+    LAT: str = "lat"
+    ACCURACY: str = "accuracy"
+    FORMATTED_ADDRESS: str = "formatted_address"
+
     def __init__(self):
         super().__init__()
 
 
+class ColumnAddressAnalysis(ColumnManagerBase):
+
+    ADDRESS: str = "ADDRESS"
+    COUNT: str = "COUNT"
+    NAME: str = "NAME"
+    URL: str = "URL"
+    NOTES: str = "NOTES"
+    IS_LANDLORD_ORG: str = "IS_LANDLORD_ORG"
+    IS_GOVT_AGENCY: str = "IS_GOVT_AGENCY"
+    IS_LAWFIRM: str = "IS_LAWFIRM"
+    IS_MISSING_SUITE: str = "IS_MISSING_SUITE"
+    IS_FINANCIAL_SERVICES: str = "IS_FINANCIAL_SERVICES"
+    IS_ASSOC_BUS: str = "IS_ASSOC_BUS"
+    FIX_ADDRESS: str = "FIX_ADDRESS"
+    IS_FIXED: str = "IS_FIXED"
+    IS_VIRTUAL_OFFICE_AGENT: str = "IS_VIRTUAL_OFFICE_AGENT"
+    IS_NONPROFIT: str = "IS_NONPROFIT"
+    IS_IGNORE_MISC: str = "IS_IGNORE_MISC"
+    YELP_URL: str = "YELP_URL"
+    GOOGLE_URL: str = "GOOGLE_URL"
+
+    def __init__(self):
+        super().__init__()

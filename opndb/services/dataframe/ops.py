@@ -251,14 +251,6 @@ class DataFrameSubsetters(DataFrameOpsBase):
         Splits up the cleaned 'props_taxpayers' dataset into two separate datasets: 'taxpayer_records' and 'properties'
         """
         try:
-            df: pd.DataFrame = DataFrameColumnGenerators.set_name_address_concat(
-                df,
-                {
-                    "name_addr": p.CLEAN_NAME_ADDRESS,
-                    "name": pt.TAX_NAME,
-                    "addr": pt.TAX_ADDRESS,
-                }
-            )
             # pull out required columns for each final dataset
             # separate out properties dataset from props_taxpayers, handling for cases in which NUM_UNITS is missing
             df_props: pd.DataFrame = df[props_cols].copy()
@@ -296,36 +288,14 @@ class DataFrameSubsetters(DataFrameOpsBase):
             elif id == "properties":
                 continue
             elif id == "taxpayer_records":
-                try:
-                    # df.rename(columns=col_map[id], inplace=True)
-                    df = df[col_map[id].keys()]
-                    df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
-                    dfs_to_concat.append(df)
-                except KeyError as e:
-                    print("Key error")
-                    print("id:", id)
-                    print("col_map:", pprint(col_map))
-                    print("cols")
-                    for col in df.columns:
-                        print(col)
-                    raise
+                df = df[col_map[id]]
+                dfs_to_concat.append(df)
             else:
-                for key in col_map[id].keys():
-                    try:
-                        df = df[col_map[id][key].keys()]
-                        df.rename(columns=col_map[id][key], inplace=True)
-                        df.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
-                        dfs_to_concat.append(df)
-                    except KeyError:
-                        print("Key error")
-                        print("id:", id)
-                        print("cols")
-                        for col in df.columns:
-                            print(col)
-                        raise
+                for addr_cols in col_map[id]:  # col_map[id]: list[dict[str, str]]
+                    df_addr = df[addr_cols.keys()].copy()
+                    df_addr.rename(columns=addr_cols, inplace=True)
+                    dfs_to_concat.append(df_addr)
         df_out: pd.DataFrame = pd.concat(dfs_to_concat, ignore_index=True)
+        df_out.dropna(subset=[ua.RAW_ADDRESS], inplace=True)
         df_out.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
         return df_out
-
-    # @classmethod
-    # def filter_missing_optional_columns(cls, df: pd.DataFrame, required: list[str]) -> pd.DataFrame:

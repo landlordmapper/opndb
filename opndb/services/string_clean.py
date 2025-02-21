@@ -146,7 +146,7 @@ class CleanStringBase:
             'Fast-Food/Cafe' -> 'Fast-Food/Cafe'
             'Main St., #401' -> 'Main St  401'
         """
-        text = text.replace("&", "AND")
+        text = text.replace("&", " AND ")
         text = text.replace(",", " ")
         text = text.replace(".", " ")
         return text.translate(
@@ -191,6 +191,7 @@ class CleanStringBase:
             'SEVEN' -> 7
             'NINE' -> 9
         """
+        # todo: fix so that it converts SPLIT text, NOT the entire string
         if text == "POINT":
             return text
         else:

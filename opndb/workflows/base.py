@@ -19,7 +19,8 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs
+from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
+    ColumnTaxpayerRecords, ColumnClassCodes
 
 # 4. Types (these should only depend on constants)
 from opndb.types.base import (
@@ -188,467 +189,6 @@ class WkflDataClean(WorkflowStandardBase):
             - 'ROOT/processed/class_codes[FileExt]'
             - 'ROOT/processed/unvalidated_addrs[FileExt]'
     """
-    FULL_ADDRESS_COL_MAP = {
-        "props_taxpayers": {
-            pt.TAX_ADDRESS: "tax"
-        },
-        "corps": {
-            c.PRESIDENT_ADDRESS: "president",
-            c.SECRETARY_ADDRESS: "secretary",
-        },
-        "llcs": {
-            l.MANAGER_MEMBER_ADDRESS: "manager_member",
-            l.AGENT_ADDRESS: "agent",
-            l.OFFICE_ADDRESS: "office"
-        }
-    }
-
-    CLEANING_COL_MAP = {
-        "name": {
-            "props_taxpayers": [
-                pt.TAX_NAME
-            ],
-            "corps": [
-                c.NAME,
-                c.PRESIDENT_NAME,
-                c.SECRETARY_NAME
-            ],
-            "llcs": [
-                l.NAME,
-                l.MANAGER_MEMBER_NAME,
-                l.AGENT_NAME
-            ],
-        },
-        "address": {
-            "props_taxpayers": {
-                "street": [
-                    pt.TAX_ADDRESS,
-                    pt.TAX_STREET
-                ],
-                "zip": [
-                    pt.TAX_ZIP
-                ],
-            },
-            "corps": {
-                "street": [
-                    c.PRESIDENT_ADDRESS,
-                    c.PRESIDENT_STREET,
-                    c.SECRETARY_ADDRESS,
-                    c.SECRETARY_STREET
-                ],
-                "zip": [
-                    c.PRESIDENT_ZIP,
-                    c.SECRETARY_ZIP
-                ],
-            },
-            "llcs": {
-                "street": [
-                    l.OFFICE_ADDRESS,
-                    l.OFFICE_STREET,
-                    l.MANAGER_MEMBER_ADDRESS,
-                    l.MANAGER_MEMBER_STREET,
-                    l.AGENT_ADDRESS,
-                    l.AGENT_STREET
-                ],
-                "zip": [
-                    l.OFFICE_ZIP,
-                    l.MANAGER_MEMBER_ZIP,
-                    l.AGENT_ZIP
-                ],
-            },
-        },
-        "accuracy": {
-            "name": {
-                "props_taxpayers": [],
-                "corps": [],
-                "llcs": [],
-            },
-            "address": {
-                "props_taxpayers": {
-                    "street": [],
-                    "zip": [],
-                },
-                "corps": {
-                    "street": [],
-                    "zip": [],
-                },
-                "llcs": {
-                    "street": [],
-                    "zip": [],
-                },
-            }
-        }
-    }
-    RAW_CLEAN_COL_MAP = {
-        "props_taxpayers": {
-            "all": [
-                pt.TAX_NAME,
-                # pt.TAX_ADDRESS,
-                pt.TAX_STREET,
-                pt.TAX_CITY,
-                pt.TAX_STATE,
-                pt.TAX_ZIP,
-            ],
-            "required": [
-                pt.TAX_NAME,
-                # pt.TAX_ADDRESS,
-                pt.TAX_STREET,
-                pt.TAX_CITY,
-                pt.TAX_STATE,
-                pt.TAX_ZIP,
-            ]
-        },
-        "corps": {
-            "all": [
-                c.NAME,
-                c.PRESIDENT_NAME,
-                c.PRESIDENT_ADDRESS,
-                c.PRESIDENT_STREET,
-                c.PRESIDENT_CITY,
-                c.PRESIDENT_STATE,
-                c.PRESIDENT_ZIP,
-                c.SECRETARY_NAME,
-                c.SECRETARY_ADDRESS,
-                c.SECRETARY_STREET,
-                c.SECRETARY_CITY,
-                c.SECRETARY_STATE,
-                c.SECRETARY_ZIP,
-            ],
-            "required": [
-                c.NAME,
-                c.PRESIDENT_NAME,
-                c.PRESIDENT_ADDRESS,
-                # c.PRESIDENT_STREET,  # todo: this will need to be addressed
-                # c.PRESIDENT_CITY,
-                # c.PRESIDENT_STATE,
-                # c.PRESIDENT_ZIP,
-                c.SECRETARY_NAME,
-                c.SECRETARY_ADDRESS,
-                # c.SECRETARY_STREET,
-                # c.SECRETARY_CITY,
-                # c.SECRETARY_STATE,
-                # c.SECRETARY_ZIP,
-            ]
-        },
-        "llcs": {
-            "all": [
-                l.NAME,
-                l.MANAGER_MEMBER_NAME,
-                l.MANAGER_MEMBER_ADDRESS,
-                l.MANAGER_MEMBER_STREET,
-                l.MANAGER_MEMBER_CITY,
-                l.MANAGER_MEMBER_STATE,
-                l.MANAGER_MEMBER_ZIP,
-                l.AGENT_NAME,
-                l.AGENT_ADDRESS,
-                l.AGENT_STREET,
-                l.AGENT_CITY,
-                l.AGENT_ZIP,
-                l.OFFICE_ADDRESS,
-                l.OFFICE_STREET,
-                l.OFFICE_CITY,
-                l.OFFICE_STATE,
-                l.OFFICE_ZIP,
-            ],
-            "required": [
-                l.NAME,
-                l.MANAGER_MEMBER_NAME,
-                # l.MANAGER_MEMBER_ADDRESS,  # todo: this will need to be addressed
-                l.MANAGER_MEMBER_STREET,
-                l.MANAGER_MEMBER_CITY,
-                # l.MANAGER_MEMBER_STATE,
-                l.MANAGER_MEMBER_ZIP,
-                l.AGENT_NAME,
-                # l.AGENT_ADDRESS,
-                l.AGENT_STREET,
-                # l.AGENT_CITY,
-                l.AGENT_ZIP,
-                # l.OFFICE_ADDRESS,
-                l.OFFICE_STREET,
-                l.OFFICE_CITY,
-                # l.OFFICE_STATE,
-                l.OFFICE_ZIP,
-            ]
-        },
-    }
-    AVAILABLE_ADDRESS_COL_MAP = {
-        "props_taxpayers": {
-
-        },
-        "corps": {
-
-        },
-        "llcs": {
-
-        }
-    }
-    UNVALIDATED_COL_MAP = {
-        "taxpayer_records": {
-            tr.RAW_ADDRESS: tr.RAW_ADDRESS,
-            tr.RAW_STREET: tr.RAW_STREET,
-            tr.RAW_CITY: tr.RAW_CITY,
-            tr.RAW_STATE: tr.RAW_STATE,
-            tr.RAW_ZIP: tr.RAW_ZIP,
-            pt.TAX_ADDRESS: tr.CLEAN_ADDRESS,
-            pt.TAX_STREET: tr.CLEAN_STREET,
-            pt.TAX_CITY: tr.CLEAN_CITY,
-            pt.TAX_STATE: tr.CLEAN_STATE,
-            pt.TAX_ZIP: tr.CLEAN_ZIP,
-        },
-        "corps": {
-            "president": {
-                c.RAW_PRESIDENT_ADDRESS: ua.RAW_ADDRESS,
-                # c.RAW_PRESIDENT_STREET: ua.RAW_STREET,
-                # c.RAW_PRESIDENT_CITY: ua.RAW_CITY,
-                # c.RAW_PRESIDENT_STATE: ua.RAW_STATE,
-                # c.RAW_PRESIDENT_ZIP: ua.RAW_ZIP,
-                c.CLEAN_PRESIDENT_ADDRESS: ua.CLEAN_ADDRESS,
-                # c.CLEAN_PRESIDENT_STREET: ua.CLEAN_STREET,
-                # c.CLEAN_PRESIDENT_CITY: ua.CLEAN_CITY,
-                # c.CLEAN_PRESIDENT_STATE: ua.CLEAN_STATE,
-                # c.CLEAN_PRESIDENT_ZIP: ua.CLEAN_ZIP,
-            },
-            "secretary": {
-                c.RAW_SECRETARY_ADDRESS: ua.RAW_ADDRESS,
-                # c.RAW_SECRETARY_STREET: ua.RAW_STREET,
-                # c.RAW_SECRETARY_CITY: ua.RAW_CITY,
-                # c.RAW_SECRETARY_STATE: ua.RAW_STATE,
-                # c.RAW_SECRETARY_ZIP: ua.RAW_ZIP,
-                c.CLEAN_SECRETARY_ADDRESS: ua.CLEAN_ADDRESS,
-                # c.CLEAN_SECRETARY_STREET: ua.CLEAN_STREET,
-                # c.CLEAN_SECRETARY_CITY: ua.CLEAN_CITY,
-                # c.CLEAN_SECRETARY_STATE: ua.CLEAN_STATE,
-                # c.CLEAN_SECRETARY_ZIP: ua.CLEAN_ZIP,
-            },
-        },
-        "llcs": {
-            "manager_member": {
-                l.RAW_MANAGER_MEMBER_ADDRESS: ua.RAW_ADDRESS,
-                l.RAW_MANAGER_MEMBER_STREET: ua.RAW_STREET,
-                l.RAW_MANAGER_MEMBER_CITY: ua.RAW_CITY,
-                # l.RAW_MANAGER_MEMBER_STATE: ua.RAW_STATE,
-                l.RAW_MANAGER_MEMBER_ZIP: ua.RAW_ZIP,
-                l.CLEAN_MANAGER_MEMBER_ADDRESS: ua.CLEAN_ADDRESS,
-                l.CLEAN_MANAGER_MEMBER_STREET: ua.CLEAN_STREET,
-                l.CLEAN_MANAGER_MEMBER_CITY: ua.CLEAN_CITY,
-                # l.CLEAN_MANAGER_MEMBER_STATE: ua.CLEAN_STATE,
-                l.CLEAN_MANAGER_MEMBER_ZIP: ua.CLEAN_ZIP,
-            },
-            "agent": {
-                l.RAW_AGENT_ADDRESS: ua.RAW_ADDRESS,
-                l.RAW_AGENT_STREET: ua.RAW_STREET,
-                # l.RAW_AGENT_CITY: ua.RAW_CITY,
-                # l.RAW_AGENT_STATE: ua.RAW_STATE,
-                l.RAW_AGENT_ZIP: ua.RAW_ZIP,
-                l.CLEAN_AGENT_ADDRESS: ua.CLEAN_ADDRESS,
-                l.CLEAN_AGENT_STREET: ua.CLEAN_STREET,
-                # l.CLEAN_AGENT_CITY: ua.CLEAN_CITY,
-                # l.CLEAN_AGENT_STATE: ua.CLEAN_STATE,
-                l.CLEAN_AGENT_ZIP: ua.CLEAN_ZIP,
-            },
-            "office": {
-                l.RAW_OFFICE_ADDRESS: ua.RAW_ADDRESS,
-                l.RAW_OFFICE_STREET: ua.RAW_STREET,
-                l.RAW_OFFICE_CITY: ua.RAW_CITY,
-                # l.RAW_OFFICE_STATE: ua.RAW_STATE,
-                l.RAW_OFFICE_ZIP: ua.RAW_ZIP,
-                l.CLEAN_OFFICE_ADDRESS: ua.CLEAN_ADDRESS,
-                l.CLEAN_OFFICE_STREET: ua.CLEAN_STREET,
-                l.CLEAN_OFFICE_CITY: ua.CLEAN_CITY,
-                # l.CLEAN_OFFICE_STATE: ua.CLEAN_STATE,
-                l.CLEAN_OFFICE_ZIP: ua.CLEAN_ZIP,
-            },
-        },
-    }
-    DF_OUT_COL_MAP = {
-        "taxpayer_records": {
-            "all": [
-                # raw columns
-                tr.RAW_NAME_ADDRESS,
-                tr.RAW_NAME,
-                tr.RAW_ADDRESS,
-                tr.RAW_STREET,
-                tr.RAW_CITY,
-                tr.RAW_STATE,
-                tr.RAW_ZIP,
-                # cleaned columns
-                tr.CLEAN_NAME_ADDRESS,
-                pt.TAX_NAME,
-                pt.TAX_ADDRESS,
-                pt.TAX_STREET,
-                pt.TAX_CITY,
-                pt.TAX_STATE,
-                pt.TAX_ZIP,
-            ],
-            "required": []
-        },
-        "properties": {
-            "all": [
-                p.PIN,
-                p.RAW_NAME_ADDRESS,
-                p.CLEAN_NAME_ADDRESS,
-                p.CLASS_CODE,
-                p.NUM_UNITS
-            ],
-            "required": [
-                p.PIN,
-                p.RAW_NAME_ADDRESS,
-                p.CLEAN_NAME_ADDRESS,
-                p.CLASS_CODE,
-            ]
-        },
-        "corps": {
-            "all": [
-                c.FILE_NUMBER,
-                c.DATE_INCORPORATED,
-                c.DATE_DISSOLVED,
-                c.STATUS,
-                c.RAW_NAME,
-                c.RAW_PRESIDENT_NAME,
-                c.RAW_PRESIDENT_ADDRESS,
-                c.RAW_PRESIDENT_STREET,
-                c.RAW_PRESIDENT_CITY,
-                c.RAW_PRESIDENT_STATE,
-                c.RAW_PRESIDENT_ZIP,
-                c.RAW_SECRETARY_NAME,
-                c.RAW_SECRETARY_ADDRESS,
-                c.RAW_SECRETARY_STREET,
-                c.RAW_SECRETARY_CITY,
-                c.RAW_SECRETARY_STATE,
-                c.RAW_SECRETARY_ZIP,
-                c.CLEAN_NAME,
-                c.CLEAN_PRESIDENT_NAME,
-                c.CLEAN_PRESIDENT_ADDRESS,
-                c.CLEAN_PRESIDENT_STREET,
-                c.CLEAN_PRESIDENT_CITY,
-                c.CLEAN_PRESIDENT_STATE,
-                c.CLEAN_PRESIDENT_ZIP,
-                c.CLEAN_SECRETARY_NAME,
-                c.CLEAN_SECRETARY_ADDRESS,
-                c.CLEAN_SECRETARY_STREET,
-                c.CLEAN_SECRETARY_CITY,
-                c.CLEAN_SECRETARY_STATE,
-                c.CLEAN_SECRETARY_ZIP,
-            ],
-            "required": [
-                c.FILE_NUMBER,
-                c.STATUS,
-                c.RAW_NAME,
-                c.RAW_PRESIDENT_NAME,
-                c.RAW_PRESIDENT_ADDRESS,
-                c.RAW_SECRETARY_NAME,
-                c.RAW_SECRETARY_ADDRESS,
-                c.CLEAN_NAME,  # rename to clean_name
-                c.CLEAN_PRESIDENT_NAME,  # rename to clean_president_name
-                c.CLEAN_PRESIDENT_ADDRESS,
-                c.CLEAN_SECRETARY_NAME,  # rename to clean_secretary_name
-                c.CLEAN_SECRETARY_ADDRESS,
-
-            ]
-        },
-        "llcs": {
-            "all": [
-                l.FILE_NUMBER,
-                l.DATE_INCORPORATED,
-                l.DATE_DISSOLVED,
-                l.STATUS,
-                l.RAW_NAME,
-                l.RAW_MANAGER_MEMBER_NAME,
-                l.RAW_MANAGER_MEMBER_ADDRESS,
-                l.RAW_MANAGER_MEMBER_STREET,
-                l.RAW_MANAGER_MEMBER_CITY,
-                l.RAW_MANAGER_MEMBER_STATE,
-                l.RAW_MANAGER_MEMBER_ZIP,
-                l.RAW_AGENT_NAME,
-                l.RAW_AGENT_ADDRESS,
-                l.RAW_AGENT_STREET,
-                l.RAW_AGENT_CITY,
-                l.RAW_AGENT_STATE,
-                l.RAW_AGENT_ZIP,
-                l.RAW_OFFICE_ADDRESS,
-                l.RAW_OFFICE_STREET,
-                l.RAW_OFFICE_CITY,
-                l.RAW_OFFICE_STATE,
-                l.RAW_OFFICE_ZIP,
-                l.CLEAN_NAME,
-                l.CLEAN_MANAGER_MEMBER_NAME,
-                l.CLEAN_MANAGER_MEMBER_ADDRESS,
-                l.CLEAN_MANAGER_MEMBER_STREET,
-                l.CLEAN_MANAGER_MEMBER_CITY,
-                l.CLEAN_MANAGER_MEMBER_STATE,
-                l.CLEAN_MANAGER_MEMBER_ZIP,
-                l.CLEAN_AGENT_NAME,
-                l.CLEAN_AGENT_ADDRESS,
-                l.CLEAN_AGENT_STREET,
-                l.CLEAN_AGENT_CITY,
-                l.CLEAN_AGENT_STATE,
-                l.CLEAN_AGENT_ZIP,
-                l.CLEAN_OFFICE_ADDRESS,
-                l.CLEAN_OFFICE_STREET,
-                l.CLEAN_OFFICE_CITY,
-                l.CLEAN_OFFICE_STATE,
-                l.CLEAN_OFFICE_ZIP,
-            ],
-            "required": [
-                l.FILE_NUMBER,
-                l.STATUS,
-                l.RAW_NAME,
-                l.RAW_MANAGER_MEMBER_NAME,
-                l.RAW_MANAGER_MEMBER_ADDRESS,
-                l.RAW_MANAGER_MEMBER_STREET,
-                l.RAW_MANAGER_MEMBER_CITY,
-                l.RAW_MANAGER_MEMBER_ZIP,
-                l.RAW_AGENT_NAME,
-                l.RAW_AGENT_ADDRESS,
-                l.RAW_AGENT_STREET,
-                l.RAW_AGENT_ZIP,
-                l.RAW_OFFICE_ADDRESS,
-                l.RAW_OFFICE_STREET,
-                l.RAW_OFFICE_CITY,
-                l.RAW_OFFICE_ZIP,
-                l.CLEAN_NAME,  # rename to clean_name
-                l.CLEAN_MANAGER_MEMBER_NAME,  # rename to clean_manager_member_name
-                l.CLEAN_MANAGER_MEMBER_ADDRESS,
-                l.CLEAN_MANAGER_MEMBER_STREET,
-                l.CLEAN_MANAGER_MEMBER_CITY,
-                l.CLEAN_MANAGER_MEMBER_ZIP,
-                l.CLEAN_AGENT_NAME,
-                l.CLEAN_AGENT_ADDRESS,
-                l.CLEAN_AGENT_STREET,
-                l.CLEAN_AGENT_ZIP,
-                l.CLEAN_OFFICE_ADDRESS,
-                l.CLEAN_OFFICE_STREET,
-                l.CLEAN_OFFICE_CITY,
-                l.CLEAN_OFFICE_ZIP,
-            ]
-        },
-        "unvalidated_addrs": {
-            "all": [
-                ua.RAW_ADDRESS,
-                ua.RAW_STREET,
-                ua.RAW_CITY,
-                ua.RAW_STATE,
-                ua.RAW_ZIP,
-                ua.CLEAN_ADDRESS,
-                ua.CLEAN_STREET,
-                ua.CLEAN_CITY,
-                ua.CLEAN_STATE,
-                ua.CLEAN_ZIP,
-            ],
-            "required": [
-                ua.RAW_ADDRESS,
-                ua.RAW_STREET,
-                ua.RAW_CITY,
-                ua.RAW_STATE,
-                ua.RAW_ZIP,
-                ua.CLEAN_ADDRESS,
-                ua.CLEAN_STREET,
-                ua.CLEAN_CITY,
-                ua.CLEAN_STATE,
-                ua.CLEAN_ZIP,
-            ]
-        }
-    }
 
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
@@ -664,7 +204,7 @@ class WkflDataClean(WorkflowStandardBase):
         # rename columns to prepare for cleaning
         df.rename(columns=column_manager.clean_rename_map, inplace=True)
 
-        # # create tax_address col if NOT present
+        # create raw_address field
         t.print_with_dots(f"Generating full raw address columns for \"{id}\" (if not already present)")
         df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.raw_address_map)
         t.print_with_dots(f"Full raw address columns for \"{id}\" generated.")
@@ -677,119 +217,125 @@ class WkflDataClean(WorkflowStandardBase):
             )
             t.print_with_dots(f"\"name_address\" field generated for \"{id}\".")
 
-        self.dfs_out[id] = df
         return df
 
-    def execute_basic_cleaning(self, id: str, df: pd.DataFrame) -> pd.DataFrame:
+    def execute_basic_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+
         t.print_with_dots(f"Executing preliminary string cleaning on {id} (all columns)...")
-        cols: list[str] = ops_df.exclude_raw_cols(df)
+        cols: list[str] = column_manager.basic_clean
+
         t.print_with_dots("Converting letters to uppercase...")
         df = clean_df_base.make_upper(df, cols)
+
         t.print_with_dots("Removing symbols and punctuation...")
         df = clean_df_base.remove_symbols_punctuation(df, cols)
+
         t.print_with_dots("Trimming whitespace...")
         df = clean_df_base.trim_whitespace(df, cols)
+
         t.print_with_dots("Removing extra spaces...")
         df = clean_df_base.remove_extra_spaces(df, cols)
-        t.print_with_dots("Converting number words to digits...")
-        df = clean_df_base.words_to_num(df, cols)
+
         t.print_with_dots("Deduplicating repeated words...")
         df = clean_df_base.deduplicate(df, cols)
-        t.print_with_dots("Converting ordinal numbers to digits...")
-        df = clean_df_base.convert_ordinals(df, cols)
+
+        # t.print_with_dots("Converting ordinal numbers to digits...")  # todo: this one breaks the df, returns all null values
+        # df = clean_df_base.convert_ordinals(df, cols)
+
         t.print_with_dots("Replacing number ranges with first number in range...")
         df = clean_df_base.take_first(df, cols)
+
         t.print_with_dots("Combining numbers separated by spaces...")
         df = clean_df_base.combine_numbers(df, cols)
+
         console.print(f"{id} preliminary cleaning complete.")
+
         return df
 
-    def execute_name_column_cleaning(self, id: str, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    def execute_name_column_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+
         console.print(f"Executing string cleaning on {id} (name columns only)...")
+        cols: list[str] = column_manager.name_clean
         df = clean_df_name.switch_the(df, cols)
         console.print(f"{id} name field cleaning complete.")
+
         return df
 
-    def execute_address_column_cleaning(
-        self,
-        id: str,
-        df: pd.DataFrame,
-        street_cols: list[str],
-        zip_cols: list[str]
-    ) -> pd.DataFrame:
+    def execute_address_column_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+
         console.print(f"Executing string cleaning on {id} (address columns only)...")
-        # clean street columns if they exist
-        for col in street_cols:
-            if col not in df.columns:
-                console.print(f"WARNING: column \"{col}\" not found in {id} dataframe.")
-                continue
+
+        for col in column_manager.address_clean["street"]:
+
+            t.print_with_dots("Converting directionals to their abbreviations...")
             df = clean_df_addr.convert_nsew(df, [col])
+
+            t.print_with_dots("Removing secondary designators...")
             df = clean_df_addr.remove_secondary_designators(df, [col])
+
+            t.print_with_dots("Converting street suffixes...")
             df = clean_df_addr.convert_street_suffixes(df, [col])
-        # clean zip code columns if they exist
-        for col in zip_cols:
-            if col not in df.columns:
-                console.print(f"WARNING: column \"{col}\" not found in {id} dataframe.")
-                continue
+
+        for col in column_manager.address_clean["zip"]:
+
+            t.print_with_dots("Fixing zip codes...")
             df = clean_df_addr.fix_zip(df, [col])
+
         console.print(f"{id} address field cleaning complete.")
+
         return df
 
-    def execute_accuracy_implications(self, id: str, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-        if self.configs["accuracy"] == "low":
-            console.print(f"Accuracy set to low. Executing additional string cleaners with accuracy implications on {id}")
-            df = clean_df_acc.remove_secondary_component(df, cols)
-            df = clean_df_acc.convert_mixed(df, cols)
-            df = clean_df_acc.drop_letters(df, cols)
-            console.print(f"{id} additional string cleaning complete.")
-        else:
-            console.print(f"Skipping additional string cleaning.")
-        return df
+    # def execute_accuracy_implications(self, id: str, df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    #     if self.configs["accuracy"] == "low":
+    #         console.print(f"Accuracy set to low. Executing additional string cleaners with accuracy implications on {id}")
+    #         df = clean_df_acc.remove_secondary_component(df, cols)
+    #         df = clean_df_acc.convert_mixed(df, cols)
+    #         df = clean_df_acc.drop_letters(df, cols)
+    #         console.print(f"{id} additional string cleaning complete.")
+    #     else:
+    #         console.print(f"Skipping additional string cleaning.")
+    #     return df
 
-    def execute_post_cleaning(self, id: str, df: pd.DataFrame) -> None:
+    def execute_post_cleaning(self, id: str, df: pd.DataFrame, column_manager, out_column_managers) -> None:
+
         # add clean full address fields
         t.print_with_dots(f"Setting clean full address fields for \"{id}\"...")
-        df: pd.DataFrame = cols_df.set_full_address_fields(df, self.FULL_ADDRESS_COL_MAP[id], "clean")
+        df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.clean_address_map)
         t.print_with_dots(f"Full clean address fields for \"{id}\" generated.")
-        # props_taxpayers-specific logic - split into
+
+        # props_taxpayers-specific logic
         if id == "props_taxpayers":
-            t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
-            df_props, df_taxpayers = subset_df.split_props_taxpayers(
-                df,
-                self.DF_OUT_COL_MAP["properties"]["all"],
-                self.DF_OUT_COL_MAP["taxpayer_records"]["all"]
+
+            # generate clean name + address concat field
+            t.print_with_dots(f"Concatenating clean name and address fields for {id}...")
+            df: pd.DataFrame = cols_df.set_name_address_concat(
+                df, column_manager.name_address_concat_map["clean"]
             )
+            t.print_with_dots(f"\"name_address\" field generated for \"{id}\".")
+
+            # split dataframe into properties and taxpayer_records
+            t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
+            col_manager_p = out_column_managers["properties"]
+            col_manager_t = out_column_managers["taxpayer_records"]
+            df_props, df_taxpayers = subset_df.split_props_taxpayers(df, col_manager_p.out, col_manager_t.out)
             self.dfs_out["properties"] = df_props
             self.dfs_out["taxpayer_records"] = df_taxpayers
             t.print_with_dots(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\".")
+
         else:
-            if id == "corps":
-                df.rename(columns={
-                    c.NAME: c.CLEAN_NAME,
-                    c.PRESIDENT_NAME: c.CLEAN_PRESIDENT_NAME,
-                    c.SECRETARY_NAME: c.CLEAN_SECRETARY_NAME,
-                }, inplace=True)
-            if id == "llcs":
-                df.rename(columns={
-                    l.NAME: l.CLEAN_NAME,
-                    l.MANAGER_MEMBER_NAME: l.CLEAN_MANAGER_MEMBER_NAME,
-                    l.AGENT_NAME: l.CLEAN_AGENT_NAME,
-                    l.MANAGER_MEMBER_STREET: l.CLEAN_MANAGER_MEMBER_STREET,
-                    l.MANAGER_MEMBER_CITY: l.CLEAN_MANAGER_MEMBER_CITY,
-                    l.MANAGER_MEMBER_ZIP: l.CLEAN_MANAGER_MEMBER_ZIP,
-                    l.AGENT_STREET: l.CLEAN_AGENT_STREET,
-                    l.AGENT_ZIP: l.CLEAN_AGENT_ZIP,
-                    l.OFFICE_STREET: l.CLEAN_OFFICE_STREET,
-                    l.OFFICE_CITY: l.CLEAN_OFFICE_CITY,
-                    l.OFFICE_ZIP: l.CLEAN_OFFICE_ZIP,
-                }, inplace=True)
+
             t.print_with_dots(f"Setting final dataframe for \"{id}\"...")
-            self.dfs_out[id] = df[self.DF_OUT_COL_MAP[id]["required"]]
+            self.dfs_out[id] = df[column_manager.out]
             t.print_with_dots(f"Final dataframe for \"{id}\" set.")
 
-    def execute_unvalidated_generator(self) -> None:
+    def execute_unvalidated_generator(self, column_managers, out_column_managers) -> None:
         t.print_with_dots(f"Generating \"unvalidated_addrs\"...")
-        self.dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(self.dfs_out, self.UNVALIDATED_COL_MAP)
+        col_map = {
+            "taxpayer_records": out_column_managers["taxpayer_records"].unvalidated_addr_cols,
+            "corps": column_managers["corps"].unvalidated_col_objs,
+            "llcs": column_managers["llcs"].unvalidated_col_objs,
+        }
+        self.dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(self.dfs_out, col_map)
         t.print_with_dots("\"unvalidated_addrs\" successfully generated.\"")
 
     # --------------
@@ -797,14 +343,10 @@ class WkflDataClean(WorkflowStandardBase):
     # --------------
     def load(self):
         load_map: dict[str, Path] = {  # todo: change these back
-            # "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
-            # "corps": path_gen.processed_corps(self.configs),
-            # "llcs": path_gen.processed_llcs(self.configs),
-            # "class_codes": path_gen.processed_class_codes(self.configs)
             "props_taxpayers": path_gen.raw_props_taxpayers(self.configs),
             "corps": path_gen.raw_corps(self.configs),
             "llcs": path_gen.raw_llcs(self.configs),
-            # "class_codes": path_gen.raw_class_codes(self.configs)
+            "class_codes": path_gen.raw_class_codes(self.configs)
         }
         self.load_dfs(load_map)
 
@@ -822,6 +364,11 @@ class WkflDataClean(WorkflowStandardBase):
             "props_taxpayers": ColumnPropsTaxpayers(),
             "corps": ColumnCorps(),
             "llcs": ColumnLLCs(),
+            "class_codes": ColumnClassCodes()
+        }
+        out_column_manager = {
+            "properties": ColumnProperties(),
+            "taxpayer_records": ColumnTaxpayerRecords(),
         }
 
         for id, df_in in self.dfs_in.items():
@@ -830,26 +377,24 @@ class WkflDataClean(WorkflowStandardBase):
 
             # specific logic for class_codes
             if id == "class_codes":
-                df: pd.DataFrame = self.execute_basic_cleaning(id, df)
+                df: pd.DataFrame = self.execute_basic_cleaning(id, df, column_manager[id])
                 self.dfs_out[id] = df
                 continue
 
             # PRE-CLEANING OPERATIONS
             df: pd.DataFrame = self.execute_pre_cleaning(id, df, column_manager[id])
-            # # MAIN CLEANING OPERATIONS
-            # df: pd.DataFrame = self.execute_basic_cleaning(id, df)
-            # df: pd.DataFrame = self.execute_name_column_cleaning(id, df, self.CLEANING_COL_MAP["name"][id])
-            # df: pd.DataFrame = self.execute_address_column_cleaning(
-            #     id,
-            #     df,
-            #     self.CLEANING_COL_MAP["address"][id]["street"],
-            #     self.CLEANING_COL_MAP["address"][id]["zip"],
-            # )
-            # # df_pt: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df_pt)
-            # # POST-CLEANING OPERATIONS
-            # self.execute_post_cleaning(id, df)
 
-        # self.execute_unvalidated_generator()
+            # # MAIN CLEANING OPERATIONS
+            df: pd.DataFrame = self.execute_basic_cleaning(id, df, column_manager[id])
+            df: pd.DataFrame = self.execute_name_column_cleaning(id, df, column_manager[id])
+            df: pd.DataFrame = self.execute_address_column_cleaning(id, df, column_manager[id])
+            # df: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df)
+
+            # POST-CLEANING OPERATIONS
+            self.execute_post_cleaning(id, df, column_manager[id], out_column_manager)
+
+        # GENERATE UNVALIDATED ADDRESS DATASET
+        self.execute_unvalidated_generator(column_manager, out_column_manager)
 
     # -------------------------------
     # ----SUMMARY STATS GENERATOR----
@@ -862,13 +407,12 @@ class WkflDataClean(WorkflowStandardBase):
     # -------------
     def save(self) -> None:
         save_map: dict[str, Path] = {
-            # "properties": path_gen.processed_properties(self.configs),
-            # "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
+            "properties": path_gen.processed_properties(self.configs),
+            "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
             "corps": path_gen.processed_corps(self.configs),
             "llcs": path_gen.processed_llcs(self.configs),
-            # "class_codes": path_gen.processed_class_codes(self.configs),
-            # "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
-            "props_taxpayers": path_gen.processed_taxpayer_records(self.configs),
+            "class_codes": path_gen.processed_class_codes(self.configs),
+            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
         }
         self.save_dfs(save_map)
 
