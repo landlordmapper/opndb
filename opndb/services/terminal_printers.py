@@ -1,24 +1,39 @@
 import os
 from pathlib import Path
 import click
-from rich.console import Console
-from rich.panel import Panel
 from rich.prompt import IntPrompt
-from rich.table import Table
-from rich.text import Text
 import shutil
-from rich.progress import track
-from time import sleep
-from rich.tree import Tree
-from rich.style import Style
-
 from opndb.constants.base import DATA_ROOT
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.tree import Tree
+from rich.syntax import Syntax
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
+from rich.live import Live
+from rich.prompt import Prompt, Confirm
+from rich import box
+from rich.rule import Rule
+from rich.style import Style
+from rich.text import Text
+from rich.align import Align
+from rich.padding import Padding
+from rich.console import Group
+from rich.traceback import install
+from datetime import datetime
+from time import sleep
+import random
+
+# Install rich traceback handler
+install()
 
 
 console = Console()
 
 class TerminalBase:
     """Messages & statements printed during stage 1 of the opndb workflow"""
+
+    # todo: make color scheme of terminal printers like the pycharm color scheme
 
     @classmethod
     def print_with_dots(cls, message: str, console: Console = Console(), style: Style = None) -> None:
@@ -90,41 +105,285 @@ class TerminalBase:
                     current = current.add(f"[green]{part}[/]")
         console.print(tree)
 
-
     @classmethod
     def print_test(cls):
         """
         Demonstrate various ways to print styled output using Click and Rich.
         """
-        # Basic Click output
+        # Original functionality
         click.echo("Basic Click message")
         click.secho("Colored Click message", fg='green')
         click.secho("Bold Click message", bold=True)
-
-        # Click with different colors and styles
         click.secho("Error message", fg='red', bold=True)
         click.secho("Warning message", fg='yellow')
         click.secho("Success message", fg='green', bg='black')
 
-        # Rich printing
+        # Horizontal rule with title
+        console.print(Rule(title="Rich Formatting Showcase", style="bold magenta"))
+
+        console.print("\n=== Rich Basic Formatting ===")
         console.print("Basic Rich message")
         console.print("Styled Rich message", style="bold blue")
         console.print("[red]Colored[/red] [green]Rich[/green] [blue]message[/blue]")
 
-        # Rich panels
-        console.print(Panel("Important information in a panel"))
-        console.print(Panel("Error message in a panel", style="red"))
+        # Interactive prompts
+        console.print("\n=== Rich Interactive Prompts ===")
+        name = Prompt.ask("Enter your name", default="User")
+        console.print(f"Hello, [bold]{name}[/bold]!")
+        if Confirm.ask("Would you like to see more examples?"):
+            console.print("[green]Continuing with more examples...[/green]")
 
-        # Rich progress bar
-        for _ in track(range(5), description="Processing..."):
-            sleep(0.2)  # Simulate work
+        # Tables with different box styles
+        console.print("\n=== Rich Tables ===")
+        # Simple table
+        table = Table(title="Sample Data", box=box.DOUBLE_EDGE)
+        table.add_column("ID", style="cyan")
+        table.add_column("Name", style="magenta")
+        table.add_column("Status", style="green")
+        table.add_row("1", "Task One", "Complete")
+        table.add_row("2", "Task Two", "Pending")
+        console.print(table)
 
-        # Rich tables and other formatting
-        console.print("\n[bold]Status Summary:[/bold]")
-        console.print("✅ Task 1 completed", style="green")
-        console.print("⚠️  Task 2 pending", style="yellow")
-        console.print("❌ Task 3 failed", style="red")
+        # Advanced table with multiple styles
+        console.print("\n=== Advanced Table Formatting ===")
+        advanced_table = Table(
+            title="Project Status",
+            caption="Updated status as of " + datetime.now().strftime("%Y-%m-%d"),
+            caption_style="dim",
+            box=box.ROUNDED,
+            header_style="bold magenta",
+            border_style="blue",
+            row_styles=["none", "dim"]
+        )
+        advanced_table.add_column("Module", justify="left")
+        advanced_table.add_column("Progress", justify="center")
+        advanced_table.add_column("Status", justify="right")
 
+        advanced_table.add_row("Core", "[green]100%[/green]", "✅")
+        advanced_table.add_row("API", "[yellow]60%[/yellow]", "🏗️")
+        advanced_table.add_row("Tests", "[red]25%[/red]", "⏳")
+        console.print(advanced_table)
+
+        # Tree structure with expanded features
+        console.print("\n=== Enhanced Tree Structure ===")
+        tree = Tree("📁 [bold]Project Root[/bold]", guide_style="bold bright_blue")
+        src = tree.add("📁 [bold]src[/bold]", guide_style="bright_blue")
+        src.add("📄 [green]main.py[/green]").add("[dim]# Main application entry[/dim]")
+        utils = src.add("📁 [bold]utils[/bold]")
+        utils.add("📄 [green]helpers.py[/green]").add("[dim]# Utility functions[/dim]")
+        utils.add("📄 [green]config.py[/green]").add("[dim]# Configuration[/dim]")
+        tests = tree.add("📁 [bold]tests[/bold]", guide_style="bright_blue")
+        tests.add("📄 [yellow]test_main.py[/yellow]")
+        tests.add("📄 [yellow]test_utils.py[/yellow]")
+        console.print(tree)
+
+        # Live updating display
+        console.print("\n=== Live Updating Display ===")
+        with Live(auto_refresh=False) as live:
+            for i in range(5):
+                data = [random.randint(0, 100) for _ in range(3)]
+                table = Table()
+                table.add_column("Metric")
+                table.add_column("Value")
+                table.add_row("CPU", f"{data[0]}%")
+                table.add_row("Memory", f"{data[1]}%")
+                table.add_row("Disk", f"{data[2]}%")
+                live.update(table)
+                live.refresh()
+                sleep(0.5)
+
+        # Enhanced progress bars
+        console.print("\n=== Enhanced Progress Indicators ===")
+        with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeRemainingColumn(),
+        ) as progress:
+            task1 = progress.add_task("[red]Downloading...", total=100)
+            task2 = progress.add_task("[green]Processing...", total=100)
+            task3 = progress.add_task("[blue]Uploading...", total=100)
+
+            while not progress.finished:
+                progress.update(task1, advance=0.9)
+                progress.update(task2, advance=0.6)
+                progress.update(task3, advance=0.3)
+                sleep(0.02)
+
+        # Grouped content with padding and alignment
+        console.print("\n=== Grouped Content with Styling ===")
+        group = Group(
+            Rule(style="red"),
+            Align.center(Text("Centered Title", style="bold yellow")),
+            Padding(
+                Panel(
+                    "This content has padding and is within a panel",
+                    style="blue"
+                ),
+                (2, 4)
+            ),
+            Rule(style="red")
+        )
+        console.print(group)
+
+        # Code syntax highlighting with different themes
+        console.print("\n=== Enhanced Syntax Highlighting ===")
+        code = '''
+    def example_function(name: str) -> str:
+        """Docstring with syntax highlighting."""
+        if name.strip():
+            return f"Hello, {name}!"
+        raise ValueError("Name cannot be empty!")
+        '''
+        console.print(Panel(
+            Syntax(code, "python", theme="monokai", line_numbers=True),
+            title="[bold]Python Code Example[/bold]",
+            border_style="green"
+        ))
+
+        # Status summary with enhanced styling
+        console.print("\n=== Enhanced Status Summary ===")
+        status_panel = Panel(
+            Group(
+                Text("System Status", style="bold blue underline"),
+                Text(""),
+                Text("✅ Database Connection", style="green"),
+                Text("⚠️  API Response Time", style="yellow"),
+                Text("❌ Background Jobs", style="red"),
+                Text(""),
+                Text("Last Updated: " + datetime.now().strftime("%H:%M:%S"), style="dim")
+            ),
+            title="Status Dashboard",
+            border_style="blue"
+        )
+        console.print(status_panel)
+
+        # Demonstration of error handling with rich traceback
+        console.print("\n=== Rich Error Handling ===")
+        try:
+            raise Exception("This is a demonstration of Rich's error handling!")
+        except Exception as e:
+            console.print_exception()
+
+    # @classmethod
+    # def print_test(cls):
+    #     """
+    #     Demonstrate various ways to print styled output using Click and Rich.
+    #     """
+    #     # Original functionality
+    #     click.echo("Basic Click message")
+    #     click.secho("Colored Click message", fg='green')
+    #     click.secho("Bold Click message", bold=True)
+    #     click.secho("Error message", fg='red', bold=True)
+    #     click.secho("Warning message", fg='yellow')
+    #     click.secho("Success message", fg='green', bg='black')
+    #
+    #     console.print("\n=== Rich Basic Formatting ===")
+    #     console.print("Basic Rich message")
+    #     console.print("Styled Rich message", style="bold blue")
+    #     console.print("[red]Colored[/red] [green]Rich[/green] [blue]message[/blue]")
+    #
+    #     # Tables with different box styles
+    #     console.print("\n=== Rich Tables ===")
+    #     table = Table(title="Sample Data", box=box.DOUBLE_EDGE)
+    #     table.add_column("ID", style="cyan")
+    #     table.add_column("Name", style="magenta")
+    #     table.add_column("Status", style="green")
+    #     table.add_row("1", "Task One", "Complete")
+    #     table.add_row("2", "Task Two", "Pending")
+    #     console.print(table)
+    #
+    #     # Tree structure
+    #     console.print("\n=== Rich Tree Structure ===")
+    #     tree = Tree("📁 Project Root")
+    #     src = tree.add("📁 src")
+    #     src.add("📄 main.py")
+    #     src.add("📄 utils.py")
+    #     tests = tree.add("📁 tests")
+    #     tests.add("📄 test_main.py")
+    #     console.print(tree)
+    #
+    #     # Code syntax highlighting
+    #     console.print("\n=== Rich Syntax Highlighting ===")
+    #     code = '''
+    # def hello_world():
+    #     print("Hello, World!")
+    #     return True
+    #     '''
+    #     syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
+    #     console.print(syntax)
+    #
+    #     # Rich native styling (more reliable than markdown)
+    #     console.print("\n=== Rich Native Styling ===")
+    #
+    #     styled_content = [
+    #         "[bold blue]Project Status Report[/bold blue]",
+    #         "",
+    #         "[bold cyan]Overview[/bold cyan]",
+    #         "This is a demonstration of Rich's native styling capabilities.",
+    #         "",
+    #         "[bold cyan]Features[/bold cyan]",
+    #         "✨ [bold]Rich[/bold] formatting support",
+    #         "📊 Tables and charts",
+    #         "🎨 Syntax highlighting",
+    #         "",
+    #         "[bold cyan]Code Example[/bold cyan]"
+    #     ]
+    #
+    #     # Create a syntax highlighted code block
+    #     code = '''def hello():
+    #     return "Hello World!"'''
+    #     syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
+    #
+    #     # Print everything in a panel
+    #     console.print(Panel(
+    #         "\n".join(styled_content) + "\n\n" + str(syntax) + "\n\n" +
+    #         "[dim]For more information, visit the Rich documentation[/dim]\n" +
+    #         "[yellow]Note:[/yellow] Rich styling works consistently across terminals",
+    #         title="Styled Output Demo",
+    #         border_style="blue"
+    #     ))
+    #
+    #     # Columns layout
+    #     console.print("\n=== Rich Columns ===")
+    #     columns = Columns([
+    #         Panel("Column 1", style="red"),
+    #         Panel("Column 2", style="green"),
+    #         Panel("Column 3", style="blue")
+    #     ])
+    #     console.print(columns)
+    #
+    #     # Advanced progress bars and spinners
+    #     console.print("\n=== Rich Progress Indicators ===")
+    #     with Progress(
+    #             SpinnerColumn(),
+    #             TextColumn("[progress.description]{task.description}"),
+    #             transient=True
+    #     ) as progress:
+    #         progress.add_task("Processing...", total=None)
+    #         sleep(2)
+    #
+    #     # Layout system
+    #     console.print("\n=== Rich Layout System ===")
+    #     layout = Layout()
+    #     layout.split(
+    #         Layout(Panel("Header", style="bold blue"), size=3),
+    #         Layout(Panel("Main Content", style="green")),
+    #         Layout(Panel("Footer", style="bold blue"), size=3)
+    #     )
+    #     console.print(layout)
+    #
+    #     # Standard progress bar (from original)
+    #     console.print("\n=== Standard Progress Bar ===")
+    #     for _ in track(range(5), description="Processing..."):
+    #         sleep(0.2)
+    #
+    #     # Status summary (from original)
+    #     console.print("\n[bold]Status Summary:[/bold]")
+    #     console.print("✅ Task 1 completed", style="green")
+    #     console.print("⚠️  Task 2 pending", style="yellow")
+    #     console.print("❌ Task 3 failed", style="red")
 
     @classmethod
     def print_welcome(cls):

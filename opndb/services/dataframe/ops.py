@@ -289,10 +289,12 @@ class DataFrameSubsetters(DataFrameOpsBase):
                 continue
             elif id == "taxpayer_records":
                 df = df[col_map[id]]
+                df["type"] = id
                 dfs_to_concat.append(df)
             else:
                 for addr_cols in col_map[id]:  # col_map[id]: list[dict[str, str]]
                     df_addr = df[addr_cols.keys()].copy()
+                    df["type"] = id
                     df_addr.rename(columns=addr_cols, inplace=True)
                     dfs_to_concat.append(df_addr)
         df_out: pd.DataFrame = pd.concat(dfs_to_concat, ignore_index=True)

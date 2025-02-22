@@ -1,17 +1,15 @@
 class SummaryStats(object):
     # todo: create excel file with tabs for different workflow stages and save summary stats in each tab
+
     @classmethod
-    def summary_stats_data_load(cls):
+    def summary_stats_data_clean(cls):
         # unique property count
         # properties with missing names/addresses counts
         # unique corp count
         # corps with missing names/addresses counts
         # unique LLC count
         # LLCs with missing names/addresses counts
-        pass
-
-    @classmethod
-    def summary_stats_data_clean(cls):
+        # number of unique raw AND addresses in property, corp and llc datasets
         pass
 
     @classmethod

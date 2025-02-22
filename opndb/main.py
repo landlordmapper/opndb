@@ -56,31 +56,32 @@ def init(config_manager: ConfigManager, data_root: Path):
 @cli.command()
 @click.pass_obj
 def start(config_manager: ConfigManager):
-    t.print_welcome()
-    if not t.press_enter_to_continue("continue "):
-        console.print("Exiting program...", style="yellow")
-        return
-    t.print_with_dots("Searching for project settings...")
-    if config_manager.exists:
-        t.print_with_dots("Configs file located. Loading...")
-        config_manager.load()
-        t.print_with_dots("Configs successfully loaded.")
-    else:
-        t.print_with_dots("No configs file was found. Run `opndb init /path/to/your/root/data/dir`")
-        return
-    t.print_with_dots("Launching workflows...")
-    console.print("\n")
-    while True:
-        wkfl = WorkflowBase.create_workflow(config_manager.configs)
-        wkfl.load()
-        # if not t.press_enter_to_continue("execute string cleaning workflow "):
-        #     t.print_with_dots("Exiting program...", style="yellow")
-        #     return
-        wkfl.process()
-        wkfl.save()
-        break
-        # print out summary stats of data found in raw datasets
-        # press enter to begin cleaning
+    t.print_test()
+    # t.print_welcome()
+    # if not t.press_enter_to_continue("continue "):
+    #     console.print("Exiting program...", style="yellow")
+    #     return
+    # t.print_with_dots("Searching for project settings...")
+    # if config_manager.exists:
+    #     t.print_with_dots("Configs file located. Loading...")
+    #     config_manager.load()
+    #     t.print_with_dots("Configs successfully loaded.")
+    # else:
+    #     t.print_with_dots("No configs file was found. Run `opndb init /path/to/your/root/data/dir`")
+    #     return
+    # t.print_with_dots("Launching workflows...")
+    # console.print("\n")
+    # while True:
+    #     wkfl = WorkflowBase.create_workflow(config_manager.configs)
+    #     wkfl.load()
+    #     # if not t.press_enter_to_continue("execute string cleaning workflow "):
+    #     #     t.print_with_dots("Exiting program...", style="yellow")
+    #     #     return
+    #     wkfl.process()
+    #     wkfl.save()
+    #     break
+    #     # print out summary stats of data found in raw datasets
+    #     # press enter to begin cleaning
 
 if __name__ == "__main__":
     cli()
