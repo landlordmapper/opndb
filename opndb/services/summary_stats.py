@@ -1,11 +1,21 @@
+import pandas as pd
+
 class SummaryStats(object):
     # todo: create excel file with tabs for different workflow stages and save summary stats in each tab
 
     @classmethod
-    def summary_stats_data_clean(cls):
+    def summary_stats_data_clean(cls, dfs_out: dict[str, pd.DataFrame]):
+        df_props = dfs_out["properties"]
+        df_tr = dfs_out["taxpayer_records"]
+        df_corp = dfs_out["corps"]
+        df_llc = dfs_out["llc"]
         # unique property count
+        unique_props: int = len(df_props.unique(subset=["pin"]))
         # properties with missing names/addresses counts
+        missing_names_props: int = len(df_props.isnull(subset=["raw_name"]))
+        missing_addresses_props: int = len(df_props.isnull(subset=["raw_address"]))
         # unique corp count
+        unique_corps: int = len(df_corp.unique(subset=["raw_name"]))
         # corps with missing names/addresses counts
         # unique LLC count
         # LLCs with missing names/addresses counts

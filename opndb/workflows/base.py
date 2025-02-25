@@ -74,7 +74,7 @@ class WorkflowBase(ABC):
     def load_dfs(self, load_map: dict[str, Path]) -> None:
         for id, path in load_map.items():
             self.dfs_in[id] = ops_df.load_df(path, str)  # todo: change back to dfs_in
-            t.print_with_dots(f"\"{id}\" successfully loaded from: \n{path}")
+            console.print(f"\"{id}\" successfully loaded from: \n{path}")
         # prep data for summary table printing
         table_data = []
         for id, df in self.dfs_in.items():  # todo: standardize this, enforce types
@@ -91,7 +91,7 @@ class WorkflowBase(ABC):
         """Saves dataframes to their specified paths."""
         for id, path in save_map.items():
             ops_df.save_df(self.dfs_out[id], path)
-            t.print_with_dots(f"\"{id}\" successfully saved to: \n{path}")
+            console.print(f"\"{id}\" successfully saved to: \n{path}")
 
     @classmethod
     def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
@@ -190,90 +190,97 @@ class WkflDataClean(WorkflowStandardBase):
             - 'ROOT/processed/unvalidated_addrs[FileExt]'
     """
 
+    WKFL_NAME: str = "INITIAL DATA CLEANING WORKFLOW"
+    WKFL_DESC: str = "Runs basic string cleaners on raw inputted datasets."
+
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
         self.dfs_out: dict[str, pd.DataFrame] = {}
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def execute_pre_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+
+        t.print_equals("Executing pre-cleaning operations")
 
         # generate raw_prefixed columns
         t.print_with_dots(f"Setting raw columns for \"{id}\"...")
         df: pd.DataFrame = cols_df.set_raw_columns(df, column_manager.raw)
-        t.print_with_dots(f"Raw columns for \"{id}\" generated.")
+        console.print(f"Raw columns generated ✅")
 
         # rename columns to prepare for cleaning
         df.rename(columns=column_manager.clean_rename_map, inplace=True)
 
         # create raw_address field
-        t.print_with_dots(f"Generating full raw address columns for \"{id}\" (if not already present)")
+        t.print_with_dots(f"Generating full raw address columns (if not already present)")
         df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.raw_address_map)
-        t.print_with_dots(f"Full raw address columns for \"{id}\" generated.")
+        console.print(f"Full raw address columns generated ✅")
 
         # props_taxpayers-specific logic - concatenate raw name + raw address
         if id == "props_taxpayers":
-            t.print_with_dots(f"Concatenating raw name and address fields for {id}...")
+            t.print_with_dots(f"Concatenating raw name and address fields")
             df: pd.DataFrame = cols_df.set_name_address_concat(
                 df, column_manager.name_address_concat_map["raw"]
             )
-            t.print_with_dots(f"\"name_address\" field generated for \"{id}\".")
+            console.print(f"\"name_address\" field generated ✅")
 
         return df
 
     def execute_basic_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
 
-        t.print_with_dots(f"Executing preliminary string cleaning on {id} (all columns)...")
+        t.print_equals(f"Executing basic operations (all data columns)")
+
         cols: list[str] = column_manager.basic_clean
 
-        t.print_with_dots("Converting letters to uppercase...")
+        t.print_with_dots("Converting letters to uppercase")
         df = clean_df_base.make_upper(df, cols)
 
-        t.print_with_dots("Removing symbols and punctuation...")
+        t.print_with_dots("Removing symbols and punctuation")
         df = clean_df_base.remove_symbols_punctuation(df, cols)
 
-        t.print_with_dots("Trimming whitespace...")
+        t.print_with_dots("Trimming whitespace")
         df = clean_df_base.trim_whitespace(df, cols)
 
-        t.print_with_dots("Removing extra spaces...")
+        t.print_with_dots("Removing extra spaces")
         df = clean_df_base.remove_extra_spaces(df, cols)
 
-        t.print_with_dots("Deduplicating repeated words...")
+        t.print_with_dots("Deduplicating repeated words")
         df = clean_df_base.deduplicate(df, cols)
 
         # t.print_with_dots("Converting ordinal numbers to digits...")  # todo: this one breaks the df, returns all null values
         # df = clean_df_base.convert_ordinals(df, cols)
 
-        t.print_with_dots("Replacing number ranges with first number in range...")
+        t.print_with_dots("Replacing number ranges with first number in range")
         df = clean_df_base.take_first(df, cols)
 
-        t.print_with_dots("Combining numbers separated by spaces...")
+        t.print_with_dots("Combining numbers separated by spaces")
         df = clean_df_base.combine_numbers(df, cols)
 
-        console.print(f"{id} preliminary cleaning complete.")
+        console.print("Preliminary cleaning complete ✅")
 
         return df
 
     def execute_name_column_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
 
-        console.print(f"Executing string cleaning on {id} (name columns only)...")
+        t.print_equals(f"Executing cleaning operations (name columns only)")
         cols: list[str] = column_manager.name_clean
         df = clean_df_name.switch_the(df, cols)
-        console.print(f"{id} name field cleaning complete.")
+        console.print(f"Name field cleaning complete ✅")
 
         return df
 
     def execute_address_column_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
 
-        console.print(f"Executing string cleaning on {id} (address columns only)...")
+        t.print_equals(f"Executing cleaning operations (address columns only)")
 
         for col in column_manager.address_clean["street"]:
 
-            t.print_with_dots("Converting directionals to their abbreviations...")
+            t.print_with_dots("Converting directionals to their abbreviations")
             df = clean_df_addr.convert_nsew(df, [col])
 
-            t.print_with_dots("Removing secondary designators...")
+            t.print_with_dots("Removing secondary designators")
             df = clean_df_addr.remove_secondary_designators(df, [col])
 
-            t.print_with_dots("Converting street suffixes...")
+            t.print_with_dots("Converting street suffixes")
             df = clean_df_addr.convert_street_suffixes(df, [col])
 
         for col in column_manager.address_clean["zip"]:
@@ -281,7 +288,7 @@ class WkflDataClean(WorkflowStandardBase):
             t.print_with_dots("Fixing zip codes...")
             df = clean_df_addr.fix_zip(df, [col])
 
-        console.print(f"{id} address field cleaning complete.")
+        console.print("Address field cleaning complete ✅")
 
         return df
 
@@ -298,20 +305,22 @@ class WkflDataClean(WorkflowStandardBase):
 
     def execute_post_cleaning(self, id: str, df: pd.DataFrame, column_manager, out_column_managers) -> None:
 
+        t.print_equals(f"Executing post-cleaning operations")
+
         # add clean full address fields
-        t.print_with_dots(f"Setting clean full address fields for \"{id}\"...")
+        t.print_with_dots("Setting clean full address fields")
         df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.clean_address_map)
-        t.print_with_dots(f"Full clean address fields for \"{id}\" generated.")
+        t.print_with_dots("Full clean address fields generated ✅")
 
         # props_taxpayers-specific logic
         if id == "props_taxpayers":
 
             # generate clean name + address concat field
-            t.print_with_dots(f"Concatenating clean name and address fields for {id}...")
+            t.print_with_dots(f"Concatenating clean name and address fields")
             df: pd.DataFrame = cols_df.set_name_address_concat(
                 df, column_manager.name_address_concat_map["clean"]
             )
-            t.print_with_dots(f"\"name_address\" field generated for \"{id}\".")
+            console.print(f"\"name_address\" field generated ✅")
 
             # split dataframe into properties and taxpayer_records
             t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
@@ -320,13 +329,13 @@ class WkflDataClean(WorkflowStandardBase):
             df_props, df_taxpayers = subset_df.split_props_taxpayers(df, col_manager_p.out, col_manager_t.out)
             self.dfs_out["properties"] = df_props
             self.dfs_out["taxpayer_records"] = df_taxpayers
-            t.print_with_dots(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\".")
+            console.print(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\" ✅")
 
         else:
 
-            t.print_with_dots(f"Setting final dataframe for \"{id}\"...")
+            t.print_with_dots("Setting final dataframe")
             self.dfs_out[id] = df[column_manager.out]
-            t.print_with_dots(f"Final dataframe for \"{id}\" set.")
+            console.print(f"Final dataframe set.")
 
     def execute_unvalidated_generator(self, column_managers, out_column_managers) -> None:
         t.print_with_dots(f"Generating \"unvalidated_addrs\"...")
@@ -336,7 +345,7 @@ class WkflDataClean(WorkflowStandardBase):
             "llcs": column_managers["llcs"].unvalidated_col_objs,
         }
         self.dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(self.dfs_out, col_map)
-        t.print_with_dots("\"unvalidated_addrs\" successfully generated.\"")
+        console.print("\"unvalidated_addrs\" successfully generated ✅")
 
     # --------------
     # ----LOADER----
@@ -372,7 +381,7 @@ class WkflDataClean(WorkflowStandardBase):
         }
 
         for id, df_in in self.dfs_in.items():
-
+            t.print_dataset_name(id)
             df: pd.DataFrame = df_in.copy()  # make copy to preserve the loaded dataframes
 
             # specific logic for class_codes

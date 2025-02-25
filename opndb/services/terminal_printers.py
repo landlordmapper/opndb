@@ -36,6 +36,41 @@ class TerminalBase:
     # todo: make color scheme of terminal printers like the pycharm color scheme
 
     @classmethod
+    def print_dataset_name(cls, dataset: str):
+        console.print("\n")
+        console.print(Rule(
+            title=f"PROCESSING DATAFRAME: {dataset}",
+            style="red"
+        ))
+
+    @classmethod
+    def print_equals(cls, text: str):
+        console.print("\n")
+        console.print(f"\n==== {text} ====")
+        console.print("\n")
+
+    @classmethod
+    def print_workflow_name(cls, wkfl_name: str, wkfl_desc: str):
+        group = Group(
+            Rule(style="green"),
+            Rule(style="bold yellow"),
+            Rule(title=wkfl_name, style="red"),
+            Rule(style="bold yellow"),
+            Rule(style="green")
+        )
+        # Create the panel with padding and print it
+        panel = Padding(
+            Panel(
+                wkfl_desc,
+                style="cyan"
+            ),
+            (2, 4)
+        )
+        console.print(group)
+        console.print(panel)  # Print the panel
+        console.print("\n")
+
+    @classmethod
     def print_with_dots(cls, message: str, console: Console = Console(), style: Style = None) -> None:
         """
         Print a message and fill the remaining space to the end of the line with dots.
@@ -52,18 +87,14 @@ class TerminalBase:
         # Account for the message length and leave space for one character at the end
         dots_needed = width - len(message) - 1
 
+        text = Text()
+        text.append(message, style="white")
+
         # Create the full line with dots
         if dots_needed > 0:
-            full_line = message + "." * dots_needed
-        else:
-            # If message is too long, truncate it
-            full_line = message[:width - 4] + "..."
+            text.append("." * dots_needed, style="cyan")
 
-        # Print with optional style
-        if style:
-            console.print(full_line, style=style)
-        else:
-            console.print(full_line)
+        console.print(text)
 
     @classmethod
     def press_enter_to_continue(cls, specify_text: str = "") -> bool:
@@ -94,7 +125,7 @@ class TerminalBase:
     @classmethod
     # After generating directories:
     def print_data_root_tree(cls, root):
-        tree = Tree(f"[bold blue]{root}[/]")
+        tree = Tree(f"📁 [bold blue]{root}[/]")
         for dir_path in sorted(root.glob("**/")):  # Recursively get all directories
             if dir_path != root:  # Skip root itself
                 # Calculate relative path for proper tree structure
@@ -102,7 +133,7 @@ class TerminalBase:
                 # Add to tree with proper nesting
                 current = tree
                 for part in relative.parts:
-                    current = current.add(f"[green]{part}[/]")
+                    current = current.add(f"📁 [green]{part}[/]")
         console.print(tree)
 
     @classmethod
@@ -459,14 +490,16 @@ class TerminalBase:
     def display_table(cls, table_data):
         # todo: format large numbers to have commas
         table = Table(title="Dataframes Loaded")
-        table.add_column("Dataset Name", justify="right", style="cyan")
+        table.add_column("Dataset Name", justify="right", style="bold yellow")
         table.add_column("File Size", justify="right", style="green")
-        table.add_column("Number of Rows", justify="right", style="blue")
+        table.add_column("Number of Rows", justify="right", style="cyan")
         for td_obj in table_data:
+            row_count = int(td_obj["record_count"])
+            formatted_count = f"{row_count:,}"
             table.add_row(
                 str(td_obj["dataset_name"]),
                 str(td_obj["file_size"]),
-                str(td_obj["record_count"]),
+                formatted_count,
             )
         console.print("\n" * 2)
         console.print(table)
