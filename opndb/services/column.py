@@ -1,6 +1,7 @@
-class ColumnManagerBase:
-    def __init__(self):
-        pass
+from pydantic import BaseModel
+
+class ColumnManagerBase(BaseModel):
+    pass
 
 
 class ColumnClassCodes(ColumnManagerBase):
@@ -9,9 +10,6 @@ class ColumnClassCodes(ColumnManagerBase):
     CATEGORY: str = "category"
     DESCRIPTION: str = "description"
     IS_RENTAL: str = "is_rental"
-
-    def __init__(self):
-        super().__init__()
 
     @property
     def basic_clean(self):
@@ -51,9 +49,6 @@ class ColumnPropsTaxpayers(ColumnManagerBase):
     CLEAN_ZIP: str = "clean_zip"
     CLEAN_ADDRESS: str = "clean_address"
     CLEAN_NAME_ADDRESS: str = "clean_name_address"
-
-    def __init__(self):
-        super().__init__()
 
     @property
     def raw(self):
@@ -213,9 +208,6 @@ class ColumnCorps(ColumnManagerBase):
     IS_COMMON_NAME_SECRETARY: str = "is_common_name_secretary"
     IS_ORG_SECRETARY: str = "is_org_secretary"
     IS_LLC_SECRETARY: str = "is_llc_secretary"
-
-    def __init__(self):
-        super().__init__()
 
     @property
     def raw(self):
@@ -383,9 +375,6 @@ class ColumnLLCs(ColumnManagerBase):
     IS_COMMON_NAME_AGENT: str = "is_common_name_agent"
     IS_ORG_AGENT: str = "is_org_agent"
     IS_LLC_AGENT: str = "is_llc_agent"
-
-    def __init__(self):
-        super().__init__()
 
     @property
     def raw(self):
@@ -613,9 +602,6 @@ class ColumnTaxpayerRecords(ColumnManagerBase):
     # todo: determine whether it's necessary to include all these? or only include ones that are absolutely necessary for whatever is being done
     FORMATTED_ADDRESS: str = "formatted_address"
 
-    def __init__(self):
-        super().__init__()
-
     @property
     def out(self):
         return [
@@ -659,9 +645,6 @@ class ColumnProperties(ColumnManagerBase):
     CLASS_CODE: str = "class_code"
     NUM_UNITS: str = "num_units"  # todo: add documentation: optional - ideal but will work without it
 
-    def __init__(self):
-        super().__init__()
-
     @property
     def out(self):
         return [
@@ -686,9 +669,6 @@ class ColumnUnvalidatedAddrs(ColumnManagerBase):
     CLEAN_ZIP: str = "raw_zip"
     CLEAN_ADDRESS: str = "raw_address"
 
-    def __init__(self):
-        super().__init__()
-
 
 class ColumnValidatedAddrs(ColumnManagerBase):
 
@@ -712,9 +692,6 @@ class ColumnValidatedAddrs(ColumnManagerBase):
     ACCURACY: str = "accuracy"
     FORMATTED_ADDRESS: str = "formatted_address"
 
-    def __init__(self):
-        super().__init__()
-
 
 class ColumnAddressAnalysis(ColumnManagerBase):
 
@@ -736,6 +713,3 @@ class ColumnAddressAnalysis(ColumnManagerBase):
     IS_IGNORE_MISC: str = "IS_IGNORE_MISC"
     YELP_URL: str = "YELP_URL"
     GOOGLE_URL: str = "GOOGLE_URL"
-
-    def __init__(self):
-        super().__init__()
