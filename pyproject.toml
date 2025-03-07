@@ -14,6 +14,7 @@ dependencies = [
     "scikit-learn==1.6.1",
     "Levenshtein==0.25.1",
     "markdown>=3.7",
+    "weasyprint>=64.1",
 ]
 
 [dependency-groups]

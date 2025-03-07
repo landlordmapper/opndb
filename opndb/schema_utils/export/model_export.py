@@ -66,6 +66,12 @@ class ExportReport:
     schemas: list[ExportableSchema]
 
     def to_md(self) -> str:
+        """
+        Convert the report to a markdown
+
+        Returns:
+            String markdown representation
+        """
         lines = [f"## opndb schema version **{self.version_code}**\n"]
         for schema in self.schemas:
             lines.append(f"### {schema.name}: {schema.description}\n")
@@ -75,7 +81,20 @@ class ExportReport:
             lines.append("")  # Blank line between schemas
         return "\n".join(lines)
 
-        pass
+    def to_pdf(self, file_path: str) -> str:
+        """
+        Convert the report to a PDF
+
+        Returns:
+            Path to the PDF file
+        """
+        from weasyprint import HTML
+        import markdown
+        html_text = markdown.markdown(self.to_md())
+        HTML(string=html_text).write_pdf(file_path)
+        return file_path
+
+
 
 
 def create_report_for_schema(schema_name: str) -> ExportReport:
