@@ -1,3 +1,5 @@
+import tempfile
+from pathlib import Path
 
 import markdown
 from typing import Final
@@ -28,6 +30,7 @@ class TestSchema:
             for v in values:
                 assert schema == create_report_for_schema(v).version_code
             assert schema == create_report_for_schema(schema).version_code
+
     class TestToMd:
 
         def test_basic(self):
@@ -37,4 +40,13 @@ class TestSchema:
             report = create_report_for_schema(EXAMPLE_SCHEMA)
             report_md = report.to_md()
             assert markdown.markdown(report_md), "Markdown should be returned"
+
+
+    class TestToPdf:
+        def test_basic(self):
+            report = create_report_for_schema(EXAMPLE_SCHEMA)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                path = report.to_pdf(temp_dir + "/foo.pdf")
+                assert Path(path).exists()
+
 
