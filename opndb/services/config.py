@@ -31,7 +31,7 @@ class ConfigManager:
             }
             json_configs = {
                 "data_root": str(configs["data_root"].absolute()),
-                "load_ext": ".csv"
+                "load_ext": "csv"
             }
             # Write configs to file with pretty printing
             with open(self._configs_path, "w", encoding="utf-8") as f:
@@ -50,6 +50,7 @@ class ConfigManager:
         if self._configs_path.exists():
             with open(self._configs_path) as f:
                 self._configs = json.load(f)
+            print("CONFIGS:", self._configs)
 
     def save(self) -> None:
         """Save current configuration to file"""

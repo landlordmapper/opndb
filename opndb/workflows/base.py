@@ -195,7 +195,6 @@ class WkflDataClean(WorkflowStandardBase):
 
     def __init__(self, configs: WorkflowConfigs):
         super().__init__(configs)
-        self.dfs_out: dict[str, pd.DataFrame] = {}
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def execute_pre_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
