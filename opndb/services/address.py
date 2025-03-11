@@ -1,3 +1,4 @@
+import re
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 import time
@@ -6,7 +7,8 @@ import traceback
 import pandas as pd
 import requests as req
 
-from opndb.constants.base import GEOCODIO_URL
+from opndb.constants.base import GEOCODIO_URL, PO_BOXES_DEPT, PO_BOXES_REMOVE, PO_BOXES
+from opndb.services.string_clean import CleanStringBase as clean_base
 from opndb.types.base import (
     RawAddress,
     GeocodioResult,
@@ -258,7 +260,7 @@ class AddressBase:
         df_results = clean_df.make_upper(df_results)
 
         # run remaining results through filters
-        df_filtered = cls.apply_filters(df_results)
+        df_filtered = cls.apply_filters(raw_addr, df_results)
 
         if len(df_filtered) == 1:
             results_processed["results_parsed"] = [df_filtered.iloc[0].to_dict()]
@@ -295,7 +297,7 @@ class AddressBase:
 
         :param api_key: user's unique Geocodio API key
         :param df_addrs: Dataframe of rows containing raw address data, with one row per unique address.
-        :param addr_col: Column name containing the addresses to be validated..
+        :param addr_col: Column name containing the addresses to be validated.
         :param interval: Optional interval setting to control how many Geocodio calls should trigger a partial save.
         :return:
         """
@@ -323,15 +325,24 @@ class AddressBase:
                             )
                             # validation & filtering successful, add to master validated address dataset
                             if len(results_processed["results_parsed"]) == 1:
-                                cls.add_validated_addr_from_geocodio(results_processed["results_parsed"][0])
+                                cls.add_validated_addr_from_geocodio(
+                                    dfs_process["validated"],
+                                    results_processed["results_parsed"][0]
+                                )
                             # could not filter down to 1 result,
                             else:
-                                cls.add_unvalidated_addr_from_geocodio(results_processed["results_parsed"])
+                                cls.add_unvalidated_addr_from_geocodio(
+                                    dfs_process["unvalidated"],
+                                    results_processed["results_parsed"]
+                                )
                             # add all results and their associated raw address to the partial
                             for result in flattened_results:
                                 gcd_results.append({**raw_addr, **result})  # include raw address data in result row
                         else:
-                            cls.add_failed_geocodio_row(raw_addr)
+                            cls.add_failed_geocodio_row(
+                                dfs_process["unvalidated"],
+                                raw_addr
+                            )
                             gcd_results.append(raw_addr)
                         # save geocodio partial and empty out gcd_results
                         if interval is not None and len(gcd_results) >= interval:
@@ -364,15 +375,7 @@ class AddressBase:
         """Removes validated addresses from 'DATA_ROOT/processed/unvalidated_addrs.csv'"""
         pass
 
-    @classmethod
-    def clean_poboxes(cls, df: pd.DataFrame):
-        """Cleans up and standardizes PO Box addresses"""
-        pass
 
-    @classmethod
-    def validate_poboxes(cls, df: pd.DataFrame):
-        """Checks for valid zip codes and city names in cleaned PO Box values."""
-        pass
 
     @classmethod
     def get_full_address(cls, row: pd.Series, address_cols: list[str]) -> str:
@@ -382,6 +385,52 @@ class AddressBase:
             if pd.notna(row[col]) and str(row[col])
         ]
         return ", ".join(address_parts)
+
+    @classmethod
+    def fix_pobox(cls, address: str) -> str:
+        """
+        Detects variations of PO box addresses in raw taxpayer data and return standardized "PO BOX" format.
+        """
+        if not clean_base.get_is_pobox(address):
+            return address
+
+        raw_addr_split = address.split(",")
+
+        if "#" in raw_addr_split[0]:
+            raw_addr_no_spaces = raw_addr_split[0].replace(" ", "")
+            match = re.search(r"([a-zA-Z])#", raw_addr_no_spaces)
+            if match:
+                raw_addr_cleaned = address.replace("#", "").strip().replace(" ", "")
+            else:
+                raw_addr_cleaned = address.replace("#", "DEPT ").strip().replace(" ", "")
+        else:
+            raw_addr_cleaned = address.replace(" ", "").strip()
+
+        for po in PO_BOXES:
+
+            if raw_addr_cleaned.startswith(po):
+
+                raw_addr_stripped = raw_addr_cleaned[len(po):].strip()
+                pobox_num = raw_addr_stripped.split(",")[0].strip()
+
+                for remove in PO_BOXES_REMOVE:
+                    if remove in pobox_num:
+                        pobox_num = pobox_num.replace(remove, "")
+
+                dep = ""
+                dep_start = len(pobox_num)
+                for dep_string in PO_BOXES_DEPT:
+                    if dep_string in pobox_num:
+                        dep_start = pobox_num.find(dep_string)
+                        dep_stripped = pobox_num[dep_start + len(dep_string):].strip()
+                        digits = "".join(filter(str.isdigit, dep_stripped))
+                        dep = f"TAX DEPT {digits}"  # Insert space before department string
+                        break
+
+                # Add a space between the PO box number and department part
+                raw_addr_split[0] = f"PO BOX {pobox_num[:dep_start].strip()} {dep}".strip()
+                raw_addr_fixed = ",".join(raw_addr_split)
+                return raw_addr_fixed
 
 
 class AddressValidatorBase(AddressBase):

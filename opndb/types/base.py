@@ -31,6 +31,7 @@ class WorkflowConfigs(TypedDict, total=False):
     wkfl_type_string_match: str
     wkfl_type_ntwk: str
     accuracy: str
+    geocodio_api_key: str
 
 
 class CleaningColumnMap(TypedDict):

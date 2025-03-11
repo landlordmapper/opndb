@@ -11,7 +11,7 @@ from opndb.constants.columns import (
     Properties as p,
     UnvalidatedAddrs as ua
 )
-from opndb.services.address import AddressBase
+from opndb.services.address import AddressBase as addr
 from opndb.services.dataframe.base import DataFrameOpsBase
 from opndb.services.string_clean import (
     CleanStringBase as clean_base,
@@ -181,6 +181,12 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def set_name_address_concat(cls, df: pd.DataFrame, col_map: dict[str, str]) -> pd.DataFrame:
+        """
+        Returns concatenation of taxpayer name and address.
+
+        :param df: Dataframe to add column to
+        :param col_map: Map of name to address columns
+        """
         df[col_map["name_addr"]] = df[col_map["name"]] + " -- " + df[col_map["addr"]]
         return df
 
@@ -205,6 +211,21 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
                 df[f"raw_{col[4:]}"] = df[col].copy()
             else:
                 df[f"raw_{col}"] = df[col].copy()
+        return df
+
+
+class DataFrameColumnManipulators(DataFrameOpsBase):
+    """Dataframe operations that manipulate or transform an existing dataframe column."""
+
+    @classmethod
+    def fix_pobox(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        """
+        Cleans up PO box addresses for the list of specified columns in the dataframe.
+
+        :param df: Dataframe to manipulate columns
+        :param addr_cols: List of columns containing address strings to be cleaned
+        """
+        df[col] = df[col].apply(lambda addr: addr.fix_pobox(addr))
         return df
 
 
@@ -301,3 +322,18 @@ class DataFrameSubsetters(DataFrameOpsBase):
         df_out.dropna(subset=[ua.RAW_ADDRESS], inplace=True)
         df_out.drop_duplicates(subset=[tr.RAW_ADDRESS], inplace=True)
         return df_out
+
+    @classmethod
+    def remove_unvalidated_addrs(
+        cls,
+        df_unvalidated: pd.DataFrame,
+        addrs_to_remove: list[str]
+    ) -> pd.DataFrame:
+        return df_unvalidated[~df_unvalidated["clean_address"].isin(addrs_to_remove)]
+
+
+class DataFrameConcatenators(DataFrameOpsBase):
+
+    @classmethod
+    def add_row(cls, df: pd.DataFrame, row_to_add: pd.DataFrame) -> pd.DataFrame:
+        return pd.concat([df, row_to_add], ignore_index=True)

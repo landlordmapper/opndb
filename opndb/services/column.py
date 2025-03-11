@@ -680,14 +680,24 @@ class ColumnUnvalidatedAddrs(ColumnManagerBase):
     RAW_STATE: str = "raw_state"
     RAW_ZIP: str = "raw_zip"
     RAW_ADDRESS: str = "raw_address"
-    CLEAN_STREET: str = "raw_street"
-    CLEAN_CITY: str = "raw_city"
-    CLEAN_STATE: str = "raw_state"
-    CLEAN_ZIP: str = "raw_zip"
-    CLEAN_ADDRESS: str = "raw_address"
+    CLEAN_STREET: str = "clean_street"
+    CLEAN_CITY: str = "clean_city"
+    CLEAN_STATE: str = "clean_state"
+    CLEAN_ZIP: str = "clean_zip"
+    CLEAN_ADDRESS: str = "clean_address"
 
     def __init__(self):
         super().__init__()
+
+    @property
+    def geocodio_columns(self):
+        return [
+            self.CLEAN_ADDRESS,
+            self.CLEAN_STREET,
+            self.CLEAN_CITY,
+            self.CLEAN_STATE,
+            self.CLEAN_ZIP,
+        ]
 
 
 class ColumnValidatedAddrs(ColumnManagerBase):
@@ -714,6 +724,30 @@ class ColumnValidatedAddrs(ColumnManagerBase):
 
     def __init__(self):
         super().__init__()
+
+    @property
+    def validated_columns(self):
+        return [
+            self.RAW_ADDRESS,
+            self.CLEAN_ADDRESS,
+            self.NUMBER,
+            self.PREDIRECTIONAL,
+            self.PREFIX,
+            self.STREET,
+            self.SUFFIX,
+            self.POSTDIRECTIONAL,
+            self.SECONDARYUNIT,
+            self.SECONDARYNUMBER,
+            self.CITY,
+            self.COUNTY,
+            self.STATE,
+            self.ZIP,
+            self.COUNTRY,
+            self.LNG,
+            self.LAT,
+            self.ACCURACY,
+            self.FORMATTED_ADDRESS
+        ]
 
 
 class ColumnAddressAnalysis(ColumnManagerBase):

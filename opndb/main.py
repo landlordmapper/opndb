@@ -72,7 +72,7 @@ def start(config_manager: ConfigManager):
     t.print_with_dots("Launching workflows...")
     console.print("\n")
     while True:
-        wkfl = WorkflowBase.create_workflow(config_manager.configs)
+        wkfl = WorkflowBase.create_workflow(config_manager)
         wkfl.load()
         # if not t.press_enter_to_continue("execute string cleaning workflow "):
         #     t.print_with_dots("Exiting program...", style="yellow")

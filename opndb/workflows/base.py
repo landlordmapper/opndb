@@ -20,7 +20,8 @@ from opndb.constants.columns import (
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
-    ColumnTaxpayerRecords, ColumnClassCodes
+    ColumnTaxpayerRecords, ColumnClassCodes, ColumnUnvalidatedAddrs, ColumnValidatedAddrs
+from opndb.services.config import ConfigManager
 
 # 4. Types (these should only depend on constants)
 from opndb.types.base import (
@@ -44,12 +45,13 @@ from opndb.services.dataframe.base import (
     DataFrameBaseCleaners as clean_df_base,
     DataFrameNameCleaners as clean_df_name,
     DataFrameAddressCleaners as clean_df_addr,
-    DataFrameCleanersAccuracy as clean_df_acc
+    DataFrameCleanersAccuracy as clean_df_acc,
 )
 from opndb.services.dataframe.ops import (
     DataFrameMergers as merge_df,
     DataFrameSubsetters as subset_df,
     DataFrameColumnGenerators as cols_df,
+    DataFrameColumnManipulators as colm_df
 )
 from rich.console import Console
 
@@ -66,8 +68,8 @@ class WorkflowBase(ABC):
         - Execute method: executes data load, required logic and transformations, and saves outputs
         - Load
     """
-    def __init__(self, configs: WorkflowConfigs):
-        self.configs: WorkflowConfigs = configs
+    def __init__(self, config_manager: ConfigManager):
+        self.config_manager: ConfigManager = config_manager
         self.dfs_in: dict[str, pd.DataFrame] = {}
         self.dfs_out: dict[str, pd.DataFrame] = {}
 
@@ -94,28 +96,29 @@ class WorkflowBase(ABC):
             console.print(f"\"{id}\" successfully saved to: \n{path}")
 
     @classmethod
-    def create_workflow(cls, configs: WorkflowConfigs) -> Optional['WorkflowBase']:
+    def create_workflow(cls, config_manager: ConfigManager) -> Optional['WorkflowBase']:
         """Instantiates workflow object based on last saved progress (config['wkfl_stage'])."""
+        configs = config_manager.configs
         if configs["wkfl_type"] == "data_clean":
-            return WkflDataClean(configs)
+            return WkflDataClean(config_manager)
         elif configs["wkfl_type"] == "address_initial":
-            return WkflAddressInitial(configs)
+            return WkflAddressInitial(config_manager)
         elif configs["wkfl_type"] == "address_geocodio":
-            return WkflAddressGeocodio(configs)
-        elif configs["wkfl_type"] == "name_analysis":
-            return WkflNameAnalysis(configs)
-        elif configs["wkfl_type"] == "address_analysis":
-            return WkflAddressAnalysis(configs)
-        elif configs["wkfl_type"] == "rental_subset":
-            return WkflRentalSubset(configs)
-        elif configs["wkfl_type"] == "clean_merge":
-            return WkflCleanMerge(configs)
-        elif configs["wkfl_type"] == "string_match":
-            return WkflStringMatch(configs)
-        elif configs["wkfl_type"] == "network_graph":
-            return WkflNetworkGraph(configs)
-        elif configs["wkfl_type"] == "final_output":
-            return WkflFinalOutput(configs)
+            return WkflAddressGeocodio(config_manager)
+        # elif configs["wkfl_type"] == "name_analysis":
+        #     return WkflNameAnalysis(config_manager)
+        # elif configs["wkfl_type"] == "address_analysis":
+        #     return WkflAddressAnalysis(config_manager)
+        # elif configs["wkfl_type"] == "rental_subset":
+        #     return WkflRentalSubset(config_manager)
+        # elif configs["wkfl_type"] == "clean_merge":
+        #     return WkflCleanMerge(config_manager)
+        # elif configs["wkfl_type"] == "string_match":
+        #     return WkflStringMatch(config_manager)
+        # elif configs["wkfl_type"] == "network_graph":
+        #     return WkflNetworkGraph(config_manager)
+        # elif configs["wkfl_type"] == "final_output":
+        #     return WkflFinalOutput(config_manager)
         return None
 
     @abstractmethod
@@ -193,8 +196,8 @@ class WkflDataClean(WorkflowStandardBase):
     WKFL_NAME: str = "INITIAL DATA CLEANING WORKFLOW"
     WKFL_DESC: str = "Runs basic string cleaners on raw inputted datasets."
 
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def execute_pre_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
@@ -349,12 +352,13 @@ class WkflDataClean(WorkflowStandardBase):
     # --------------
     # ----LOADER----
     # --------------
-    def load(self):
+    def load(self) -> None:
+        configs = self.config_manager.configs
         load_map: dict[str, Path] = {  # todo: change these back
-            "props_taxpayers": path_gen.raw_props_taxpayers(self.configs),
-            "corps": path_gen.raw_corps(self.configs),
-            "llcs": path_gen.raw_llcs(self.configs),
-            "class_codes": path_gen.raw_class_codes(self.configs)
+            "props_taxpayers": path_gen.raw_props_taxpayers(configs),
+            "corps": path_gen.raw_corps(configs),
+            "llcs": path_gen.raw_llcs(configs),
+            "class_codes": path_gen.raw_class_codes(configs)
         }
         self.load_dfs(load_map)
 
@@ -407,20 +411,21 @@ class WkflDataClean(WorkflowStandardBase):
     # -------------------------------
     # ----SUMMARY STATS GENERATOR----
     # -------------------------------
-    def summary_stats(self):
+    def summary_stats(self) -> None:
         pass
 
     # -------------
     # ----SAVER----
     # -------------
     def save(self) -> None:
+        configs = self.config_manager.configs
         save_map: dict[str, Path] = {
-            "properties": path_gen.processed_properties(self.configs),
-            "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
-            "corps": path_gen.processed_corps(self.configs),
-            "llcs": path_gen.processed_llcs(self.configs),
-            "class_codes": path_gen.processed_class_codes(self.configs),
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
+            "properties": path_gen.processed_properties(configs),
+            "taxpayer_records": path_gen.processed_taxpayer_records(configs),
+            "corps": path_gen.processed_corps(configs),
+            "llcs": path_gen.processed_llcs(configs),
+            "class_codes": path_gen.processed_class_codes(configs),
+            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
         }
         self.save_dfs(save_map)
 
@@ -446,46 +451,34 @@ class WkflAddressInitial(WorkflowStandardBase):
             -'ROOT/processed/unvalidated_addrs[FileExt]'
     """
     # todo: specify to use clean_address to associate with validated addr object
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
 
-    def load(self) -> dict[str, pd.DataFrame]:
+    def load(self):
+        configs = self.config_manager.configs
         load_map: dict[str, Path] = {
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
+            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
         }
-        return self.set_working_dfs(load_map)
+        self.load_dfs(load_map)
 
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-        # todo: add conditional handling for whether or not street column is separate from full address column
-        # todo: use pydantic/panderas model to created validated object address rows
-        # add is_pobox
-        dfs["unvalidated_addrs"]["is_pobox"] = cols_df.set_is_pobox(dfs["unvalidated_addrs"], ua.TAX_STREET)
-        # subset is_pobox
-        df_pobox: pd.DataFrame = subset_df.get_is_pobox(dfs["unvalidated_addrs"])
-        # cleans up pobox addresses
-        poboxes_cleaned = addr.clean_poboxes(df_pobox)  # these should be pydantic/pandera model objects
-        # checks city names and zipcodes
-        poboxes_validated = addr.validate_poboxes(df_pobox)  # these should be pydantic/pandera model objects
-        # adds pobox rows with validated city/state/zip to df_validated_addrs
-        df_validated_addrs: pd.DataFrame = pd.DataFrame(poboxes_validated)
-        # removes validated pobox addrs from unvalidated_addrs, saves
-        df_unvalidated_addrs: pd.DataFrame = subset_df.update_unvalidated_addrs(
-            dfs["unvalidated_addrs"],
-            list(df_validated_addrs[va.CLEAN_ADDRESS].unique())
-        )
-        return dfs
+    def process(self) -> None:
+        column_manager = {"unvalidated_addrs": ColumnUnvalidatedAddrs()}
+        df: pd.DataFrame = self.dfs_in["unvalidated_addrs"].copy()
+        df["is_pobox"] = subset_df.get_is_pobox(df["unvalidated_addrs"])
+        df: pd.DataFrame = colm_df.fix_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
+        self.dfs_out["unvalidated_addrs"] = df
 
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+    def summary_stats(self) -> None:
         pass
 
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
+    def save(self) -> None:
+        configs = self.config_manager.configs
         save_map: dict[str, Path] = {
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
-            "validated_addrs": path_gen.processed_validated_addrs(self.configs),
+            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
         }
-        self.save_dfs(dfs, save_map)
+        self.save_dfs(save_map)
 
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    def update_configs(self) -> None:
         pass
 
 
@@ -506,29 +499,76 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             - 'ROOT/geocodio/gcd_failed[FileExt]'
         - Geocodio partial files for all API call results, in 'ROOT/geocodio/partials'
     """
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
 
     def load(self) -> dict[str, pd.DataFrame]:
+        configs = self.config_manager.configs
         load_map: dict[str, Path] = {
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
+            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
         }
-        return self.set_working_dfs(load_map)
+        self.load_dfs(load_map)
 
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    def process(self) -> dict[str, pd.DataFrame]:
+
+        configs = self.config_manager.configs
+        column_manager = {
+            "unvalidated_addrs": ColumnUnvalidatedAddrs(),
+            "validated_addrs": ColumnValidatedAddrs(),
+        }
+        df_unvalidated_in = self.dfs_in["unvalidated_addrs"].copy()
+        df_addrs: pd.DataFrame = self.dfs_in["unvalidated_addrs"][
+            column_manager["unvalidated_addrs"].geocodio_columns
+        ].copy()
+
         # print out address count to be validated using geocodio
         t.print_geocodio_warning(dfs["unvalidated_addrs"])
-        # prompt user for api key and display warning with number of calls and estimated cost
-        self.api_key = t.enter_geocodio_api_key()
+
+        if "geocodio_api_key" not in self.config_manager.configs.keys():
+            while True:
+                api_key: str = input("Copy & paste your geocodio API key for address validation: ")
+                if len(api_key) > 0:
+                    self.config_manager.set("geocodio_api_key", api_key)
+                    break
+                else:
+                    console.print("You must enter an API key to continue.")
+
+
+
+
         # call geocodio or exit
-        addr.run_geocodio(self.api_key, dfs["unvalidated_addrs"], ua.TAX_FULL_ADDRESS)  # have it return the dfs?
+        gcd_results_obj = addr.run_geocodio(
+            configs["geocodio_api_key"],
+            df_addrs,
+            column_manager["unvalidated_addrs"].CLEAN_ADDRESS
+        )  # have it return the dfs?
+
+        df_validated: pd.DataFrame = pd.DataFrame(gcd_results_obj["validated"])
+        df_unvalidated: pd.DataFrame = subset_df.remove_unvalidated_addrs(
+            df_unvalidated_in,
+            [d["clean_address"] for d in gcd_results_obj["unvalidated_addrs"]]
+        )
+        df_failed: pd.DataFrame = pd.DataFrame(gcd_results_obj["failed"])
+
+        dfs_out: dict[str, pd.DataFrame] = {
+            "validated": pd.DataFrame(
+                columns=column_manager["validated_addrs"].validated_columns
+            ),
+            "unvalidated": pd.DataFrame(
+                columns=column_manager["unvalidated_addrs"].geocodio_columns
+            ),
+            "failed": pd.DataFrame(
+                columns=column_manager["unvalidated_addrs"].geocodio_columns
+            )
+        }
+
         # add validated addrs to the master files and save to data dirs
         df_validated_gcd: pd.DataFrame = ops_df.load_df(
             utils.generate_path(
                 d.GEOCODIO,
-                g.get_raw_filename_ext(g.GCD_VALIDATED, self.configs),
-                self.configs["prev_stage"],
-                self.configs["load_ext"]
+                g.get_raw_filename_ext(g.GCD_VALIDATED, configs),
+                configs["prev_stage"],
+                configs["load_ext"]
             )
         )
         # remove validated raw address from unvalidated master file
@@ -538,20 +578,21 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         )
         return dfs
 
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+    def summary_stats(self) -> None:
         pass
 
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
+    def save(self) -> None:
+        configs = self.config_manager.configs
         save_map: dict[str, Path] = {
-            "gcd_validated": path_gen.geocodio_gcd_validated(self.configs),
-            "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(self.configs),
-            "gcd_failed": path_gen.geocodio_gcd_failed(self.configs),
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(self.configs),
-            "validated_addrs": path_gen.processed_validated_addrs(self.configs),
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+            "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs),
+            "gcd_failed": path_gen.geocodio_gcd_failed(configs),
+            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
+            "validated_addrs": path_gen.processed_validated_addrs(configs),
         }
-        self.save_dfs(dfs, save_map)
+        self.save_dfs(save_map)
 
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    def update_configs(self) -> None:
         pass
 
 
