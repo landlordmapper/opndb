@@ -299,10 +299,12 @@ class ColumnCorps(ColumnManagerBase):
             {
                 self.RAW_PRESIDENT_ADDRESS: "raw_address",
                 self.CLEAN_PRESIDENT_ADDRESS: "clean_address",
+                self.STATUS: "status",
             },
             {
                 self.RAW_SECRETARY_ADDRESS: "raw_address",
                 self.CLEAN_SECRETARY_ADDRESS: "clean_address",
+                self.STATUS: "status",
             }
         ]
 
@@ -563,6 +565,7 @@ class ColumnLLCs(ColumnManagerBase):
                 self.CLEAN_MANAGER_MEMBER_CITY: "clean_city",
                 self.CLEAN_MANAGER_MEMBER_ZIP: "clean_zip",
                 self.CLEAN_MANAGER_MEMBER_ADDRESS: "clean_address",
+                self.STATUS: "status",
             },
             {
                 self.RAW_AGENT_STREET: "raw_street",
@@ -571,6 +574,7 @@ class ColumnLLCs(ColumnManagerBase):
                 self.CLEAN_AGENT_STREET: "clean_street",
                 self.CLEAN_AGENT_ZIP: "clean_zip",
                 self.CLEAN_AGENT_ADDRESS: "clean_address",
+                self.STATUS: "status",
             },
             {
                 self.RAW_OFFICE_STREET: "raw_street",
@@ -581,6 +585,7 @@ class ColumnLLCs(ColumnManagerBase):
                 self.CLEAN_OFFICE_CITY: "clean_city",
                 self.CLEAN_OFFICE_ZIP: "clean_zip",
                 self.CLEAN_OFFICE_ADDRESS: "clean_address",
+                self.STATUS: "status",
             }
         ]
 

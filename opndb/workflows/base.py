@@ -479,6 +479,8 @@ class WkflAddressInitial(WorkflowStandardBase):
         df = cols_df.set_is_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
         t.print_with_dots("Cleaning up PO box addresses")
         df = colm_df.fix_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
+
+
         self.dfs_out["unvalidated_addrs"] = df
 
     def summary_stats(self) -> None:
