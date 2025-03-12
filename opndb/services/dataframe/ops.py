@@ -339,9 +339,20 @@ class DataFrameSubsetters(DataFrameOpsBase):
         """
         return df_unvalidated[~df_unvalidated["clean_address"].isin(addrs_to_remove)]
 
-
-class DataFrameConcatenators(DataFrameOpsBase):
-
     @classmethod
-    def concatenate(cls, df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
-        return pd.concat([df, row_to_add], ignore_index=True)
+    def generate_frequency_df(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
+        """
+        Returns frequency dataframe with two columns: unique values contained in the column "col" (function parameter)
+        and their frequency count.
+
+        :param df: Input DataFrame to analyze
+        :param col: Column name to calculate frequencies for
+        :return: DataFrame with values and their frequencies, sorted by frequency in descending order
+        """
+        counts = df[col].value_counts().to_dict()
+        freq_df = pd.DataFrame({
+            "value": list(counts.keys()),
+            "frequency": list(counts.values())
+        })
+        freq_df = freq_df.sort_values("frequency", ascending=False).reset_index(drop=True)
+        return freq_df

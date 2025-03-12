@@ -113,8 +113,8 @@ class WorkflowBase(ABC):
             return WkflAddressInitial(config_manager)
         elif configs["wkfl_type"] == "address_geocodio":
             return WkflAddressGeocodio(config_manager)
-        # elif configs["wkfl_type"] == "name_analysis":
-        #     return WkflNameAnalysis(config_manager)
+        elif configs["wkfl_type"] == "name_analysis":
+            return WkflNameAnalysis(config_manager)
         # elif configs["wkfl_type"] == "address_analysis":
         #     return WkflAddressAnalysis(config_manager)
         # elif configs["wkfl_type"] == "rental_subset":
@@ -603,7 +603,6 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         configs = self.config_manager.configs
         load_map: dict[str, Path] = {
             "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
-            "validated_addrs": path_gen.processed_validated_addrs(configs),
             "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs),
             "gcd_validated": path_gen.geocodio_gcd_validated(configs),
             "gcd_failed": path_gen.geocodio_gcd_failed(configs),
@@ -655,29 +654,60 @@ class WkflAddressGeocodio(WorkflowStandardBase):
 
 class WkflNameAnalysis(WorkflowStandardBase):
     """
-    Taxpayer name analysis workflow.
+    Initial taxpayer name analysis workflow. Generates frequency and name analysis dataframes.
 
     INPUTS:
     OUTPUTS:
     """
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
 
-    def load(self) -> dict[str, pd.DataFrame]:
-        load_map: dict[str, Path] = {}
-        return self.set_working_dfs(load_map)
+    WKFL_NAME: str = "NAME ANALYSIS ADDRESS WORKFLOW"
+    WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
 
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {
+            "taxpayer_records": path_gen.processed_taxpayer_records(configs)
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        df = self.dfs_in["taxpayer_records"].copy()
+        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
+        self.dfs_out["frequent_tax_names"] = df_freq
+        self.dfs_out["fixing_tax_names"] = pd.DataFrame(
+            columns=["raw_value", "standardized_value"],
+            data=[
+                [
+                    "Paste the EXACT string from the messy data to be standardized in this column",
+                    "Paste the fixed version in this column"
+                ],
+                ["EXAMPLES","EXAMPLES"],
+                ["COMMUNITY SAV BK LT", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BK TR", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BK", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BANK", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY BK TR LT", "COMMUNITY SAVINGS BANK"],
+                ["COMM SAVINGS BK LT", "COMMUNITY SAVINGS BANK"],
+                ["COMM SAVGS BK LT", "COMMUNITY SAVINGS BANK"],
+            ]
+        )
+
+    def summary_stats(self) -> None:
         pass
 
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
-        pass
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
+            "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
+        }
+        self.save_dfs(save_map)
 
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
-        save_map: dict[str, Path] = {}
-        self.save_dfs(dfs, save_map)
-
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    def update_configs(self) -> None:
         pass
 
 
