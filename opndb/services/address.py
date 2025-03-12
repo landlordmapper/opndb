@@ -8,19 +8,20 @@ import pandas as pd
 import requests as req
 
 from opndb.constants.base import GEOCODIO_URL, PO_BOXES_DEPT, PO_BOXES_REMOVE, PO_BOXES
+from opndb.services.config import ConfigManager
 from opndb.services.string_clean import CleanStringBase as clean_base
 from opndb.types.base import (
-    RawAddress,
+    CleanAddress,
     GeocodioResult,
     GeocodioResponse,
     GeocodioResultProcessed,
-    GeocodioResultFlat
+    GeocodioResultFlat, GeocodioResultFinal, GeocodioReturnObject, WorkflowConfigs
 )
 from opndb.services.dataframe.base import (
     DataFrameOpsBase as ops_df,
     DataFrameBaseCleaners as clean_df
 )
-from opndb.utils import UtilsBase as utils
+from opndb.utils import (UtilsBase as utils, PathGenerators as utils_path)
 
 
 class AddressBase:
@@ -31,7 +32,7 @@ class AddressBase:
         self.geocodio_api_key = ""
 
     @classmethod
-    def get_unique_addresses(cls, df: pd.DataFrame, addr_cols: RawAddress):
+    def get_unique_addresses(cls, df: pd.DataFrame, addr_cols: CleanAddress):
         """Returns all unique addresses found in the dataframe."""
         pass
 
@@ -71,10 +72,10 @@ class AddressBase:
             return None
 
     @classmethod
-    def save_geocodio_partial(cls, results: list[dict]):
+    def save_geocodio_partial(cls, results: list[dict], configs: WorkflowConfigs):
         timestamp = utils.get_timestamp()
         df_partial = pd.DataFrame(results)
-        ops_df.save_df(df_partial, cls.gcd_partials_dir_path / f"partial_geocodio_({timestamp}).csv")
+        ops_df.save_df(df_partial, utils_path.geocodio_partial(configs, f"gcd_partial_({timestamp}).csv"))
 
     @classmethod
     def check_matching_addrs(cls, df: pd.DataFrame) -> bool:
@@ -136,20 +137,20 @@ class AddressBase:
     #     }
 
     @classmethod
-    def apply_filters(cls, raw_addr: RawAddress, df: pd.DataFrame) -> pd.DataFrame | None:
+    def apply_filters(cls, clean_address: CleanAddress, df: pd.DataFrame) -> pd.DataFrame | None:
 
         """Filters geocodio results by street number and zip code. Additional filters to be added in the future."""
 
         # extract individual pieces of raw address
-        addr_raw_split = raw_addr["complete_addr"].split(",")
+        addr_raw_split = clean_address["complete_addr"].split(",")
 
-        if "street" in raw_addr.keys():
-            number_raw: str = raw_addr["street"].split()[0]
+        if "street" in clean_address.keys():
+            number_raw: str = clean_address["street"].split()[0]
         else:
             number_raw = addr_raw_split[0].split()[0]
 
-        if "zip" in raw_addr.keys():
-            zip_raw: str = raw_addr["zip"]
+        if "zip" in clean_address.keys():
+            zip_raw: str = clean_address["zip"]
         else:
             zip_raw = addr_raw_split[-1]
 
@@ -234,7 +235,7 @@ class AddressBase:
     @classmethod
     def process_geocodio_results(
         cls,
-        raw_addr: RawAddress,
+        clean_address: CleanAddress,
         results: list[GeocodioResultFlat]
     ) -> GeocodioResultProcessed:
 
@@ -245,7 +246,7 @@ class AddressBase:
 
         # instantiate GeocodioResultsProcessed object with empty results_parsed
         results_processed: GeocodioResultProcessed = {
-            "raw_addr": raw_addr,
+            "clean_address": clean_address,
             "results": results,
             "results_parsed": None,
         }
@@ -260,7 +261,7 @@ class AddressBase:
         df_results = clean_df.make_upper(df_results)
 
         # run remaining results through filters
-        df_filtered = cls.apply_filters(raw_addr, df_results)
+        df_filtered = cls.apply_filters(clean_address, df_results)
 
         if len(df_filtered) == 1:
             results_processed["results_parsed"] = [df_filtered.iloc[0].to_dict()]
@@ -270,28 +271,7 @@ class AddressBase:
         return results_processed
 
     @classmethod
-    def add_validated_addr_from_geocodio(cls, addr: GeocodioResultFlat):
-        """Adds Geocodio result object to DATA_ROOT/geocodio/gcd_validated.csv"""
-        # converts geocodio result into panderas object
-        # adds panderas object to validated address dataframe
-        pass
-
-    @classmethod
-    def add_unvalidated_addr_from_geocodio(cls, results: list[GeocodioResultFlat] | None):
-        """Adds unfiltered Geocodio results objects to 'DATA_ROOT/geocodio/gcd_unvalidated.csv'."""
-        # if results is None:
-            # add row with empty values for the GeocodioResultFlat object
-        # else:
-            # for each result, add rows to gcd_unvalidated.csv
-        pass
-
-    @classmethod
-    def add_failed_geocodio_row(cls, raw_addr: RawAddress):
-        """Adds row to 'DATA_ROOT/geocodio/gcd_failed.csv'."""
-        pass
-
-    @classmethod
-    def run_geocodio(cls, api_key: str, df_addrs: pd.DataFrame, addr_col: str, interval: int = 50):
+    def run_geocodio(cls, api_key: str, df_addrs: pd.DataFrame, addr_col: str, configs: WorkflowConfigs, interval: int = 50) -> GeocodioReturnObject:
         """
         Executes Geocodio API calls for raw, unvalidated addresses.
 
@@ -301,8 +281,13 @@ class AddressBase:
         :param interval: Optional interval setting to control how many Geocodio calls should trigger a partial save.
         :return:
         """
+        return_obj: GeocodioReturnObject = {  # object to be used to create/update dataframes in workflow process
+            "validated": [],
+            "unvalidated": [],
+            "failed": [],
+        }
         try:
-            gcd_results = []
+            gcd_results = []  # list of all results to store as partials
             start_time = time.time()
             with ThreadPoolExecutor(max_workers=10) as executor:
                 # store all unique addresses from dataframe into future object
@@ -314,53 +299,48 @@ class AddressBase:
                 for future in as_completed(futures):  # todo: add progress bar visualization
                     try:
                         i, row = futures[future]
-                        raw_addr: RawAddress = row.to_dict()  # create RawAddress object from dataframe row
+                        clean_address: CleanAddress = row.to_dict()  # create CleanAddress object from dataframe row
                         results: list[GeocodioResult] = future.result()  # fetch results returned by call_geocodio()
                         # flatten geocodio results to include lat, lng, accuracy and formatted address
                         flattened_results: list[GeocodioResultFlat] = [cls.flatten_geocodio_result(result) for result in results]
                         if results:  # API call succeeded, begin processing results
                             results_processed: GeocodioResultProcessed = cls.process_geocodio_results(
-                                raw_addr,
+                                clean_address,
                                 flattened_results
                             )
-                            # validation & filtering successful, add to master validated address dataset
                             if len(results_processed["results_parsed"]) == 1:
-                                cls.add_validated_addr_from_geocodio(
-                                    dfs_process["validated"],
-                                    results_processed["results_parsed"][0]
-                                )
-                            # could not filter down to 1 result,
+                                new_validated = results_processed["results_parsed"][0]
+                                new_validated["clean_address"] = clean_address["clean_address"]
+                                return_obj["validated"].append(new_validated)
                             else:
-                                cls.add_unvalidated_addr_from_geocodio(
-                                    dfs_process["unvalidated"],
-                                    results_processed["results_parsed"]
-                                )
+                                for result in results_processed["results_parsed"]:
+                                    new_unvalidated = result
+                                    new_unvalidated["clean_address"] = clean_address["clean_address"]
                             # add all results and their associated raw address to the partial
                             for result in flattened_results:
-                                gcd_results.append({**raw_addr, **result})  # include raw address data in result row
+                                gcd_results.append({**clean_address, **result})
                         else:
-                            cls.add_failed_geocodio_row(
-                                dfs_process["unvalidated"],
-                                raw_addr
-                            )
-                            gcd_results.append(raw_addr)
+                            return_obj["failed"].append(clean_address)
+                            gcd_results.append(clean_address)
                         # save geocodio partial and empty out gcd_results
                         if interval is not None and len(gcd_results) >= interval:
-                            cls.save_geocodio_partial(gcd_results)
+                            cls.save_geocodio_partial(gcd_results, configs)
                             gcd_results = []
                     except Exception as e:
                         print(f"Error: {e}")
                         print(traceback.format_exc())
                 if interval is not None and gcd_results:
-                    cls.save_geocodio_partial(gcd_results)
+                    cls.save_geocodio_partial(gcd_results, configs)
             if interval is None:
-                cls.save_geocodio_partial(gcd_results)
+                cls.save_geocodio_partial(gcd_results, configs)
             # log time
             end_time = time.time()
             print(f"Elapsed time: {round((end_time - start_time), 2)} minutes")
+            return return_obj
         except Exception as e:
             print(f"Error: {e}")
             print(traceback.format_exc())
+            return return_obj
 
     @classmethod
     def add_to_validated_addrs(cls):

@@ -40,6 +40,11 @@ class UtilsBase(object):
         return Path(data_root) / subdir / filename
 
     @classmethod
+    def generate_geocodio_partial_path(cls, data_root: str | Path, filename: str, ext: FileExt = "csv") -> Path:
+        return Path(data_root) / "geocodio" / "partials" / f"{filename}.{ext}"
+
+
+    @classmethod
     def is_encoded_empty(cls, x):
         if isinstance(x, str):
             # Check if string contains mostly non-printable characters
@@ -309,6 +314,10 @@ class PathGenerators(UtilsBase):
             Geocodio.GCD_FAILED,
             configs["load_ext"]
         )
+    @classmethod
+    def geocodio_partial(cls, configs: WorkflowConfigs, filename: str) -> Path:
+        """:returns: ROOT/geocodio/partials/gcd_partial_{timestamp}[ext]"""
+        return cls.generate_geocodio_partial_path(configs["data_root"], filename, configs["load_ext"])
 
     # -----------------
     # ----ANALYSIS----

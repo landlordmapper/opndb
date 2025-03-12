@@ -329,11 +329,15 @@ class DataFrameSubsetters(DataFrameOpsBase):
         df_unvalidated: pd.DataFrame,
         addrs_to_remove: list[str]
     ) -> pd.DataFrame:
+        """
+        Removes validated addresses from the unvalidated master address list by filtering existing unvalidated address
+        dataset by clean_address.
+        """
         return df_unvalidated[~df_unvalidated["clean_address"].isin(addrs_to_remove)]
 
 
 class DataFrameConcatenators(DataFrameOpsBase):
 
     @classmethod
-    def add_row(cls, df: pd.DataFrame, row_to_add: pd.DataFrame) -> pd.DataFrame:
+    def concatenate(cls, df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
         return pd.concat([df, row_to_add], ignore_index=True)

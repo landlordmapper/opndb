@@ -47,12 +47,12 @@ class BooleanColumnMap(TypedDict):
     corps: list[str]
     llcs: list[str]
 
-class RawAddress(TypedDict, total=False):
+class CleanAddress(TypedDict, total=False):
     """
     Used to generate list of unique addresses from raw data. Handles situations in which there's only a single field
     for complete address AND in which the address is broken into street, city, state and zip columns
     """
-    complete_addr: str
+    clean_address: str
     street: str | None
     city: str | None
     state: str | None
@@ -94,7 +94,7 @@ class GeocodioResponse(TypedDict):
     results: list[GeocodioResult]
 
 
-class GeocodioResultFlat(TypedDict):
+class GeocodioResultFlat(TypedDict, total=False):
     """Single object flattening geocodio result object by including moving lat, lng, accuracy and formatted_address as keys."""
     number: str
     predirectional: str
@@ -113,11 +113,37 @@ class GeocodioResultFlat(TypedDict):
     lat: str
     accuracy: int | float
     formatted_address: str
+    clean_address: str
 
 class GeocodioResultProcessed(TypedDict):
-    raw_addr: RawAddress
+    clean_address: CleanAddress
     results: list[GeocodioResultFlat]
     results_parsed: list[GeocodioResultFlat] | None
+
+class GeocodioResultFinal(TypedDict):
+    clean_address: str
+    number: str
+    predirectional: str
+    prefix: str
+    street: str
+    suffix: str
+    postdirectional: str
+    secondaryunit: str
+    secondarynumber: str
+    city: str
+    county: str
+    state: str
+    zip: str
+    country: str
+    lng: str
+    lat: str
+    accuracy: int | float
+    formatted_address: str
+
+class GeocodioReturnObject(TypedDict):
+    validated: list[GeocodioResultFinal]
+    unvalidated: list[GeocodioResultFinal]
+    failed: list[GeocodioResultFinal]
 
 class NmslibOptions(TypedDict):
     method: str

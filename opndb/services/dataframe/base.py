@@ -28,14 +28,20 @@ class DataFrameOpsBase(object):
     """
 
     @classmethod
-    def load_df(cls, path: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame:
+    def load_df(cls, path: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame | None:
         """
         Loads dataframes based on file format. Reads extension and loads dataframe using corresponding pd.read method.
+        Returns None if the path doesn't exist.'
 
         :param filepath: Complete path to data file to be loaded into dataframe (UtilsBase.generate_file_path())
         :param dtype: Specify data types for columns or entire dataset
         :return: Dataframe containing data from specified file
         """
+
+        if not path.exists():
+            console.print(f"[yellow]File not found: {path}[/yellow]")
+            return None
+
         file_size = path.stat().st_size
         format = path.suffix[1:].lower()
         with Progress(
