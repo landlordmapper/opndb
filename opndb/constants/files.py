@@ -50,7 +50,7 @@ class Processed(FileNames):
     CLASS_CODES: str = "class_codes"
 
     VALIDATED_ADDRS: str = "validated_addrs"
-    UNVALIDATED_ADDRS: str = "unvalidated_addrs"
+    UNVALIDATED_ADDRS: str = "unvalidated_addrs_sample"
 
     PROPS_SUBSETTED: str = "props_subsetted"
     PROPS_PREPPED: str = "props_prepped"

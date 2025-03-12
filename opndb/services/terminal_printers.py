@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import pandas as pd
 import click
 from rich.prompt import IntPrompt
 import shutil
@@ -23,6 +24,7 @@ from rich.traceback import install
 from datetime import datetime
 from time import sleep
 import random
+
 
 # Install rich traceback handler
 install()
@@ -511,6 +513,14 @@ class TerminalBase:
             response = input("\nPress Enter to continue...")
             if response == "":
                 break
+
+    @classmethod
+    def print_geocodio_warning(cls, df: pd.DataFrame):
+        unique_addrs: str = f"{len(df):,}"
+        cost = 0.0005 * (len(df) - 2500) if len(df) > 2500 else 0
+        est_cost: str = f"${cost:,.2f}"
+        console.print(f"{unique_addrs} unique addresses found.")
+        console.print(f"[red] Cost for executing Geocodio calls: {est_cost}.[/red]")
 
 
 class TerminalInteract(TerminalBase):

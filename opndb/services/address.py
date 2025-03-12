@@ -3,6 +3,7 @@ from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 import time
 import traceback
+from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 
 import pandas as pd
 import requests as req
@@ -137,7 +138,7 @@ class AddressBase:
         """Filters geocodio results by street number and zip code. Additional filters to be added in the future."""
 
         # extract individual pieces of raw address
-        addr_raw_split = clean_address["complete_addr"].split(",")
+        addr_raw_split = clean_address["clean_address"].split(",")
 
         if "street" in clean_address.keys():
             number_raw: str = clean_address["street"].split()[0]
@@ -258,6 +259,10 @@ class AddressBase:
         # run remaining results through filters
         df_filtered = cls.apply_filters(clean_address, df_results)
 
+        if df_filtered is None:
+            results_processed["results_parsed"] = results_processed["results"]
+            return results_processed
+
         if len(df_filtered) == 1:
             results_processed["results_parsed"] = [df_filtered.iloc[0].to_dict()]
         elif len(df_filtered) > 1:
@@ -266,7 +271,14 @@ class AddressBase:
         return results_processed
 
     @classmethod
-    def run_geocodio(cls, api_key: str, df_addrs: pd.DataFrame, addr_col: str, configs: WorkflowConfigs, interval: int = 50) -> GeocodioReturnObject:
+    def run_geocodio(
+        cls,
+        api_key: str,
+        df_addrs: pd.DataFrame,
+        addr_col: str,
+        configs: WorkflowConfigs,
+        interval: int = 50
+    ) -> GeocodioReturnObject:
         """
         Executes Geocodio API calls for raw, unvalidated addresses.
 
@@ -283,54 +295,89 @@ class AddressBase:
         }
         try:
             gcd_results = []  # list of all results to store as partials
-            start_time = time.time()
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                # store all unique addresses from dataframe into future object
-                futures = {}
-                for i, row in df_addrs.iterrows():
-                    future = executor.submit(cls.call_geocodio, api_key, row[addr_col])
-                    futures[future] = (i, row)
-                # loop through futures object, executing geocodio calls for each one
-                for future in as_completed(futures):  # todo: add progress bar visualization
-                    try:
-                        i, row = futures[future]
-                        clean_address: CleanAddress = row.to_dict()  # create CleanAddress object from dataframe row
-                        results: list[GeocodioResult] = future.result()  # fetch results returned by call_geocodio()
-                        # flatten geocodio results to include lat, lng, accuracy and formatted address
-                        flattened_results: list[GeocodioResultFlat] = [cls.flatten_geocodio_result(result) for result in results]
-                        if results:  # API call succeeded, begin processing results
-                            results_processed: GeocodioResultProcessed = cls.process_geocodio_results(
-                                clean_address,
-                                flattened_results
-                            )
-                            if len(results_processed["results_parsed"]) == 1:
-                                new_validated = results_processed["results_parsed"][0]
-                                new_validated["clean_address"] = clean_address["clean_address"]
-                                return_obj["validated"].append(new_validated)
+            total_addresses = len(df_addrs)
+
+            # Set up Rich progress display
+            with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[bold blue]{task.description}"),
+                    BarColumn(bar_width=None),
+                    "[progress.percentage]{task.percentage:>3.0f}%",
+                    "•",
+                    TimeElapsedColumn(),
+                    "•",
+                    TimeRemainingColumn(),
+                    "•",
+                    TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+            ) as progress:
+                geocodio_task = progress.add_task(
+                    "[yellow]Processing Geocodio API calls...",
+                    total=total_addresses,
+                    processed=0,
+                )
+                start_time = time.time()
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    # store all unique addresses from dataframe into future object
+                    futures = {}
+                    for i, row in df_addrs.iterrows():
+                        future = executor.submit(cls.call_geocodio, api_key, row[addr_col])
+                        futures[future] = (i, row)
+                    processed_count = 0
+                    # loop through futures object, executing geocodio calls for each one
+                    for future in as_completed(futures):  # todo: add progress bar visualization
+                        try:
+                            i, row = futures[future]
+                            clean_address: CleanAddress = row.to_dict()  # create CleanAddress object from dataframe row
+                            results: list[GeocodioResult] = future.result()  # fetch results returned by call_geocodio()
+                            # flatten geocodio results to include lat, lng, accuracy and formatted address
+                            flattened_results: list[GeocodioResultFlat] = [cls.flatten_geocodio_result(result) for result in results]
+                            if results:  # API call succeeded, begin processing results
+                                results_processed: GeocodioResultProcessed = cls.process_geocodio_results(
+                                    clean_address,
+                                    flattened_results
+                                )
+                                if len(results_processed["results_parsed"]) == 1:
+                                    new_validated = results_processed["results_parsed"][0]
+                                    new_validated["clean_address"] = clean_address["clean_address"]
+                                    return_obj["validated"].append(new_validated)
+                                else:
+                                    for result in results_processed["results_parsed"]:
+                                        new_unvalidated = result
+                                        new_unvalidated["clean_address"] = clean_address["clean_address"]
+                                        return_obj["unvalidated"].append(new_unvalidated)
+                                # add all results and their associated raw address to the partial
+                                for result in flattened_results:
+                                    gcd_results.append({**clean_address, **result})
                             else:
-                                for result in results_processed["results_parsed"]:
-                                    new_unvalidated = result
-                                    new_unvalidated["clean_address"] = clean_address["clean_address"]
-                            # add all results and their associated raw address to the partial
-                            for result in flattened_results:
-                                gcd_results.append({**clean_address, **result})
-                        else:
-                            return_obj["failed"].append(clean_address)
-                            gcd_results.append(clean_address)
-                        # save geocodio partial and empty out gcd_results
-                        if interval is not None and len(gcd_results) >= interval:
-                            cls.save_geocodio_partial(gcd_results, configs)
-                            gcd_results = []
-                    except Exception as e:
-                        print(f"Error: {e}")
-                        print(traceback.format_exc())
-                if interval is not None and gcd_results:
+                                return_obj["failed"].append(clean_address)
+                                gcd_results.append(clean_address)
+                            # save geocodio partial and empty out gcd_results
+                            if interval is not None and len(gcd_results) >= interval:
+                                progress.update(geocodio_task, description="[magenta]Saving partial results...")
+                                cls.save_geocodio_partial(gcd_results, configs)
+                                gcd_results = []
+                            # Update progress
+                            processed_count += 1
+                            progress.update(
+                                geocodio_task,
+                                advance=1,
+                                processed=processed_count,
+                                description=f"[yellow]Processing address {processed_count}/{total_addresses}"
+                            )
+                        except Exception as e:
+                            progress.console.print(f"[red]Error: {e}[/red]")
+                            progress.console.print(traceback.format_exc())
+                    if interval is not None and gcd_results:
+                        progress.update(geocodio_task, description="[magenta]Saving final batch...")
+                        cls.save_geocodio_partial(gcd_results, configs)
+                if interval is None:
                     cls.save_geocodio_partial(gcd_results, configs)
-            if interval is None:
-                cls.save_geocodio_partial(gcd_results, configs)
+            # Complete the task
+            progress.update(geocodio_task, description="[green]Geocodio processing complete!")
             # log time
             end_time = time.time()
-            print(f"Elapsed time: {round((end_time - start_time), 2)} minutes")
+            elapsed_minutes = round((end_time - start_time) / 60, 2)
+            progress.console.print(f"[bold green]Total processing time: {elapsed_minutes} minutes[/bold green]")
             return return_obj
         except Exception as e:
             print(f"Error: {e}")

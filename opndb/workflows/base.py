@@ -54,6 +54,7 @@ from opndb.services.dataframe.ops import (
     DataFrameColumnManipulators as colm_df
 )
 from rich.console import Console
+from rich.prompt import Prompt
 
 
 console = Console()
@@ -80,10 +81,13 @@ class WorkflowBase(ABC):
         """
         for id, path in load_map.items():
             self.dfs_in[id] = ops_df.load_df(path, str)
-            console.print(f"\"{id}\" successfully loaded from: \n{path}")
+            if self.dfs_in[id] is not None:
+                console.print(f"\"{id}\" successfully loaded from: \n{path}")
         # prep data for summary table printing
         table_data = []
         for id, df in self.dfs_in.items():  # todo: standardize this, enforce types
+            if df is None:
+                continue
             memory_usage = df.memory_usage(deep=True).sum()
             table_data.append({
                 "dataset_name": id,
@@ -231,7 +235,7 @@ class WkflDataClean(WorkflowStandardBase):
 
         return df
 
-    def execute_basic_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+    def execute_basic_cleaning(self, df: pd.DataFrame, column_manager) -> pd.DataFrame:
 
         t.print_equals(f"Executing basic operations (all data columns)")
 
@@ -265,7 +269,7 @@ class WkflDataClean(WorkflowStandardBase):
 
         return df
 
-    def execute_name_column_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+    def execute_name_column_cleaning(self, df: pd.DataFrame, column_manager) -> pd.DataFrame:
 
         t.print_equals(f"Executing cleaning operations (name columns only)")
         cols: list[str] = column_manager.name_clean
@@ -274,7 +278,7 @@ class WkflDataClean(WorkflowStandardBase):
 
         return df
 
-    def execute_address_column_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+    def execute_address_column_cleaning(self, df: pd.DataFrame, column_manager) -> pd.DataFrame:
 
         t.print_equals(f"Executing cleaning operations (address columns only)")
 
@@ -393,7 +397,7 @@ class WkflDataClean(WorkflowStandardBase):
 
             # specific logic for class_codes
             if id == "class_codes":
-                df: pd.DataFrame = self.execute_basic_cleaning(id, df, column_manager[id])
+                df: pd.DataFrame = self.execute_basic_cleaning(df, column_manager[id])
                 self.dfs_out[id] = df
                 continue
 
@@ -401,9 +405,9 @@ class WkflDataClean(WorkflowStandardBase):
             df: pd.DataFrame = self.execute_pre_cleaning(id, df, column_manager[id])
 
             # # MAIN CLEANING OPERATIONS
-            df: pd.DataFrame = self.execute_basic_cleaning(id, df, column_manager[id])
-            df: pd.DataFrame = self.execute_name_column_cleaning(id, df, column_manager[id])
-            df: pd.DataFrame = self.execute_address_column_cleaning(id, df, column_manager[id])
+            df: pd.DataFrame = self.execute_basic_cleaning(df, column_manager[id])
+            df: pd.DataFrame = self.execute_name_column_cleaning(df, column_manager[id])
+            df: pd.DataFrame = self.execute_address_column_cleaning(df, column_manager[id])
             # df: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df)
 
             # POST-CLEANING OPERATIONS
@@ -479,8 +483,6 @@ class WkflAddressInitial(WorkflowStandardBase):
         df = cols_df.set_is_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
         t.print_with_dots("Cleaning up PO box addresses")
         df = colm_df.fix_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
-
-
         self.dfs_out["unvalidated_addrs"] = df
 
     def summary_stats(self) -> None:
@@ -514,8 +516,88 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             - 'ROOT/geocodio/gcd_failed[FileExt]'
         - Geocodio partial files for all API call results, in 'ROOT/geocodio/partials'
     """
+
+    WKFL_NAME: str = "ADDRESS VALIDATION (GEOCODIO) WORKFLOW"
+    WKFL_DESC: str = ("Executes Geocodio API calls for unvalidated addresses. Processes and stores results in data "
+                      "directories.")
+
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_gcd_address_subset(self, df_unvalidated: pd.DataFrame, column_manager) -> pd.DataFrame:
+        """
+        Subsets unvalidated master address file by filtering out addresses that have already been validated. Returns
+        dataframe slice containing only columns required for processing Geocodio API calls.
+        """
+        if self.dfs_in["gcd_validated"] is not None:
+            validated_addrs: list[str] = list(self.dfs_in["gcd_validated"]["clean_address"].unique())
+            df_addrs: pd.DataFrame = df_unvalidated[~df_unvalidated["clean_address"].isin(validated_addrs)]
+        else:
+            df_addrs: pd.DataFrame = df_unvalidated
+        return df_addrs[column_manager["unvalidated_addrs"].geocodio_columns]
+
+    def execute_api_key_handler_warning(self, df_addrs: pd.DataFrame) -> bool:
+        """
+        Prompts user to enter geocodio API key if not already found in configs.json. Prints out warning telling user
+        how many addresses are set to be geocoded and how much id could cost them, and aborts workflow if user quits.
+        """
+        if "geocodio_api_key" not in self.config_manager.configs.keys():
+            while True:
+                console.print("\n")
+                api_key: str = Prompt.ask(
+                    "[bold cyan]Copy & paste your geocodio API key for address validation[/bold cyan]"
+                )
+                if len(api_key) > 0:
+                    self.config_manager.set("geocodio_api_key", api_key)
+                else:
+                    console.print("You must enter an API key to continue.")
+        t.print_geocodio_warning(df_addrs)
+        cont: bool = t.press_enter_to_continue("execute geocodio API calls ")
+        if not cont:
+            console.print("Aborted!")
+        return cont
+
+    def execute_geocodio_postprocessor(self, gcd_results_obj: GeocodioReturnObject):
+        """
+        Processes results of run_geocodio. Updates gcd_validated, gcd_unvalidated and gcd_failed based on results of
+        run_geocodio call. Stores final dataframes to be saved in self.dfs_out.
+        """
+        # create new dataframes from the resulting geocodio call
+        df_gcd_validated: pd.DataFrame = pd.DataFrame(gcd_results_obj["validated"])
+        df_gcd_unvalidated: pd.DataFrame = pd.DataFrame(gcd_results_obj["unvalidated"])
+        df_gcd_failed: pd.DataFrame = pd.DataFrame(gcd_results_obj["failed"])
+
+        # if there were already gcd_validated, gcd_unvalidated and gcd_failed in the directories, concatenate the new one and set to dfs_out
+        if self.dfs_in["gcd_validated"] is not None:
+            df_gcd_validated = pd.concat([self.dfs_in["gcd_validated"], df_gcd_validated], ignore_index=True)
+        if self.dfs_in["gcd_unvalidated"] is not None:
+            df_gcd_unvalidated = pd.concat([self.dfs_in["gcd_unvalidated"], df_gcd_unvalidated], ignore_index=True)
+        if self.dfs_in["gcd_failed"] is not None:
+            df_gcd_failed = pd.concat([self.dfs_in["gcd_failed"], df_gcd_failed], ignore_index=True)
+
+        # calculate stats to print
+        validated_before: int = len(self.dfs_in["gcd_validated"]) if self.dfs_in["gcd_validated"] is not None else 0
+        validated_after: int = len(df_gcd_validated)
+        validated_diff: int = validated_after - validated_before
+
+        unvalidated_before: int = len(self.dfs_in["gcd_unvalidated"]["clean_address"].unique()) if self.dfs_in["gcd_unvalidated"] is not None else 0
+        unvalidated_after: int = len(df_gcd_unvalidated["clean_address"].unique())
+        unvalidated_diff: int = unvalidated_after - unvalidated_before
+
+        failed_before: int = len(self.dfs_in["gcd_failed"]) if self.dfs_in["gcd_failed"] is not None else 0
+        failed_after: int = len(df_gcd_failed)
+        failed_diff: int = failed_after - failed_before
+
+        console.print(f"Total validated addresses: {validated_after} (+{validated_diff})")
+        console.print(f"Total unvalidated addresses: {unvalidated_after} (+{unvalidated_diff})")
+        console.print(f"Total failed addresses: {failed_after} (+{failed_diff})")
+
+        self.dfs_out: dict[str, pd.DataFrame] = {
+            "gcd_validated": df_gcd_validated,
+            "gcd_unvalidated": df_gcd_unvalidated,
+            "gcd_failed": df_gcd_failed,
+        }
 
     def load(self) -> None:
         configs = self.config_manager.configs
@@ -530,85 +612,30 @@ class WkflAddressGeocodio(WorkflowStandardBase):
 
     def process(self):
 
-        dfs = {id: df.copy() for id, df in self.dfs_in.items()}
-
         configs = self.config_manager.configs
         column_manager = {
             "unvalidated_addrs": ColumnUnvalidatedAddrs(),
             "validated_addrs": ColumnValidatedAddrs(),
         }
-        df_addrs: pd.DataFrame = self.dfs_in["unvalidated_addrs"][
-            column_manager["unvalidated_addrs"].geocodio_columns
-        ].copy()
+        dfs = {id: df.copy() for id, df in self.dfs_in.items() if df is not None}
 
+        # fetch addresses to be geocoded
+        df_addrs: pd.DataFrame = self.execute_gcd_address_subset(dfs["unvalidated_addrs"], column_manager)
 
         # get geocodio api key from user if not already exists in configs.json
-        if "geocodio_api_key" not in self.config_manager.configs.keys():
-            while True:
-                api_key: str = input("Copy & paste your geocodio API key for address validation: ")
-                if len(api_key) > 0:
-                    self.config_manager.set("geocodio_api_key", api_key)
-                    break
-                else:
-                    console.print("You must enter an API key to continue.")
-
-        # print out final warning and estimated cost
-        # print out address count to be validated using geocodio
-        # number of unique clean_address values (i.e., number of addresses to be geocoded)
-        t.print_geocodio_warning(dfs["unvalidated_addrs"])
-
-        cont: bool = t.press_enter_to_continue("execute geocodio API calls ")
-        if not cont:
-            console.print("Aborted!")
-            return
+        cont: bool = self.execute_api_key_handler_warning(df_addrs)
+        if not cont: return
 
         # call geocodio or exit
         gcd_results_obj: GeocodioReturnObject = addr.run_geocodio(
             configs["geocodio_api_key"],
             df_addrs,
-            column_manager["unvalidated_addrs"].CLEAN_ADDRESS
+            column_manager["unvalidated_addrs"].CLEAN_ADDRESS,
+            self.config_manager.configs
         )
 
-        # create new dataframes from the resulting geocodio call
-        df_validated: pd.DataFrame = pd.DataFrame(gcd_results_obj["validated"])
-        df_unvalidated: pd.DataFrame = subset_df.remove_unvalidated_addrs(  # remove all successfully validated addresses from unvalidated master address dataset loaded at beginning of workflow
-            dfs["unvalidated_addrs"],
-            [d["clean_address"] for d in gcd_results_obj["validated"]]
-        )
-        df_failed: pd.DataFrame = pd.DataFrame(gcd_results_obj["failed"])
-
-        # if there were already gcd_validated, gcd_unvalidated and gcd_failed in the directories, concatenate the new one and set to dfs_out
-        if self.dfs_in["gcd_validated"] is not None:
-            df_validated = pd.concat([self.dfs_in["gcd_validated"], df_validated], ignore_index=True)
-        if self.dfs_in["gcd_unvalidated"] is not None:
-            df_unvalidated = pd.concat([self.dfs_in["gcd_unvalidated"], df_unvalidated], ignore_index=True)
-        if self.dfs_in["gcd_failed"] is not None:
-            df_failed = pd.concat([self.dfs_in["gcd_failed"], df_failed], ignore_index=True)
-
-        validated_before: int = len(self.dfs_in["validated_addrs"]) if self.dfs_in["validated_addrs"] is not None else 0
-        validated_after: int = len(df_validated)
-        validated_diff: int = validated_after - validated_before
-
-        unvalidated_before: int = len(self.dfs_in["unvalidated_addrs"])
-        unvalidated_after: int = unvalidated_before - (validated_diff)
-        unvalidated_diff: int = unvalidated_before - unvalidated_after
-
-        failed_before: int = len(self.dfs_in["gcd_failed"]) if self.dfs_in["gcd_failed"] is not None else 0
-        failed_after: int = len(df_failed)
-        failed_diff: int = failed_after - failed_before
-
-        console.print(f"Total validated addresses: {validated_after} (+{validated_diff})")
-        console.print(f"Total unvalidated addresses: {unvalidated_after} (-{unvalidated_diff})")
-        console.print(f"Total failed addresses: {failed_after} (+{failed_diff})")
-
-        self.dfs_out: dict[str, pd.DataFrame] = {
-            "gcd_validated": df_validated,
-            "gcd_unvalidated": df_unvalidated,
-            "gcd_failed": df_failed,
-            "validated_addrs": df_validated,
-            "unvalidated_addrs": df_unvalidated,
-        }
-
+        # execute post-processor
+        self.execute_geocodio_postprocessor(gcd_results_obj)
 
     def summary_stats(self) -> None:
         pass
@@ -619,8 +646,6 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             "gcd_validated": path_gen.geocodio_gcd_validated(configs),
             "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs),
             "gcd_failed": path_gen.geocodio_gcd_failed(configs),
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
-            "validated_addrs": path_gen.processed_validated_addrs(configs),
         }
         self.save_dfs(save_map)
 
