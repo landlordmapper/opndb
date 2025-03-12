@@ -455,8 +455,13 @@ class WkflAddressInitial(WorkflowStandardBase):
             -'ROOT/processed/unvalidated_addrs[FileExt]'
     """
     # todo: specify to use clean_address to associate with validated addr object
+
+    WKFL_NAME: str = "INITIAL ADDRESS WORKFLOW"
+    WKFL_DESC: str = "Cleans up PO box addresses in preparation for Geocodio validation."
+
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def load(self):
         configs = self.config_manager.configs
@@ -466,10 +471,14 @@ class WkflAddressInitial(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     def process(self) -> None:
+        t.print_dataset_name("unvalidated_addrs")
+        t.print_equals("Executing initial address operations")
         column_manager = {"unvalidated_addrs": ColumnUnvalidatedAddrs()}
         df: pd.DataFrame = self.dfs_in["unvalidated_addrs"].copy()
-        df["is_pobox"] = subset_df.get_is_pobox(df["unvalidated_addrs"])
-        df: pd.DataFrame = colm_df.fix_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
+        t.print_with_dots("Setting is_pobox column")
+        df = cols_df.set_is_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
+        t.print_with_dots("Cleaning up PO box addresses")
+        df = colm_df.fix_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
         self.dfs_out["unvalidated_addrs"] = df
 
     def summary_stats(self) -> None:

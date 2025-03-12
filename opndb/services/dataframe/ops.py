@@ -176,6 +176,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         :param df: Dataframe to add column to
         :param col: Column in the dataframe to be used to set is_pobox
         """
+        df = df.fillna({col: ""})
         df["is_pobox"] = df[col].apply(lambda addr: clean_base.get_is_pobox(addr))
         return df
 
@@ -196,7 +197,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
             return df
         for map in raw_address_map:
             df[map["full_address"]] = df.apply(
-                lambda row: AddressBase.get_full_address(
+                lambda row: addr.get_full_address(
                     row,
                     map["address_cols"]
                 ), axis=1
@@ -225,7 +226,7 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         :param df: Dataframe to manipulate columns
         :param addr_cols: List of columns containing address strings to be cleaned
         """
-        df[col] = df[col].apply(lambda addr: addr.fix_pobox(addr))
+        df[col] = df[col].apply(lambda clean_addr: addr.fix_pobox(clean_addr))
         return df
 
 
