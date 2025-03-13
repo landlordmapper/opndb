@@ -52,6 +52,10 @@ class Processed(FileNames):
     VALIDATED_ADDRS: str = "validated_addrs"
     UNVALIDATED_ADDRS: str = "unvalidated_addrs_sample"
 
+    TAXPAYER_RECORDS_MERGED: str = "taxpayer_records_merged"
+    CORPS_MERGED: str = "corps_merged"
+    LLCS_MERGED: str = "llcs_merged"
+
     PROPS_SUBSETTED: str = "props_subsetted"
     PROPS_PREPPED: str = "props_prepped"
     PROPS_STRING_MATCHED: str = "props_string_matched"

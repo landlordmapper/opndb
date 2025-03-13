@@ -52,12 +52,12 @@ class CleanAddress(TypedDict, total=False):
     Used to generate list of unique addresses from raw data. Handles situations in which there's only a single field
     for complete address AND in which the address is broken into street, city, state and zip columns
     """
+    raw_address: str
     clean_address: str
     street: str | None
     city: str | None
     state: str | None
     zip: str | None
-
 
 class GeocodioAddressComponents(TypedDict, total=False):
     number: str

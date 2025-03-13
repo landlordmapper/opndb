@@ -248,6 +248,33 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
+    def processed_taxpayer_records_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/taxpayer_records_merged[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.TAXPAYER_RECORDS_MERGED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_corps_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/corps_merged[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.CORPS_MERGED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_llcs_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/llcs_merged[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.LLCS_MERGED,
+            configs["load_ext"]
+        )
+    @classmethod
     def processed_props_subsetted(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_subsetted[ext]"""
         return cls.generate_path(

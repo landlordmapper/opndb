@@ -308,6 +308,13 @@ class ColumnCorps(ColumnManagerBase):
             }
         ]
 
+    @property
+    def validated_address_merge(self):
+        return [
+            self.RAW_PRESIDENT_ADDRESS,
+            self.RAW_SECRETARY_ADDRESS,
+        ]
+
 
 class ColumnLLCs(ColumnManagerBase):
 
@@ -589,6 +596,14 @@ class ColumnLLCs(ColumnManagerBase):
             }
         ]
 
+    @property
+    def validated_address_merge(self):
+        return [
+            self.RAW_OFFICE_ADDRESS,
+            self.RAW_AGENT_ADDRESS,
+            self.RAW_MANAGER_MEMBER_ADDRESS,
+        ]
+
 
 class ColumnTaxpayerRecords(ColumnManagerBase):
 
@@ -655,6 +670,10 @@ class ColumnTaxpayerRecords(ColumnManagerBase):
             self.CLEAN_ADDRESS,
         ]
 
+    @property
+    def validated_address_merge(self):
+        return [self.RAW_ADDRESS]
+
 
 class ColumnProperties(ColumnManagerBase):
 
@@ -697,6 +716,7 @@ class ColumnUnvalidatedAddrs(ColumnManagerBase):
     @property
     def geocodio_columns(self):
         return [
+            self.RAW_ADDRESS,
             self.CLEAN_ADDRESS,
             self.CLEAN_STREET,
             self.CLEAN_CITY,

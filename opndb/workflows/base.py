@@ -115,6 +115,8 @@ class WorkflowBase(ABC):
             return WkflAddressGeocodio(config_manager)
         elif configs["wkfl_type"] == "name_analysis":
             return WkflNameAnalysis(config_manager)
+        elif configs["wkfl_type"] == "address_merge":
+            return WkflAddressMerge(config_manager)
         # elif configs["wkfl_type"] == "address_analysis":
         #     return WkflAddressAnalysis(config_manager)
         # elif configs["wkfl_type"] == "rental_subset":
@@ -213,7 +215,7 @@ class WkflDataClean(WorkflowStandardBase):
         t.print_equals("Executing pre-cleaning operations")
 
         # generate raw_prefixed columns
-        t.print_with_dots(f"Setting raw columns for \"{id}\"...")
+        t.print_with_dots(f"Setting raw columns for \"{id}\"")
         df: pd.DataFrame = cols_df.set_raw_columns(df, column_manager.raw)
         console.print(f"Raw columns generated ✅")
 
@@ -648,6 +650,92 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAddressMerge(WorkflowStandardBase):
+    """
+    Merges validated addresses to taxpayer, corporate and LLC records. Creates new columns for validated addresses
+    suffixed with "_v"
+
+    INPUTS:
+        - Processed taxpayer, corporate and LLC data
+            - 'ROOT/processed/taxpayer_records[FileExt]'
+            - 'ROOT/processed/corps[FileExt]'
+            - 'ROOT/processed/llcs[FileExt]'
+    OUTPUTS:
+        - Taxpayer, corporate and LLC records with validated addresses
+            - 'ROOT/processed/taxpayer_records_merged[FileExt]'
+            - 'ROOT/processed/corps_merged[FileExt]'
+            - 'ROOT/processed/llcs_merged[FileExt]'
+    """
+
+    WKFL_NAME: str = "ADDRESS MERGE WORKFLOW"
+    WKFL_DESC: str = "Merges validated addresses to address fields in taxpayer, corporate and LLC records."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {  # todo: change these back
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+            "taxpayer_records": path_gen.processed_taxpayer_records(configs),
+            "corps": path_gen.processed_corps(configs),
+            "llcs": path_gen.processed_llcs(configs),
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+
+        column_manager = {
+            "gcd_validated": ColumnValidatedAddrs(),
+            "taxpayer_records": ColumnTaxpayerRecords(),
+            "corps": ColumnCorps(),
+            "llcs": ColumnLLCs(),
+        }
+        df_valid = self.dfs_in["gcd_validated"].copy()
+
+        for id, df_in in self.dfs_in.items():
+            if id == "gcd_validated":
+                continue
+            t.print_dataset_name(id)
+            df: pd.DataFrame = df_in.copy()
+            for addr_col in column_manager[id].validated_address_merge:
+                t.print_with_dots(f"Merging validated address into {addr_col} for \"{id}\"")
+                df = merge_df.merge_validated_address(df, df_valid, addr_col)
+            self.dfs_out[id] = df
+            console.print("Validated addresses merged ✅ 🗺️ 📍")
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayer_records": path_gen.processed_taxpayer_records_merged(configs),
+            "corps": path_gen.processed_corps_merged(configs),
+            "llcs": path_gen.processed_llcs_merged(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
