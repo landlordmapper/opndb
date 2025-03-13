@@ -712,6 +712,7 @@ class WkflAddressMerge(WorkflowStandardBase):
             for addr_col in column_manager[id].validated_address_merge:
                 t.print_with_dots(f"Merging validated address into {addr_col} for \"{id}\"")
                 df = merge_df.merge_validated_address(df, df_valid, addr_col)
+            df = clean_df_base.combine_columns_parallel(df)
             self.dfs_out[id] = df
             console.print("Validated addresses merged ✅ 🗺️ 📍")
 
