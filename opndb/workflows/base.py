@@ -99,26 +99,26 @@ class WorkflowBase(ABC):
 
     def save_dfs(self, save_map: dict[str, Path]) -> None:
         """Saves dataframes to their specified paths."""
+        console.print("\n")
         for id, path in save_map.items():
             ops_df.save_df(self.dfs_out[id], path)
             console.print(f"\"{id}\" successfully saved to: \n{path}")
 
     @classmethod
-    def create_workflow(cls, config_manager: ConfigManager) -> Optional['WorkflowBase']:
+    def create_workflow(cls, config_manager: ConfigManager, wkfl_id: str) -> Optional['WorkflowBase']:
         """Instantiates workflow object based on last saved progress (config['wkfl_stage'])."""
-        configs = config_manager.configs
-        if configs["wkfl_type"] == "data_clean":
+        if wkfl_id == "data_clean":
             return WkflDataClean(config_manager)
-        elif configs["wkfl_type"] == "address_initial":
+        elif wkfl_id == "address_initial":
             return WkflAddressInitial(config_manager)
-        elif configs["wkfl_type"] == "address_geocodio":
+        elif wkfl_id == "address_geocodio":
             return WkflAddressGeocodio(config_manager)
-        elif configs["wkfl_type"] == "name_analysis":
-            return WkflNameAnalysis(config_manager)
-        elif configs["wkfl_type"] == "address_merge":
+        elif wkfl_id == "address_merge":
             return WkflAddressMerge(config_manager)
-        # elif configs["wkfl_type"] == "address_analysis":
-        #     return WkflAddressAnalysis(config_manager)
+        elif wkfl_id == "name_analysis":
+            return WkflNameAnalysis(config_manager)
+        elif wkfl_id == "address_analysis":
+            return WkflAddressAnalysis(config_manager)
         # elif configs["wkfl_type"] == "rental_subset":
         #     return WkflRentalSubset(config_manager)
         # elif configs["wkfl_type"] == "clean_merge":
@@ -143,9 +143,9 @@ class WorkflowStandardBase(WorkflowBase):
         try:
             self.load()
             self.process()
-            self.summary_stats()
+            # self.summary_stats()
             self.save()
-            self.update_configs()
+            # self.update_configs()
         except Exception as e:
             raise
 
@@ -812,31 +812,74 @@ class WkflAddressAnalysis(WorkflowStandardBase):
         - Address analysis dataset
             - 'ROOT/analysis/address_freq[FileExt]'
     """
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
+    WKFL_NAME: str = "ADDRESS ANALYSIS ADDRESS WORKFLOW"
+    WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
 
-    def load(self) -> dict[str, pd.DataFrame]:
+    ANALYSIS_FIELDS: list[str] = [
+        "name",
+        "urls",
+        "notes",
+        "is_landlord_org",
+        "is_govt_agency",
+        "is_lawfirm",
+        "is_missing_suite",
+        "is_financial_services",
+        "is_assoc_bus",
+        "fix_address",
+        "is_virtual_office_agent",
+        "yelp_urls",
+        "is_nonprofit",
+        "google_urls",
+        "is_ignore_misc",
+        "google_place_id"
+    ]
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
         load_map: dict[str, Path] = {
-            "validated_addrs": path_gen.processed_validated_addrs(self.configs),
+            "taxpayer_records": path_gen.processed_taxpayer_records_merged(configs),
+            "corps": path_gen.processed_corps_merged(configs),
+            "llcs": path_gen.processed_llcs_merged(configs),
         }
-        return self.set_working_dfs(load_map)
+        self.load_dfs(load_map)
 
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-        # create & save dataframe with unique validated addresses & their count
-        df_addr_counts: pd.DataFrame = ops_df.get_frequency_df(
-            dfs["validated_addrs"],
-            va.FORMATTED_ADDRESS
-        )
-        return dfs
+    def process(self) -> None:
+        column_manager = {
+            "taxpayer_records": ColumnTaxpayerRecords(),
+            "corps": ColumnCorps(),
+            "llcs": ColumnLLCs(),
+        }
+        addrs = []
+        for id, df_in in self.dfs_in.items():
+            for addr_col in column_manager[id].validated_address_merge:
+                addrs.extend(
+                    [
+                        addr
+                        for addr in df_in[f"{addr_col}_v"]
+                        if pd.notnull(addr) and addr != ""
+                    ]
+                )
+        df_addrs: pd.DataFrame = pd.DataFrame(columns=["address"], data=addrs)
+        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df_addrs, "address")
+        for field in self.ANALYSIS_FIELDS:
+            df_freq[field] = ""
+        self.dfs_out["address_analysis"] = df_freq
 
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+    def summary_stats(self) -> None:
         pass
 
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
-        save_map: dict[str, Path] = {}
-        self.save_dfs(dfs, save_map)
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "address_analysis": path_gen.analysis_address_analysis(configs),
+        }
+        self.save_dfs(save_map)
 
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    def update_configs(self) -> None:
         pass
 
 

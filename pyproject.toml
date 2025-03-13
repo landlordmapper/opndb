@@ -15,6 +15,7 @@ dependencies = [
     "Levenshtein==0.25.1",
     "markdown>=3.7",
     "weasyprint>=64.1",
+    "questionary>=2.1.0",
 ]
 
 [dependency-groups]

@@ -376,15 +376,15 @@ class PathGenerators(UtilsBase):
             Analysis.FIXING_TAX_NAMES,
             configs["load_ext"]
         )
-    @classmethod
-    def analysis_fixing_tax_addrs(cls, configs: WorkflowConfigs) -> Path:
-        """:returns: ROOT/analysis/fixing_tax_addrs[ext]"""
-        return cls.generate_path(
-            configs["data_root"],
-            Dirs.ANALYSIS,
-            Analysis.FIXING_TAX_ADDRS,
-            configs["load_ext"]
-        )
+    # @classmethod
+    # def analysis_fixing_tax_addrs(cls, configs: WorkflowConfigs) -> Path:
+    #     """:returns: ROOT/analysis/fixing_tax_addrs[ext]"""
+    #     return cls.generate_path(
+    #         configs["data_root"],
+    #         Dirs.ANALYSIS,
+    #         Analysis.FIXING_TAX_ADDRS,
+    #         configs["load_ext"]
+    #     )
     @classmethod
     def analysis_address_analysis(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/analysis/address_analysis[ext]"""

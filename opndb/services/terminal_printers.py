@@ -24,6 +24,7 @@ from rich.traceback import install
 from datetime import datetime
 from time import sleep
 import random
+import questionary
 
 
 # Install rich traceback handler
@@ -36,6 +37,93 @@ class TerminalBase:
     """Messages & statements printed during stage 1 of the opndb workflow"""
 
     # todo: make color scheme of terminal printers like the pycharm color scheme
+
+    @classmethod
+    # Alternative implementation using the questionary library which has better support for arrow key navigation
+    def select_workflow(cls) -> str:
+        """
+        Prompts the user to select a workflow using questionary for better arrow key navigation.
+        Returns the identifier string of the selected workflow.
+        """
+        console = Console()
+
+        # Display selection prompt inside a panel
+        panel = Panel("Select a workflow to execute.", title="[bold cyan]Workflow Selection[/bold cyan]",
+                      border_style="cyan")
+        console.print(panel)
+
+        # Ask if user wants to start from the beginning
+        start_from_beginning = questionary.select(
+            "Do you want to start from the beginning or execute a specific workflow?",
+            choices=["Start from beginning", "Select specific workflow"]
+        ).ask()
+
+        if start_from_beginning == "Start from beginning":
+            panel = Panel("Starting from the beginning with Data Cleaning workflow.", border_style="green")
+            console.print(panel)
+            return "data_clean"
+
+        # Define the available workflows
+        workflow_choices = [
+            {"name": "Data Cleaning", "value": "data_clean"},
+            {"name": "Initial Address Cleaning", "value": "address_initial"},
+            {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
+            {"name": "Address Merge", "value": "address_merge"},
+            {"name": "Name Analysis", "value": "name_analysis"},
+            {"name": "Address Analysis", "value": "address_analysis"},
+        ]
+
+        # Let user select a workflow
+        workflow_id = questionary.select(
+            "Select a workflow to execute:",
+            choices=[w["name"] for w in workflow_choices]
+        ).ask()
+
+        # Find the selected workflow ID
+        for w in workflow_choices:
+            if w["name"] == workflow_id:
+                panel = Panel(f"Selected workflow: [bold green]{w['name']}[/bold green]", border_style="green")
+                console.print(panel)
+                return w["value"]
+
+        return "data_clean"
+        # console = Console()
+        # console.print("\n[bold cyan]Workflow Selection[/bold cyan]")
+        #
+        # # Ask if user wants to start from the beginning
+        # start_from_beginning = questionary.select(
+        #     "Do you want to start from the beginning or execute a specific workflow?",
+        #     choices=["Start from beginning", "Select specific workflow"]
+        # ).ask()
+        #
+        # if start_from_beginning == "Start from beginning":
+        #     console.print("[green]Starting from the beginning with Data Cleaning workflow.[/green]")
+        #     return "data_clean"
+        #
+        # # Define the available workflows
+        # workflow_choices = [
+        #     {"name": "Data Cleaning", "value": "data_clean"},
+        #     {"name": "Inital Address Cleaning", "value": "address_initial"},
+        #     {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
+        #     {"name": "Address Merge", "value": "address_merge"},
+        #     {"name": "Name Analysis", "value": "name_analysis"},
+        #     {"name": "Address Analysis", "value": "address_analysis"},
+        # ]
+        #
+        # # Let user select a workflow
+        # workflow_id = questionary.select(
+        #     "Select a workflow to execute:",
+        #     choices=[f"{w['name']}" for w in workflow_choices]
+        # ).ask()
+        #
+        # # Find the selected workflow ID
+        # for w in workflow_choices:
+        #     if w["name"] == workflow_id:
+        #         console.print(f"[green]Selected workflow: {w['name']}[/green]")
+        #         console.print("\n")
+        #         return w["value"]
+        #
+        # return "data_clean"
 
     @classmethod
     def print_dataset_name(cls, dataset: str):
@@ -282,7 +370,7 @@ class TerminalBase:
                 Text("System Status", style="bold blue underline"),
                 Text(""),
                 Text("✅ Database Connection", style="green"),
-                Text("⚠️  API Response Time", style="yellow"),
+                Text("⚠️ API Response Time", style="yellow"),
                 Text("❌ Background Jobs", style="red"),
                 Text(""),
                 Text("Last Updated: " + datetime.now().strftime("%H:%M:%S"), style="dim")
@@ -298,125 +386,6 @@ class TerminalBase:
             raise Exception("This is a demonstration of Rich's error handling!")
         except Exception as e:
             console.print_exception()
-
-    # @classmethod
-    # def print_test(cls):
-    #     """
-    #     Demonstrate various ways to print styled output using Click and Rich.
-    #     """
-    #     # Original functionality
-    #     click.echo("Basic Click message")
-    #     click.secho("Colored Click message", fg='green')
-    #     click.secho("Bold Click message", bold=True)
-    #     click.secho("Error message", fg='red', bold=True)
-    #     click.secho("Warning message", fg='yellow')
-    #     click.secho("Success message", fg='green', bg='black')
-    #
-    #     console.print("\n=== Rich Basic Formatting ===")
-    #     console.print("Basic Rich message")
-    #     console.print("Styled Rich message", style="bold blue")
-    #     console.print("[red]Colored[/red] [green]Rich[/green] [blue]message[/blue]")
-    #
-    #     # Tables with different box styles
-    #     console.print("\n=== Rich Tables ===")
-    #     table = Table(title="Sample Data", box=box.DOUBLE_EDGE)
-    #     table.add_column("ID", style="cyan")
-    #     table.add_column("Name", style="magenta")
-    #     table.add_column("Status", style="green")
-    #     table.add_row("1", "Task One", "Complete")
-    #     table.add_row("2", "Task Two", "Pending")
-    #     console.print(table)
-    #
-    #     # Tree structure
-    #     console.print("\n=== Rich Tree Structure ===")
-    #     tree = Tree("📁 Project Root")
-    #     src = tree.add("📁 src")
-    #     src.add("📄 main.py")
-    #     src.add("📄 utils.py")
-    #     tests = tree.add("📁 tests")
-    #     tests.add("📄 test_main.py")
-    #     console.print(tree)
-    #
-    #     # Code syntax highlighting
-    #     console.print("\n=== Rich Syntax Highlighting ===")
-    #     code = '''
-    # def hello_world():
-    #     print("Hello, World!")
-    #     return True
-    #     '''
-    #     syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
-    #     console.print(syntax)
-    #
-    #     # Rich native styling (more reliable than markdown)
-    #     console.print("\n=== Rich Native Styling ===")
-    #
-    #     styled_content = [
-    #         "[bold blue]Project Status Report[/bold blue]",
-    #         "",
-    #         "[bold cyan]Overview[/bold cyan]",
-    #         "This is a demonstration of Rich's native styling capabilities.",
-    #         "",
-    #         "[bold cyan]Features[/bold cyan]",
-    #         "✨ [bold]Rich[/bold] formatting support",
-    #         "📊 Tables and charts",
-    #         "🎨 Syntax highlighting",
-    #         "",
-    #         "[bold cyan]Code Example[/bold cyan]"
-    #     ]
-    #
-    #     # Create a syntax highlighted code block
-    #     code = '''def hello():
-    #     return "Hello World!"'''
-    #     syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
-    #
-    #     # Print everything in a panel
-    #     console.print(Panel(
-    #         "\n".join(styled_content) + "\n\n" + str(syntax) + "\n\n" +
-    #         "[dim]For more information, visit the Rich documentation[/dim]\n" +
-    #         "[yellow]Note:[/yellow] Rich styling works consistently across terminals",
-    #         title="Styled Output Demo",
-    #         border_style="blue"
-    #     ))
-    #
-    #     # Columns layout
-    #     console.print("\n=== Rich Columns ===")
-    #     columns = Columns([
-    #         Panel("Column 1", style="red"),
-    #         Panel("Column 2", style="green"),
-    #         Panel("Column 3", style="blue")
-    #     ])
-    #     console.print(columns)
-    #
-    #     # Advanced progress bars and spinners
-    #     console.print("\n=== Rich Progress Indicators ===")
-    #     with Progress(
-    #             SpinnerColumn(),
-    #             TextColumn("[progress.description]{task.description}"),
-    #             transient=True
-    #     ) as progress:
-    #         progress.add_task("Processing...", total=None)
-    #         sleep(2)
-    #
-    #     # Layout system
-    #     console.print("\n=== Rich Layout System ===")
-    #     layout = Layout()
-    #     layout.split(
-    #         Layout(Panel("Header", style="bold blue"), size=3),
-    #         Layout(Panel("Main Content", style="green")),
-    #         Layout(Panel("Footer", style="bold blue"), size=3)
-    #     )
-    #     console.print(layout)
-    #
-    #     # Standard progress bar (from original)
-    #     console.print("\n=== Standard Progress Bar ===")
-    #     for _ in track(range(5), description="Processing..."):
-    #         sleep(0.2)
-    #
-    #     # Status summary (from original)
-    #     console.print("\n[bold]Status Summary:[/bold]")
-    #     console.print("✅ Task 1 completed", style="green")
-    #     console.print("⚠️  Task 2 pending", style="yellow")
-    #     console.print("❌ Task 3 failed", style="red")
 
     @classmethod
     def print_welcome(cls):
