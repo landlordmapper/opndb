@@ -224,7 +224,7 @@ class WkflDataClean(WorkflowStandardBase):
 
         # create raw_address field
         t.print_with_dots(f"Generating full raw address columns (if not already present)")
-        df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.raw_address_map)
+        df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.raw_address_map, id)
         console.print(f"Full raw address columns generated ✅")
 
         # props_taxpayers-specific logic - concatenate raw name + raw address
@@ -321,7 +321,7 @@ class WkflDataClean(WorkflowStandardBase):
 
         # add clean full address fields
         t.print_with_dots("Setting clean full address fields")
-        df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.clean_address_map)
+        df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.clean_address_map, id)
         t.print_with_dots("Full clean address fields generated ✅")
 
         # props_taxpayers-specific logic

@@ -215,14 +215,18 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df
 
     @classmethod
-    def set_full_address_fields(cls, df: pd.DataFrame, raw_address_map) -> pd.DataFrame:
+    def set_full_address_fields(cls, df: pd.DataFrame, raw_address_map, id: str) -> pd.DataFrame:
         if raw_address_map is None:
             return df
+        llc: bool = False
+        if id == "llcs":
+            llc: bool = True
         for map in raw_address_map:
             df[map["full_address"]] = df.apply(
                 lambda row: addr.get_full_address(
                     row,
-                    map["address_cols"]
+                    map["address_cols"],
+                    llc
                 ), axis=1
             )
         return df

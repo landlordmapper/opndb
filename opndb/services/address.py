@@ -397,16 +397,25 @@ class AddressBase:
         """Removes validated addresses from 'DATA_ROOT/processed/unvalidated_addrs.csv'"""
         pass
 
-
-
     @classmethod
-    def get_full_address(cls, row: pd.Series, address_cols: list[str]) -> str:
+    def get_full_address(cls, row: pd.Series, address_cols: list[str], llc: bool = False) -> str:
         address_parts = [
             str(row[col])
             for col in address_cols
             if pd.notna(row[col]) and str(row[col])
         ]
-        return ", ".join(address_parts)
+
+        if llc:
+            return ", ".join(address_parts)
+
+        if "raw_street" not in row or pd.isna(row["raw_street"]):
+            return ""
+
+        if len(address_parts) > 1:
+            full_address: str = ", ".join(address_parts[:-1])
+            return f"{full_address} {address_parts[-1]}"
+        else:
+            return address_parts[0]
 
     @classmethod
     def fix_pobox(cls, address: str) -> str:
