@@ -110,16 +110,22 @@ class WorkflowBase(ABC):
         """Instantiates workflow object based on last saved progress (config['wkfl_stage'])."""
         if wkfl_id == "data_clean":
             return WkflDataClean(config_manager)
-        elif wkfl_id == "address_initial":
-            return WkflAddressInitial(config_manager)
+        elif wkfl_id == "address_clean":
+            return WkflAddressClean(config_manager)
         elif wkfl_id == "address_geocodio":
             return WkflAddressGeocodio(config_manager)
+        elif wkfl_id == "fix_units_initial":
+            return WkflFixUnitsInitial(config_manager)
+        elif wkfl_id == "fix_units_final":
+            return WkflFixUnitsFinal(config_manager)
         elif wkfl_id == "address_merge":
             return WkflAddressMerge(config_manager)
-        elif wkfl_id == "name_analysis":
-            return WkflNameAnalysis(config_manager)
-        elif wkfl_id == "address_analysis":
-            return WkflAddressAnalysis(config_manager)
+        elif wkfl_id == "name_analysis_initial":
+            return WkflNameAnalysisInitial(config_manager)
+        elif wkfl_id == "address_analysis_initial":
+            return WkflAddressAnalysisInitial(config_manager)
+        elif wkfl_id == "analysis_final":
+            return WkflAnalysisFinal(config_manager)
         # elif configs["wkfl_type"] == "rental_subset":
         #     return WkflRentalSubset(config_manager)
         # elif configs["wkfl_type"] == "clean_merge":
@@ -454,7 +460,7 @@ class WkflDataClean(WorkflowStandardBase):
         pass
 
 
-class WkflAddressInitial(WorkflowStandardBase):
+class WkflAddressClean(WorkflowStandardBase):
     """
     Initial address validation workflow. Cleans up & validates PO box addresses, updates validated and unvalidated
     master address files.
@@ -665,6 +671,124 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         pass
 
 
+class WkflFixUnitsInitial(WorkflowStandardBase):
+    """
+    Subsets validated addresses whose raw addresses contain secondary unit numbers but whose validated addresses do not.
+    """
+    WKFL_NAME: str = "INITIAL FIX UNITS WORKFLOW"
+    WKFL_DESC: str = ("Outputs validated addresses whose raw addresses contain secondary unit numbers but whose "
+                      "validated addresses do not.")
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {  # todo: change these back
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+
+        column_manager = {
+            "gcd_validated": ColumnValidatedAddrs(),
+        }
+
+        # detect missing unit numbers in validated addresses via regex analysis
+        df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        # subset to exclude pobox addresses
+        df_unit = df_unit[df_unit["is_pobox"] == "False"]
+        # subset validated addresses for only ones which do not have a secondary number
+        df_unit = df_unit[df_unit["secondarynumber"].isnull()]
+        # check street addresses for digits at the end
+        df_unit = cols_df.set_check_sec_num(df_unit, "clean_address")
+        # subset check_sec_num results to only include rows where a number WAS detected
+        df_unit = df_unit[df_unit["check_sec_num"].notnull()]
+        self.dfs_out["fixing_addrs"] = df_unit
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "fixing_addrs": path_gen.analysis_fixing_addrs(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflFixUnitsFinal(WorkflowStandardBase):
+    """
+    Changes validated addresses to include unit numbers not initially detected by the workflow.
+    """
+    WKFL_NAME: str = "FINAL FIX UNITS WORKFLOW"
+    WKFL_DESC: str = "Changes validated addresses to include unit numbers not initially detected by the workflow."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {  # todo: change these back
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+            "fixing_addrs": path_gen.analysis_fixing_addrs(configs),
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # fix addresses - changes addresses whose unit numbers need adding to the master validated address dataset - add to secondarynumber column AND formatted address
+        pass
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
 class WkflAddressMerge(WorkflowStandardBase):
     """
     Merges validated addresses to taxpayer, corporate and LLC records. Creates new columns for validated addresses
@@ -752,7 +876,7 @@ class WkflAddressMerge(WorkflowStandardBase):
         pass
 
 
-class WkflNameAnalysis(WorkflowStandardBase):
+class WkflNameAnalysisInitial(WorkflowStandardBase):
     """
     Initial taxpayer name analysis workflow. Generates frequency and name analysis dataframes.
 
@@ -811,7 +935,7 @@ class WkflNameAnalysis(WorkflowStandardBase):
         pass
 
 
-class WkflAddressAnalysis(WorkflowStandardBase):
+class WkflAddressAnalysisInitial(WorkflowStandardBase):
     """
     Address analysis
 
@@ -884,18 +1008,6 @@ class WkflAddressAnalysis(WorkflowStandardBase):
             df_freq[field] = ""
         self.dfs_out["address_analysis"] = df_freq
 
-        # detect missing unit numbers in validated addresses via regex analysis
-        df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
-        # subset to exclude pobox addresses
-        df_unit = df_unit[df_unit["is_pobox"] == "False"]
-        # subset validated addresses for only ones which do not have a secondary number
-        df_unit = df_unit[df_unit["secondarynumber"].isnull()]
-        # check street addresses for digits at the end
-        df_unit = cols_df.set_check_sec_num(df_unit, "clean_address")
-        # subset check_sec_num results to only include rows where a number WAS detected
-        df_unit = df_unit[df_unit["check_sec_num"].notnull()]
-        self.dfs_out["fixing_addrs"] = df_unit
-
     def summary_stats(self) -> None:
         pass
 
@@ -906,6 +1018,45 @@ class WkflAddressAnalysis(WorkflowStandardBase):
             "fixing_addrs": path_gen.analysis_fixing_addrs(configs),
         }
         self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAnalysisFinal(WorkflowStandardBase):
+    """
+    Fixes taxpayer names based on standardized spellings manually specified in the fixing_tax_names dataset. Adds
+    boolean columns to taxpayer records for is_common_name and is_landlord_org, based on manual input in
+    fixing_tax_names and address_analysis datasets.
+
+    INPUTS:
+    OUTPUTS:
+    """
+    WKFL_NAME: str = "FIX NAMES ADDRESSES WORKFLOW"
+    WKFL_DESC: str = "Changes taxpayer names and validated addresses based on manual input."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+            "taxpayer_records": path_gen.processed_taxpayer_records_merged(configs),
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        # fix_banks - replace all taxpayer names with the names specified in the dataset
+        # add is_common_name column to taxpayer records
+        # add is_landlord_org column to taxpayer records
+        pass
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
 
     def update_configs(self) -> None:
         pass
@@ -925,24 +1076,19 @@ class WkflRentalSubset(WorkflowStandardBase):
         - Rental-subsetted taxpayer dataset
             - 'ROOT/processed/tax_records_subsetted[FileExt]'
     """
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
 
-    def load(self) -> dict[str, pd.DataFrame]:
+    def load(self) -> None:
+        configs = self.config_manager.configs
         load_map: dict[str, Path] = {
-            "properties": path_gen.processed_properties(self.configs),
-            "taxpayer_records": path_gen.processed_taxpayer_records(self.configs),
-            "validated_addrs": path_gen.processed_validated_addrs(self.configs),
-            "class_codes": path_gen.processed_class_codes(self.configs)
+            "properties": path_gen.processed_properties(configs),
+            "taxpayer_records": path_gen.processed_taxpayer_records(configs),
+            "class_codes": path_gen.processed_class_codes(configs)
         }
-        return self.set_working_dfs(load_map)
+        self.load_dfs(load_map)
 
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-        # merge validated_addrs
-        df_taxpayers_addrs: pd.DataFrame = merge_df.merge_validated_addrs(
-            dfs["taxpayer_records"],
-            dfs["validated_addrs"],
-        )
+    def process(self) -> dict[str, pd.DataFrame]:
         # add is_rental column to properties
         dfs["properties"]: pd.DataFrame = cols_df.set_is_rental(
             df_taxpayers_addrs,
@@ -960,14 +1106,15 @@ class WkflRentalSubset(WorkflowStandardBase):
             "properties_subsetted": dfs["properties"],
         }
 
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+    def summary_stats(self):
         pass
 
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
+    def save(self) -> None:
+        configs = self.config_manager.configs
         save_map: dict[str, Path] = {}
-        self.save_dfs(dfs, save_map)
+        self.save_dfs(save_map)
 
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    def update_configs(self) -> None:
         pass
 
 
