@@ -72,7 +72,6 @@ def start(config_manager: ConfigManager):
     console.print("\n")
     while True:
         wkfl_id: str = t.select_workflow()
-        console.print(wkfl_id)
         wkfl = WorkflowBase.create_workflow(config_manager, wkfl_id)
         wkfl.execute()
         break

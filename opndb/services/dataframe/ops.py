@@ -241,6 +241,11 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
                 df[f"raw_{col}"] = df[col].copy()
         return df
 
+    @classmethod
+    def set_check_sec_num(cls, df: pd.DataFrame, addr_col: str) -> pd.DataFrame:
+        df["check_sec_num"] = df[addr_col].apply(lambda address: clean_addr.check_sec_num(address))
+        return df[df["is_pobox"] == "False"]
+
 
 class DataFrameColumnManipulators(DataFrameOpsBase):
     """Dataframe operations that manipulate or transform an existing dataframe column."""

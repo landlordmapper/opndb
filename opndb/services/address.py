@@ -3,6 +3,8 @@ from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 import time
 import traceback
+from pprint import pprint
+
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 
 import pandas as pd
@@ -15,7 +17,7 @@ from opndb.types.base import (
     CleanAddress,
     GeocodioResult,
     GeocodioResponse,
-    GeocodioResultProcessed,
+    GeocodioReworkflsultProcessed,
     GeocodioResultFlat, GeocodioResultFinal, GeocodioReturnObject, WorkflowConfigs
 )
 from opndb.services.dataframe.base import (
@@ -330,8 +332,10 @@ class AddressBase:
                             clean_address: CleanAddress = row.to_dict()  # create CleanAddress object from dataframe row
                             results: list[GeocodioResult] = future.result()  # fetch results returned by call_geocodio()
                             # flatten geocodio results to include lat, lng, accuracy and formatted address
-                            flattened_results: list[GeocodioResultFlat] = [cls.flatten_geocodio_result(result) for result in results]
                             if results:  # API call succeeded, begin processing results
+                                flattened_results: list[GeocodioResultFlat] = [
+                                    cls.flatten_geocodio_result(result) for result in results
+                                ]
                                 results_processed: GeocodioResultProcessed = cls.process_geocodio_results(
                                     clean_address,
                                     flattened_results
@@ -339,6 +343,7 @@ class AddressBase:
                                 if len(results_processed["results_parsed"]) == 1:
                                     new_validated = results_processed["results_parsed"][0]
                                     new_validated["clean_address"] = clean_address["clean_address"]
+                                    new_validated["is_pobox"] = clean_address["is_pobox"]
                                     return_obj["validated"].append(new_validated)
                                 else:
                                     for result in results_processed["results_parsed"]:

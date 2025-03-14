@@ -709,6 +709,7 @@ class ColumnUnvalidatedAddrs(ColumnManagerBase):
     CLEAN_STATE: str = "clean_state"
     CLEAN_ZIP: str = "clean_zip"
     CLEAN_ADDRESS: str = "clean_address"
+    IS_POBOX: str = "is_pobox"
 
     def __init__(self):
         super().__init__()
@@ -722,6 +723,7 @@ class ColumnUnvalidatedAddrs(ColumnManagerBase):
             self.CLEAN_CITY,
             self.CLEAN_STATE,
             self.CLEAN_ZIP,
+            self.IS_POBOX
         ]
 
 

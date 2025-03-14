@@ -58,6 +58,7 @@ class CleanAddress(TypedDict, total=False):
     city: str | None
     state: str | None
     zip: str | None
+    is_pobox: bool
 
 class GeocodioAddressComponents(TypedDict, total=False):
     number: str
@@ -114,6 +115,7 @@ class GeocodioResultFlat(TypedDict, total=False):
     accuracy: int | float
     formatted_address: str
     clean_address: str
+    is_pobox: bool
 
 class GeocodioResultProcessed(TypedDict):
     clean_address: CleanAddress
@@ -139,6 +141,7 @@ class GeocodioResultFinal(TypedDict):
     lat: str
     accuracy: int | float
     formatted_address: str
+    is_pobox: bool
 
 class GeocodioReturnObject(TypedDict):
     validated: list[GeocodioResultFinal]

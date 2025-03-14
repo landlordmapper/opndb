@@ -3,6 +3,7 @@ import shutil
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
+from pprint import pprint
 from typing import Any, ClassVar, Optional
 
 # 2. Third-party imports
@@ -356,7 +357,8 @@ class WkflDataClean(WorkflowStandardBase):
             "corps": column_managers["corps"].unvalidated_col_objs,
             "llcs": column_managers["llcs"].unvalidated_col_objs,
         }
-        self.dfs_out["unvalidated_addrs"] = subset_df.generate_unvalidated_df(self.dfs_out, col_map)
+        df_unvalidated: pd.DataFrame = subset_df.generate_unvalidated_df(self.dfs_out, col_map)
+        self.dfs_out["unvalidated_addrs"] = df_unvalidated.drop_duplicates(subset=["clean_address"])
         console.print("\"unvalidated_addrs\" successfully generated ✅")
 
     # --------------
@@ -370,6 +372,12 @@ class WkflDataClean(WorkflowStandardBase):
             "llcs": path_gen.raw_llcs(configs),
             "class_codes": path_gen.raw_class_codes(configs)
         }
+        # load_map: dict[str, Path] = {  # todo: change these back
+        #     "taxpayer_records": path_gen.processed_taxpayer_records(configs),
+        #     "corps": path_gen.processed_corps(configs),
+        #     "llcs": path_gen.processed_llcs(configs),
+        #     "class_codes": path_gen.raw_class_codes(configs)
+        # }
         self.load_dfs(load_map)
 
     # -----------------
@@ -579,21 +587,24 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             df_gcd_failed = pd.concat([self.dfs_in["gcd_failed"], df_gcd_failed], ignore_index=True)
 
         # calculate stats to print
-        validated_before: int = len(self.dfs_in["gcd_validated"]) if self.dfs_in["gcd_validated"] is not None else 0
-        validated_after: int = len(df_gcd_validated)
-        validated_diff: int = validated_after - validated_before
+        if not df_gcd_validated.empty:
+            validated_before: int = len(self.dfs_in["gcd_validated"]) if self.dfs_in["gcd_validated"] is not None else 0
+            validated_after: int = len(df_gcd_validated)
+            validated_diff: int = validated_after - validated_before
+            console.print(f"Total validated addresses: {validated_after} (+{validated_diff})")
 
-        unvalidated_before: int = len(self.dfs_in["gcd_unvalidated"]["clean_address"].unique()) if self.dfs_in["gcd_unvalidated"] is not None else 0
-        unvalidated_after: int = len(df_gcd_unvalidated["clean_address"].unique())
-        unvalidated_diff: int = unvalidated_after - unvalidated_before
+        if not df_gcd_unvalidated.empty:
+            unvalidated_before: int = len(self.dfs_in["gcd_unvalidated"]["clean_address"].unique()) if self.dfs_in["gcd_unvalidated"] is not None else 0
+            unvalidated_after: int = len(df_gcd_unvalidated["clean_address"].unique())
+            unvalidated_diff: int = unvalidated_after - unvalidated_before
+            console.print(f"Total unvalidated addresses: {unvalidated_after} (+{unvalidated_diff})")
 
-        failed_before: int = len(self.dfs_in["gcd_failed"]) if self.dfs_in["gcd_failed"] is not None else 0
-        failed_after: int = len(df_gcd_failed)
-        failed_diff: int = failed_after - failed_before
+        if not df_gcd_failed.empty:
+            failed_before: int = len(self.dfs_in["gcd_failed"]) if self.dfs_in["gcd_failed"] is not None else 0
+            failed_after: int = len(df_gcd_failed)
+            failed_diff: int = failed_after - failed_before
+            console.print(f"Total failed addresses: {failed_after} (+{failed_diff})")
 
-        console.print(f"Total validated addresses: {validated_after} (+{validated_diff})")
-        console.print(f"Total unvalidated addresses: {unvalidated_after} (+{unvalidated_diff})")
-        console.print(f"Total failed addresses: {failed_after} (+{failed_diff})")
 
         self.dfs_out: dict[str, pd.DataFrame] = {
             "gcd_validated": df_gcd_validated,
@@ -841,6 +852,7 @@ class WkflAddressAnalysis(WorkflowStandardBase):
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, Path] = {
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
             "taxpayer_records": path_gen.processed_taxpayer_records_merged(configs),
             "corps": path_gen.processed_corps_merged(configs),
             "llcs": path_gen.processed_llcs_merged(configs),
@@ -849,12 +861,15 @@ class WkflAddressAnalysis(WorkflowStandardBase):
 
     def process(self) -> None:
         column_manager = {
+            "gcd_validated": ColumnValidatedAddrs(),
             "taxpayer_records": ColumnTaxpayerRecords(),
             "corps": ColumnCorps(),
             "llcs": ColumnLLCs(),
         }
         addrs = []
         for id, df_in in self.dfs_in.items():
+            if id == "gcd_validated":
+                continue
             for addr_col in column_manager[id].validated_address_merge:
                 addrs.extend(
                     [
@@ -869,6 +884,18 @@ class WkflAddressAnalysis(WorkflowStandardBase):
             df_freq[field] = ""
         self.dfs_out["address_analysis"] = df_freq
 
+        # detect missing unit numbers in validated addresses via regex analysis
+        df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        # subset to exclude pobox addresses
+        df_unit = df_unit[df_unit["is_pobox"] == "False"]
+        # subset validated addresses for only ones which do not have a secondary number
+        df_unit = df_unit[df_unit["secondarynumber"].isnull()]
+        # check street addresses for digits at the end
+        df_unit = cols_df.set_check_sec_num(df_unit, "clean_address")
+        # subset check_sec_num results to only include rows where a number WAS detected
+        df_unit = df_unit[df_unit["check_sec_num"].notnull()]
+        self.dfs_out["fixing_addrs"] = df_unit
+
     def summary_stats(self) -> None:
         pass
 
@@ -876,6 +903,7 @@ class WkflAddressAnalysis(WorkflowStandardBase):
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
             "address_analysis": path_gen.analysis_address_analysis(configs),
+            "fixing_addrs": path_gen.analysis_fixing_addrs(configs),
         }
         self.save_dfs(save_map)
 

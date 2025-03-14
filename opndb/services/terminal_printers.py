@@ -84,6 +84,7 @@ class TerminalBase:
             if w["name"] == workflow_id:
                 panel = Panel(f"Selected workflow: [bold green]{w['name']}[/bold green]", border_style="green")
                 console.print(panel)
+                console.print("\n")
                 return w["value"]
 
         return "data_clean"

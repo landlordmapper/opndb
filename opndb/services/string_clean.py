@@ -1,6 +1,7 @@
 import re
 import string
 
+import numpy as np
 import pandas as pd
 import word2number as w2n
 
@@ -429,6 +430,20 @@ class CleanStringAddress(CleanStringBase):
                 return str(int("".join(filter(str.isdigit, text)))).zfill(5)
         else:
             return ""
+
+    @classmethod
+    def check_sec_num(cls, text: str) -> str | float:
+        """
+        Sting passed into `text` must be fully formatted address. Searches for numbers at the end of street addresses
+        to check for missing secondary numbers in the validated addresses.
+        """
+        street: str = text.split(",")[0].strip()
+        match = re.search(r"(\d+)$", street)
+        if match:
+            return match.group(1)
+        else:
+            return np.nan
+
 
 
 class CleanStringAccuracy(CleanStringBase):
