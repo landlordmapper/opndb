@@ -84,7 +84,7 @@ class DataFrameMergers(DataFrameOpsBase):
 class DataFrameColumnGenerators(DataFrameOpsBase):
     """Dataframe operations that generate new columns."""
     @classmethod
-    def set_is_rental(cls, df_props: pd.DataFrame, df_class_codes: pd.DataFrame) -> pd.DataFrame:
+    def set_is_rental_initial(cls, df_props: pd.DataFrame, df_class_codes: pd.DataFrame) -> pd.DataFrame:
         """
         Subsets property dataframe to only include properties associated with rental class codes. Handles situations in
         which multiple class codes are associated with a single property and are separated by commas.
@@ -101,6 +101,15 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
             )
         )
         return df_props
+
+    @classmethod
+    def set_is_rental_final(cls, df_props: pd.DataFrame, nonrental_records: list[str]) -> pd.DataFrame:
+        # Find rows where "raw_name_address" is in nonrental_records
+        mask = df_props["raw_name_address"].isin(nonrental_records)
+        # Set "is_rental" column to True for matching rows
+        df_props.loc[mask, "is_rental"] = True
+        return df_props
+
 
     @classmethod
     def set_core_name(cls, df: pd.DataFrame, name_col: str) -> pd.DataFrame:

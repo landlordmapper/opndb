@@ -203,6 +203,15 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
+    def processed_properties_rentals(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/taxpayer_records[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.PROPERTIES_RENTALS,
+            configs["load_ext"]
+        )
+    @classmethod
     def processed_corps(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/corps[ext]"""
         return cls.generate_path(

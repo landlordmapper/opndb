@@ -336,11 +336,11 @@ class WkflDataClean(WorkflowStandardBase):
         if id == "props_taxpayers":
 
             # generate clean name + address concat field
-            t.print_with_dots(f"Concatenating clean name and address fields")
-            df: pd.DataFrame = cols_df.set_name_address_concat(
-                df, column_manager.name_address_concat_map["clean"]
-            )
-            console.print(f"\"name_address\" field generated ✅")
+            # t.print_with_dots(f"Concatenating clean name and address fields")
+            # df: pd.DataFrame = cols_df.set_name_address_concat(
+            #     df, column_manager.name_address_concat_map["clean"]
+            # )
+            # console.print(f"\"name_address\" field generated ✅")
 
             # split dataframe into properties and taxpayer_records
             t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
@@ -1150,35 +1150,52 @@ class WkflRentalSubset(WorkflowStandardBase):
         configs = self.config_manager.configs
         load_map: dict[str, Path] = {
             "properties": path_gen.processed_properties(configs),
-            "taxpayer_records": path_gen.processed_taxpayer_records(configs),
+            "taxpayers_fixed": path_gen.processed_taxpayers_fixed(configs),
             "class_codes": path_gen.processed_class_codes(configs)
         }
         self.load_dfs(load_map)
 
-    def process(self) -> dict[str, pd.DataFrame]:
+    def process(self) -> None:
+
+        # copy dfs
+        df_props: pd.DataFrame = self.dfs_in["properties"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayes_fixed"].copy()
+        df_class_codes: pd.DataFrame = self.dfs_in["class_codes"].copy()
+
         # add is_rental column to properties
-        dfs["properties"]: pd.DataFrame = cols_df.set_is_rental(
-            df_taxpayers_addrs,
-            dfs["class_codes"],
-        )
-        # todo: fix logic to handle property & taxpayer record datasets distinctly
+        df_props = cols_df.set_is_rental_initial(df_props, df_class_codes)
         # execute initial subset based on is_rental
-        df_rentals_initial: pd.DataFrame = dfs["properties"][dfs["properties"][tr.IS_RENTAL] == True]
-        # fetch properties left out of initial subset with matching validated taxpayer addresses
-        df_rentals_addrs: pd.DataFrame = subset_df.get_nonrentals_from_addrs(dfs["properties"], df_rentals_initial)
-        # pull non-rentals with matching rental taxpayer addresses
-        df_rentals_final: pd.DataFrame = pd.concat([df_rentals_initial, df_rentals_addrs], axis=1)
-        return {
-            "taxpayers_subsetted": df_rentals_final,
-            "properties_subsetted": dfs["properties"],
-        }
+        df_rentals_initial: pd.DataFrame = df_props[df_props[tr.IS_RENTAL] == True]
+        # get unique raw name+addr values for rental subset
+        rental_records: list[str] = list(df_rentals_initial["raw_name_address"].unique())
+        # subset taxpayer records for rental and non-rental properties
+        df_taxpayer_rentals: pd.DataFrame = df_taxpayers[df_taxpayers["raw_name_address"].isin(rental_records)]
+        df_taxpayer_nonrentals: pd.DataFrame = df_taxpayers[~df_taxpayers["raw_name_address"].isin(rental_records)]
+        # fetch validated addresses associated with rental taxpayer records
+        rental_addrs: list[str] = list(df_taxpayer_rentals["formatted_address_v"].unique())
+        # fetch taxpayer records NOT pulled in by initial subset but that have matching addresses
+        df_taxpayers_missed: pd.DataFrame = df_taxpayer_nonrentals[df_taxpayer_nonrentals["formatted_address_v"].isin(rental_addrs)]
+        nonrental_records: list[str] = list(df_taxpayers_missed["raw_name_address"].unique())
+        # set is_rental in df_props again
+        df_props = cols_df.set_is_rental_final(df_props, nonrental_records)
+        rental_records_final: list[str] = rental_records + nonrental_records
+        df_taxpayers["is_rental"] = df_taxpayers["raw_name_address"].apply(
+            lambda name_addr: name_addr in rental_records_final
+        )
+
+        # output dfs
+        self.dfs_out["properties_rentals"] = df_props
+        self.dfs_out["taxpayers_subsetted"] = df_taxpayers[df_taxpayers["is_rental"] == True]
 
     def summary_stats(self):
         pass
 
     def save(self) -> None:
         configs = self.config_manager.configs
-        save_map: dict[str, Path] = {}
+        save_map: dict[str, Path] = {
+            "properties_rentals": path_gen.processed_properties_rentals(configs),
+            "taxpayers_subsetted": path_gen.processed_taxpayers_subsetted(configs),
+        }
         self.save_dfs(save_map)
 
     def update_configs(self) -> None:

@@ -652,7 +652,6 @@ class ColumnTaxpayerRecords(ColumnManagerBase):
             self.CLEAN_STATE,
             self.CLEAN_ZIP,
             self.CLEAN_ADDRESS,
-            self.CLEAN_NAME_ADDRESS,
         ]
 
     @property
