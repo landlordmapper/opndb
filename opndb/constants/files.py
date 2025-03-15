@@ -55,10 +55,11 @@ class Processed(FileNames):
     CORPS_MERGED: str = "corps_merged"
     LLCS_MERGED: str = "llcs_merged"
 
-    PROPS_SUBSETTED: str = "props_subsetted"
-    PROPS_PREPPED: str = "props_prepped"
-    PROPS_STRING_MATCHED: str = "props_string_matched"
-    PROPS_NETWORKED: str = "props_networked"
+    TAXPAYERS_FIXED: str = "taxpayers_fixed"
+    TAXPAYERS_SUBSETTED: str = "taxpayers_subsetted"
+    TAXPAYERS_PREPPED: str = "taxpayers_prepped"
+    TAXPAYERS_STRING_MATCHED: str = "taxpayers_string_matched"
+    TAXPAYERS_NETWORKED: str = "taxpayers_networked"
 
 class SummaryStats(FileNames):
     """Summary statistics for each stage of the workflow."""

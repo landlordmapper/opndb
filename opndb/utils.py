@@ -275,39 +275,48 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
-    def processed_props_subsetted(cls, configs: WorkflowConfigs) -> Path:
+    def processed_taxpayers_fixed(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_subsetted[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.PROPS_SUBSETTED,
+            Processed.TAXPAYERS_FIXED,
             configs["load_ext"]
         )
     @classmethod
-    def processed_props_prepped(cls, configs: WorkflowConfigs) -> Path:
+    def processed_taxpayers_subsetted(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/props_subsetted[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.TAXPAYERS_SUBSETTED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_taxpayers_prepped(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_prepped[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.PROPS_PREPPED,
+            Processed.TAXPAYERS_PREPPED,
             configs["load_ext"]
         )
     @classmethod
-    def processed_props_string_matched(cls, configs: WorkflowConfigs) -> Path:
+    def processed_taxpayers_string_matched(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_string_matched[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.PROPS_STRING_MATCHED,
+            Processed.TAXPAYERS_STRING_MATCHED,
             configs["load_ext"]
         )
     @classmethod
-    def processed_props_networked(cls, configs: WorkflowConfigs) -> Path:
+    def processed_taxpayers_networked(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_networked[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.PROPS_NETWORKED,
+            Processed.TAXPAYERS_NETWORKED,
             configs["load_ext"]
         )
 

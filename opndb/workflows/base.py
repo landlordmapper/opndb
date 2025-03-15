@@ -697,11 +697,6 @@ class WkflFixUnitsInitial(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
-
-        column_manager = {
-            "gcd_validated": ColumnValidatedAddrs(),
-        }
-
         # detect missing unit numbers in validated addresses via regex analysis
         df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         # subset to exclude pobox addresses
@@ -763,8 +758,19 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
-        # fix addresses - changes addresses whose unit numbers need adding to the master validated address dataset - add to secondarynumber column AND formatted address
-        pass
+        df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        df_fix: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
+        for _, row in df_fix.iterrows():  # todo: add progress bar
+            address: str = row["clean_address"]
+            # Find the index of the single matching row
+            idx: int = df_valid.index[df_valid["clean_address"] == address].item()
+            # First update the secondarynumber in the DataFrame
+            df_valid.loc[idx, "secondarynumber"] = row["secondarynumber"]
+            # Now get the row with the updated secondarynumber
+            row_to_fix: pd.Series = df_valid.loc[idx]
+            # Calculate and update the formatted address
+            df_valid.loc[idx, "formatted_address"] = addr.fix_formatted_address_unit(row_to_fix)
+        self.dfs_out["gcd_validated"] = df_valid
 
     # -------------------------------
     # ----SUMMARY STATS GENERATOR----
@@ -901,7 +907,10 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
     def process(self) -> None:
         df = self.dfs_in["taxpayer_records"].copy()
         df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
+        # frequent_tax_names
         self.dfs_out["frequent_tax_names"] = df_freq
+        self.dfs_out["frequent_tax_names"]["is_common_name"] = ""
+        # fixing_tax_names
         self.dfs_out["fixing_tax_names"] = pd.DataFrame(
             columns=["raw_value", "standardized_value"],
             data=[
@@ -1041,22 +1050,43 @@ class WkflAnalysisFinal(WorkflowStandardBase):
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, Path] = {
-            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
-            "taxpayer_records": path_gen.processed_taxpayer_records_merged(configs),
+            "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
+            "address_analysis": path_gen.analysis_address_analysis(configs),
+            "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
+            "taxpayer_records_merged": path_gen.processed_taxpayer_records_merged(configs),
         }
         self.load_dfs(load_map)
 
+    def get_banks_dict(self, df: pd.DataFrame) -> dict:
+        banks = {}
+        for standard_name in list(df["standardized_value"].unique()):
+            df_name: pd.DataFrame = df[df["standardized_value"] == standard_name]
+            for raw_name in list(df_name["raw_value"].unique()):
+                banks[raw_name] = standard_name
+        return banks
+
     def process(self) -> None:
-        # fix_banks - replace all taxpayer names with the names specified in the dataset
-        # add is_common_name column to taxpayer records
-        # add is_landlord_org column to taxpayer records
-        pass
+        # copy dfs
+        df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayer_records"].copy()
+        # create banks dict
+        banks: dict[str, str] = self.get_banks_dict(df_fix_names)
+        df_taxpayers = colm_df.fix_tax_names(df_taxpayers, banks)
+        df_taxpayers = cols_df.set_is_common_name(df_taxpayers, df_freq_names)
+        df_taxpayers = cols_df.set_is_landlord_org(df_taxpayers, df_analysis)
+        self.dfs_out["taxpayers_fixed"] = df_taxpayers
 
     def summary_stats(self) -> None:
         pass
 
     def save(self) -> None:
-        pass
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_fixed": path_gen.processed_taxpayers_fixed(configs)
+        }
+        self.save_dfs(save_map)
 
     def update_configs(self) -> None:
         pass

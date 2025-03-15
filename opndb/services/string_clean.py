@@ -77,12 +77,6 @@ class CleanStringBase:
             return False
 
     @classmethod
-    def get_is_common_name(cls, text: str) -> bool:
-        """Checks common names data and returns True if the name passed as a parameter is found within it."""
-        # todo: figure out a better way to check if text is in COMMON_NAMES
-        return text in COMMON_NAMES
-
-    @classmethod
     def get_is_org(cls, text: str) -> bool:
         """Returns True if the string contains keywords associated with organizations."""
         try:
@@ -116,6 +110,16 @@ class CleanStringBase:
             if addr_spaces_removed.startswith(po):
                 return True
         return False
+
+    @classmethod
+    def get_is_common_name(cls, text: str, common_names: list[str]) -> bool:
+        """Returns True if the string is found in common_names list."""
+        return text in common_names
+
+    @classmethod
+    def get_is_landlord_org(cls, text: str, org_addrs: list[str]) -> bool:
+        """Returns True if taxpayer address is found in list of landlord organization addresses."""
+        return text in org_addrs
 
     @classmethod
     def make_upper(cls, text: str) -> str:
@@ -326,6 +330,28 @@ class CleanStringName(CleanStringBase):
             return "THE " + text[:-4]
         else:
             return text
+
+    @classmethod
+    def fix_banks(cls, text: str, banks: dict[str, str]) -> str:
+        """
+        Standardizes names for financial institutions.
+
+        Examples:
+            'CHICAGO TITLE LND TRST' > 'CHICAGO TITLE LAND TRUST COMPANY'
+            'CHIICAGO TITLE & LAND' > 'CHICAGO TITLE LAND TRUST COMPANY'
+            'CHICAGO TITLE & TRUSTE' > 'CHICAGO TITLE LAND TRUST COMPANY'
+        """
+        # Obtain a list of keys from the "banks" dictionary
+        bank_keys = list(banks.keys())
+        # Iterate through each key and check if it's found within the "text" string
+        for key in bank_keys:
+            if key in text:
+                # If found, replace that text with banks[key], adding a space at the end
+                text = text.replace(key, banks[key] + " ")
+                break
+        # Split the text by spaces, strip each item of all whitespace, and return the joined list with equal spacing between everything
+        fixed_text = " ".join(item.strip() for item in text.split())
+        return fixed_text
 
 
 class CleanStringAddress(CleanStringBase):

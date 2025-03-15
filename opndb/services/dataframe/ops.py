@@ -153,17 +153,36 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df
 
     @classmethod
-    def set_is_common_name(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
+    def set_is_landlord_org(cls, df_taxpayers: pd.DataFrame, df_addr_analysis: pd.DataFrame) -> pd.DataFrame:
         """
-        Adds is_common_name boolean column to dataframe.
+        Adds is_landlord_org boolean column to dataframe. Landlord orgs are identified manually by user and stored in
+        address_analysis dataset.
 
-        :param df: Dataframe to add column to
-        :param name_col: Column in the dataframe to be used to set is_common_name
-        :param suffix: Suffix to add to column name (ex: is_common_name_president, is_common_name_agent, etc.)
+        :param df_taxpayers: Dataframe containing taxpayer record data
+        :param df_addr_analysis: Dataframe containing address analysis spreadsheet
         """
-        is_common_name_col: str = f"is_common_name_{suffix}" if suffix else "is_common_name"
-        df[is_common_name_col] = df[col].apply(lambda name: clean_base.get_is_common_name(name))
-        return df
+        df_orgs: pd.DataFrame = df_addr_analysis[df_addr_analysis["is_landlord_org"] == "t"]
+        org_addrs: list[str] = list(df_orgs["value"])
+        df_taxpayers["is_landlord_org"] = df_taxpayers["clean_address"].apply(
+            lambda addr: clean_base.get_is_landlord_org(addr, org_addrs)
+        )
+        return df_taxpayers
+
+    @classmethod
+    def set_is_common_name(cls, df_taxpayers: pd.DataFrame, df_freq_names: pd.DataFrame) -> pd.DataFrame:
+        """
+        Adds is_common_name boolean column to dataframe. Common names are currently obtained from frequent_tax_names
+        dataset manually inputted.
+
+        :param df_taxpayers: Dataframe containing taxpayer record data
+        :param df_freq_names: Dataframe containing name analysis spreadsheet
+        """
+        df_common: pd.DataFrame = df_freq_names[df_freq_names["is_common_name"] == "t"]
+        common_names: list[str] = list(df_common["value"])
+        df_taxpayers["is_common_name"] = df_taxpayers["value"].apply(
+            lambda name: clean_base.get_is_common_name(name, common_names)
+        )
+        return df_taxpayers
 
     @classmethod
     def set_is_org(cls, df: pd.DataFrame, col: str, suffix: str | None = None) -> pd.DataFrame:
@@ -243,6 +262,10 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def set_check_sec_num(cls, df: pd.DataFrame, addr_col: str) -> pd.DataFrame:
+        """
+        Adds "check_sec_num" column to dataframe, containing any numbers found at the end of the street address
+        component of clean addresses. Returns dataframe subset that excludes PO box addresses.
+        """
         df["check_sec_num"] = df[addr_col].apply(lambda address: clean_addr.check_sec_num(address))
         return df[df["is_pobox"] == "False"]
 
@@ -259,6 +282,15 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         :param addr_cols: List of columns containing address strings to be cleaned
         """
         df[col] = df[col].apply(lambda clean_addr: addr.fix_pobox(clean_addr))
+        return df
+
+    @classmethod
+    def fix_tax_names(cls, df: pd.DataFrame, banks: dict[str, str]) -> pd.DataFrame:
+        """
+        Checks cleaned taxpayer names against raw/standardized name pairs in banks dictionary. Returns taxpayer name
+        with raw strings replaced with standardized.
+        """
+        df["clean_name"] = df["clean_name"].apply(lambda name: clean_name.fix_banks(name, banks))
         return df
 
 

@@ -11,14 +11,12 @@ import pandas as pd
 import requests as req
 
 from opndb.constants.base import GEOCODIO_URL, PO_BOXES_DEPT, PO_BOXES_REMOVE, PO_BOXES
-from opndb.services.config import ConfigManager
 from opndb.services.string_clean import CleanStringBase as clean_base
 from opndb.types.base import (
     CleanAddress,
     GeocodioResult,
     GeocodioResponse,
-    GeocodioReworkflsultProcessed,
-    GeocodioResultFlat, GeocodioResultFinal, GeocodioReturnObject, WorkflowConfigs
+    GeocodioResultFlat, GeocodioReturnObject, WorkflowConfigs, GeocodioResultProcessed
 )
 from opndb.services.dataframe.base import (
     DataFrameOpsBase as ops_df,
@@ -33,6 +31,32 @@ class AddressBase:
 
     def __init__(self):
         self.geocodio_api_key = ""
+
+    @classmethod
+    def fix_formatted_address_unit(cls, row: pd.Series) -> str:  # how to assign type to "row" object?
+        """
+        Returns new formatted address. Should be called on validated addresses that need unit numbers added that were
+        missing initially.
+        """
+        gcd_formatted_split = row["formatted_address"].split(",")
+        gcd_sec_unit = row[f"secondaryunit"]
+        gcd_sec_number = row[f"secondarynumber"]
+        gcd_city = row["city"]
+        gcd_state = row["state"]
+        gcd_zip = row["zip"]
+
+        if pd.notnull(gcd_sec_unit):
+            unit_number = f"{gcd_sec_unit.strip()} {gcd_sec_number.strip()}"
+            new_formatted_addr = f"{gcd_formatted_split[0].strip()}, {unit_number}"
+        else:
+            new_formatted_addr = f"{gcd_formatted_split[0].strip()} {gcd_sec_number.strip()}"
+
+        new_formatted_addr_split = new_formatted_addr.split()
+        if new_formatted_addr_split[-1].strip() == new_formatted_addr_split[-2].strip():
+            new_formatted_addr_split.pop()  # Remove the last element
+            new_formatted_addr = " ".join(new_formatted_addr_split)
+
+        return f"{new_formatted_addr}, {gcd_city}, {gcd_state} {gcd_zip}"
 
     @classmethod
     def get_unique_addresses(cls, df: pd.DataFrame, addr_cols: CleanAddress):
