@@ -342,7 +342,7 @@ class CleanStringName(CleanStringBase):
             'CHICAGO TITLE & TRUSTE' > 'CHICAGO TITLE LAND TRUST COMPANY'
         """
         # Obtain a list of keys from the "banks" dictionary
-        bank_keys = list(banks.keys())
+        bank_keys = sorted(banks.keys(), key=len, reverse=True)
 
         # Iterate through each key and check if it's found within the "text" string
         for key in bank_keys:
