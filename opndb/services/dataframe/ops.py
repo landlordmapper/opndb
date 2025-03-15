@@ -92,14 +92,9 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         :param df_class_codes: Dataframe containing building class code descriptions
         :return: D
         """
-        df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes[cc.IS_RENTAL] == True]
-        rental_codes: list[str] = list(df_rental_codes[cc.IS_RENTAL])
-        df_props[tr.IS_RENTAL] = df_props[p.CLASS_CODE].apply(
-            lambda codes: cls.rental_class_check(
-                [code.strip() for code in codes.split(",")],
-                rental_codes
-            )
-        )
+        df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes["is_rental"] == "t"]
+        rental_codes: list[str] = list(df_rental_codes["code"])
+        df_props["is_rental"] = df_props["class_code"].apply(lambda code: code in rental_codes)
         return df_props
 
     @classmethod

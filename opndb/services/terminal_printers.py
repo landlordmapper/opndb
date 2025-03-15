@@ -74,6 +74,7 @@ class TerminalBase:
             {"name": "Name Analysis Initial", "value": "name_analysis_initial"},
             {"name": "Address Analysis Initial", "value": "address_analysis_initial"},
             {"name": "Analysis Final", "value": "analysis_final"},
+            {"name": "Subset Rentals", "value": "rental_subset"},
         ]
 
         # Let user select a workflow

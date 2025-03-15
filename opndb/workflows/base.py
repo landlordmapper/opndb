@@ -127,8 +127,8 @@ class WorkflowBase(ABC):
             return WkflAddressAnalysisInitial(config_manager)
         elif wkfl_id == "analysis_final":
             return WkflAnalysisFinal(config_manager)
-        # elif configs["wkfl_type"] == "rental_subset":
-        #     return WkflRentalSubset(config_manager)
+        elif wkfl_id == "rental_subset":
+            return WkflRentalSubset(config_manager)
         # elif configs["wkfl_type"] == "clean_merge":
         #     return WkflCleanMerge(config_manager)
         # elif configs["wkfl_type"] == "string_match":
@@ -1159,14 +1159,18 @@ class WkflRentalSubset(WorkflowStandardBase):
 
         # copy dfs
         df_props: pd.DataFrame = self.dfs_in["properties"].copy()
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayes_fixed"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_fixed"].copy()
         df_class_codes: pd.DataFrame = self.dfs_in["class_codes"].copy()
 
         # add is_rental column to properties
+        t.print_with_dots("Subsetting rental properties by class code")
         df_props = cols_df.set_is_rental_initial(df_props, df_class_codes)
         # execute initial subset based on is_rental
-        df_rentals_initial: pd.DataFrame = df_props[df_props[tr.IS_RENTAL] == True]
+        df_rentals_initial: pd.DataFrame = df_props[df_props["is_rental"] == True]
+        console.print("Properties subsetted by class code ✅")
+
         # get unique raw name+addr values for rental subset
+        t.print_with_dots("Subsetting rental properties by validated address")
         rental_records: list[str] = list(df_rentals_initial["raw_name_address"].unique())
         # subset taxpayer records for rental and non-rental properties
         df_taxpayer_rentals: pd.DataFrame = df_taxpayers[df_taxpayers["raw_name_address"].isin(rental_records)]
@@ -1176,12 +1180,14 @@ class WkflRentalSubset(WorkflowStandardBase):
         # fetch taxpayer records NOT pulled in by initial subset but that have matching addresses
         df_taxpayers_missed: pd.DataFrame = df_taxpayer_nonrentals[df_taxpayer_nonrentals["formatted_address_v"].isin(rental_addrs)]
         nonrental_records: list[str] = list(df_taxpayers_missed["raw_name_address"].unique())
+        console.print("Properties subsetted by validated address ✅")
+
         # set is_rental in df_props again
+        t.print_with_dots("Adding final is_rental columns to property and taxpayer datasets")
         df_props = cols_df.set_is_rental_final(df_props, nonrental_records)
         rental_records_final: list[str] = rental_records + nonrental_records
-        df_taxpayers["is_rental"] = df_taxpayers["raw_name_address"].apply(
-            lambda name_addr: name_addr in rental_records_final
-        )
+        df_taxpayers["is_rental"] = df_taxpayers["raw_name_address"].isin(rental_records_final)
+        console.print("is_rental columns generated ✅")
 
         # output dfs
         self.dfs_out["properties_rentals"] = df_props
