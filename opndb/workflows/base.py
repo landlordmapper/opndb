@@ -347,6 +347,7 @@ class WkflDataClean(WorkflowStandardBase):
             col_manager_p = out_column_managers["properties"]
             col_manager_t = out_column_managers["taxpayer_records"]
             df_props, df_taxpayers = subset_df.split_props_taxpayers(df, col_manager_p.out, col_manager_t.out)
+            df_taxpayers.dropna(subset=["raw_name"], inplace=True)
             self.dfs_out["properties"] = df_props
             self.dfs_out["taxpayer_records"] = df_taxpayers
             console.print(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\" ✅")
@@ -1100,11 +1101,17 @@ class WkflAnalysisFinal(WorkflowStandardBase):
         df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
         df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayer_records"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayer_records_merged"].copy()
+
+        df_taxpayers.dropna(subset=["raw_name"], inplace=True)
         # create banks dict
+        t.print_with_dots("Setting standardized name dictionary")
         banks: dict[str, str] = self.get_banks_dict(df_fix_names)
+        t.print_with_dots("Fixing taxpayer names")
         df_taxpayers = colm_df.fix_tax_names(df_taxpayers, banks)
+        t.print_with_dots("Setting is_common_name boolean column")
         df_taxpayers = cols_df.set_is_common_name(df_taxpayers, df_freq_names)
+        t.print_with_dots("Setting is_landlord_org boolean column")
         df_taxpayers = cols_df.set_is_landlord_org(df_taxpayers, df_analysis)
         self.dfs_out["taxpayers_fixed"] = df_taxpayers
 

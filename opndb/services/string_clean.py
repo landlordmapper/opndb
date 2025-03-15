@@ -343,6 +343,7 @@ class CleanStringName(CleanStringBase):
         """
         # Obtain a list of keys from the "banks" dictionary
         bank_keys = list(banks.keys())
+
         # Iterate through each key and check if it's found within the "text" string
         for key in bank_keys:
             if key in text:

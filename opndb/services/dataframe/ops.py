@@ -26,7 +26,7 @@ from rich.progress import (
     BarColumn,
     FileSizeColumn,
     TotalFileSizeColumn,
-    TimeRemainingColumn
+    TimeRemainingColumn, TimeElapsedColumn
 )
 from rich.console import Console
 
@@ -69,7 +69,7 @@ class DataFrameMergers(DataFrameOpsBase):
         # print("ADDR COL:", addr_col)
         df_merged: pd.DataFrame = pd.merge(
             df,
-            df_addrs[["clean_address", "formatted_address"]],
+            df_addrs[["clean_address", "formatted_address_v"]],
             how="left",
             left_on=addr_col,
             right_on="clean_address"
@@ -179,7 +179,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         """
         df_common: pd.DataFrame = df_freq_names[df_freq_names["is_common_name"] == "t"]
         common_names: list[str] = list(df_common["value"])
-        df_taxpayers["is_common_name"] = df_taxpayers["value"].apply(
+        df_taxpayers["is_common_name"] = df_taxpayers["clean_name"].apply(
             lambda name: clean_base.get_is_common_name(name, common_names)
         )
         return df_taxpayers
@@ -294,7 +294,7 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         Checks cleaned taxpayer names against raw/standardized name pairs in banks dictionary. Returns taxpayer name
         with raw strings replaced with standardized.
         """
-        df["clean_name"] = df["clean_name"].apply(lambda name: clean_name.fix_banks(name, banks))
+        df["clean_name"] = df["raw_name"].apply(lambda name: clean_name.fix_banks(name, banks))
         return df
 
 
