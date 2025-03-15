@@ -294,7 +294,7 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         Checks cleaned taxpayer names against raw/standardized name pairs in banks dictionary. Returns taxpayer name
         with raw strings replaced with standardized.
         """
-        df["clean_name"] = df["raw_name"].apply(lambda name: clean_name.fix_banks(name, banks))
+        df = df.apply(lambda row: clean_name.fix_banks(row, banks), axis=1)
         return df
 
 

@@ -332,7 +332,7 @@ class CleanStringName(CleanStringBase):
             return text
 
     @classmethod
-    def fix_banks(cls, text: str, banks: dict[str, str]) -> str:
+    def fix_banks(cls, row: pd.Series, banks: dict[str, str]) -> pd.Series:
         """
         Standardizes names for financial institutions.
 
@@ -344,15 +344,19 @@ class CleanStringName(CleanStringBase):
         # Obtain a list of keys from the "banks" dictionary
         bank_keys = sorted(banks.keys(), key=len, reverse=True)
 
+        text = row["raw_name"]
+
         # Iterate through each key and check if it's found within the "text" string
         for key in bank_keys:
             if key in text:
                 # If found, replace that text with banks[key], adding a space at the end
                 text = text.replace(key, banks[key] + " ")
+                fixed_text = " ".join(item.strip() for item in text.split())
+                row["clean_name"] = fixed_text
                 break
-        # Split the text by spaces, strip each item of all whitespace, and return the joined list with equal spacing between everything
-        fixed_text = " ".join(item.strip() for item in text.split())
-        return fixed_text
+            else:
+                continue
+        return row
 
 
 class CleanStringAddress(CleanStringBase):
