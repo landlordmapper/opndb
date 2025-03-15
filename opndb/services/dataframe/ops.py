@@ -269,6 +269,10 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         df["check_sec_num"] = df[addr_col].apply(lambda address: clean_addr.check_sec_num(address))
         return df[df["is_pobox"] == "False"]
 
+    @classmethod
+    def set_formatted_address_v(cls, df: pd.DataFrame) -> pd.DataFrame:
+        df["formatted_address_v"] = df.apply(lambda row: addr.get_formatted_address_v(row), axis=1)
+        return df
 
 class DataFrameColumnManipulators(DataFrameOpsBase):
     """Dataframe operations that manipulate or transform an existing dataframe column."""

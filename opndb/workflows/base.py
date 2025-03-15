@@ -5,6 +5,7 @@ from enum import IntEnum
 from pathlib import Path
 from pprint import pprint
 from typing import Any, ClassVar, Optional
+from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 
 # 2. Third-party imports
 import pandas as pd
@@ -673,7 +674,8 @@ class WkflAddressGeocodio(WorkflowStandardBase):
 
 class WkflFixUnitsInitial(WorkflowStandardBase):
     """
-    Subsets validated addresses whose raw addresses contain secondary unit numbers but whose validated addresses do not.
+    Outputs validated address subset dataset for rows whose raw (or clean) addresses contain secondary unit numbers
+    but whose validated addresses do not. To be used for manual investigation and address fixing
     """
     WKFL_NAME: str = "INITIAL FIX UNITS WORKFLOW"
     WKFL_DESC: str = ("Outputs validated addresses whose raw addresses contain secondary unit numbers but whose "
@@ -758,18 +760,46 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
+        t.print_equals("Adding missing unit numbers to validated addresses")
         df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         df_fix: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
-        for _, row in df_fix.iterrows():  # todo: add progress bar
-            address: str = row["clean_address"]
-            # Find the index of the single matching row
-            idx: int = df_valid.index[df_valid["clean_address"] == address].item()
-            # First update the secondarynumber in the DataFrame
-            df_valid.loc[idx, "secondarynumber"] = row["secondarynumber"]
-            # Now get the row with the updated secondarynumber
-            row_to_fix: pd.Series = df_valid.loc[idx]
-            # Calculate and update the formatted address
-            df_valid.loc[idx, "formatted_address"] = addr.fix_formatted_address_unit(row_to_fix)
+        total_addresses = len(df_fix["clean_address"])
+        # Set up Rich progress display
+        with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                BarColumn(bar_width=None),
+                "[progress.percentage]{task.percentage:>3.0f}%",
+                "•",
+                TimeElapsedColumn(),
+                "•",
+                TimeRemainingColumn(),
+                "•",
+                TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+        ) as progress:
+            task = progress.add_task(
+                "[yellow]Fixing validated addresses...",
+                total=total_addresses,
+                processed=0,
+            )
+            processed_count = 0
+            for _, row in df_fix.iterrows():  # todo: add progress bar
+                address: str = row["clean_address"]
+                mask = df_valid["clean_address"] == address
+                matching_indices = df_valid.index[mask]
+                df_valid.loc[matching_indices, "secondarynumber"] = row["secondarynumber"]
+                for idx in matching_indices:
+                    row_to_fix = df_valid.loc[idx]
+                    df_valid.loc[idx, "formatted_address"] = addr.fix_formatted_address_unit(row_to_fix)
+                processed_count += 1
+                progress.update(
+                    task,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing address {processed_count}/{total_addresses}"
+                )
+        # generate formatted_address_v
+        df_valid = cols_df.set_formatted_address_v(df_valid)
         self.dfs_out["gcd_validated"] = df_valid
 
     # -------------------------------

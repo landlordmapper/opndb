@@ -55,7 +55,7 @@ class TerminalBase:
         # Ask if user wants to start from the beginning
         start_from_beginning = questionary.select(
             "Do you want to start from the beginning or execute a specific workflow?",
-            choices=["Start from beginning", "Select specific workflow"]
+            choices=["Select specific workflow", "Start from beginning"]
         ).ask()
 
         if start_from_beginning == "Start from beginning":
@@ -66,11 +66,14 @@ class TerminalBase:
         # Define the available workflows
         workflow_choices = [
             {"name": "Data Cleaning", "value": "data_clean"},
-            {"name": "Initial Address Cleaning", "value": "address_initial"},
+            {"name": "Initial Address Cleaning", "value": "address_clean"},
             {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
+            {"name": "Fix Units Initial", "value": "fix_units_initial"},
+            {"name": "Fix Units Final", "value": "fix_units_final"},
             {"name": "Address Merge", "value": "address_merge"},
-            {"name": "Name Analysis", "value": "name_analysis"},
-            {"name": "Address Analysis", "value": "address_analysis"},
+            {"name": "Name Analysis Initial", "value": "name_analysis_initial"},
+            {"name": "Address Analysis Initial", "value": "address_analysis_initial"},
+            {"name": "Analysis Final", "value": "analysis_final"},
         ]
 
         # Let user select a workflow

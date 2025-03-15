@@ -492,6 +492,31 @@ class AddressBase:
                 raw_addr_fixed = ",".join(raw_addr_split)
                 return raw_addr_fixed
 
+    @classmethod
+    def get_formatted_address_v(cls, row: pd.Series) -> str:
+
+        if "city" not in row or pd.isna(row.get("city")):
+            return row.get("formatted_address", "")
+
+        addr_out: str = row["number"]
+        if pd.notna(row["predirectional"]):
+            addr_out += f" {row['predirectional']}"
+        if pd.notna(row["prefix"]):
+            addr_out += f" {row['prefix']}"
+        addr_out += f" {row['street']}"
+        if pd.notna(row["suffix"]):
+            addr_out += f" {row['suffix']}"
+        if pd.notna(row["postdirectional"]):
+            addr_out += f" {row['postdirectional']}"
+        addr_out += ","
+        if pd.notna(row["secondarynumber"]):
+            addr_out += f" {row['secondarynumber']},"
+        addr_out += f" {row['city']}"
+        addr_out += ","
+        addr_out += f" {row['state']} {row['zip']}"
+
+        return addr_out
+
 
 class AddressValidatorBase(AddressBase):
 
