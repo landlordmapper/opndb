@@ -353,13 +353,7 @@ class WkflDataClean(WorkflowStandardBase):
             console.print(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\" ✅")
         else:
             t.print_with_dots("Setting final dataframe")
-            t.print_with_dots(f"Dropping duplicates in \"{id}\"")
-            console.print("rows before:", len(df))
-            df_dups, df_non_dups = subset_df.get_duplicates(df, "raw_name")
-            df_dups = dedup_df.drop_dups_corps_llcs(id, df_dups, ["raw_name"])
-            df_out: pd.DataFrame = pd.concat([df_dups, df_non_dups], ignore_index=True)
-            console.print("rows after:", len(df_out))
-            self.dfs_out[id] = df_out[column_manager.out]
+            self.dfs_out[id] = df[column_manager.out]
             console.print(f"Final dataframe set.")
 
     def execute_unvalidated_generator(self, column_managers, out_column_managers) -> None:
