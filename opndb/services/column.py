@@ -690,7 +690,6 @@ class ColumnProperties(ColumnManagerBase):
         return [
             self.PIN,
             self.RAW_NAME_ADDRESS,
-            self.CLEAN_NAME_ADDRESS,
             self.CLASS_CODE,
             self.NUM_UNITS,
         ]

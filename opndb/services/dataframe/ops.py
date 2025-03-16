@@ -1,6 +1,8 @@
 from pathlib import Path
-from typing import Any, Callable, Type
+from typing import Any, Callable, Type, Tuple
 from pprint import pprint
+
+import numpy as np
 import pandas as pd
 
 from opndb.constants.columns import (
@@ -40,8 +42,23 @@ class DataFrameMergers(DataFrameOpsBase):
     columns, etc.)
     """
     @classmethod
-    def merge_orgs(cls, df_taxpayers: pd.DataFrame, df_orgs: pd.DataFrame) -> pd.DataFrame:
-        pass
+    def merge_orgs(
+        cls,
+        df_taxpayers: pd.DataFrame,
+        df_orgs: pd.DataFrame,
+        clean_core: str,
+        string_match: bool = False
+    ) -> pd.DataFrame:
+        right_on: str = f"entity_{string_match}_name" if not string_match else "entity_string_match"
+        df_merge = pd.merge(
+            df_taxpayers,
+            df_orgs,
+            how="left",
+            left_on=f"{clean_core}_name",
+            right_on=right_on,
+        )
+        df_merge_clean = cls.combine_columns_parallel(df_merge)
+        return df_merge_clean
 
     @classmethod
     def merge_validated_addrs(cls, df: pd.DataFrame, df_addrs: pd.DataFrame, clean_addr_cols: list[str]) -> pd.DataFrame:
@@ -278,6 +295,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         df["formatted_address_v"] = df.apply(lambda row: addr.get_formatted_address_v(row), axis=1)
         return df
 
+
 class DataFrameColumnManipulators(DataFrameOpsBase):
     """Dataframe operations that manipulate or transform an existing dataframe column."""
 
@@ -305,6 +323,25 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
 class DataFrameSubsetters(DataFrameOpsBase):
     """Dataframe operations that return subsets."""
     @classmethod
+    def get_duplicates(cls, df: pd.DataFrame, col: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Finds duplicate values in the specified column and returns two dataframes:
+        1. A dataframe containing only rows with duplicates in the specified column
+        2. A dataframe with the duplicated rows removed and all other original rows
+        Returns:
+            tuple: (duplicate_rows, non_duplicate_rows)
+        """
+        # Find which values are duplicated
+        duplicated_names = df[col][df[col].duplicated(keep=False)]
+        # Create a mask for rows with duplicated values
+        duplicate_mask = df[col].isin(duplicated_names)
+        # Return both dataframes
+        df_dups = df[duplicate_mask]
+        df_non_dups = df[~duplicate_mask]
+        return df_dups, df_non_dups
+
+
+    @classmethod
     def get_nonrentals_from_addrs(cls, df_all: pd.DataFrame, df_rentals_initial: pd.DataFrame) -> pd.DataFrame:
         """
         Extracts properties whose class codes are NOT associated with rental class codes, but whose taxpayer mailing
@@ -320,7 +357,7 @@ class DataFrameSubsetters(DataFrameOpsBase):
 
     @classmethod
     def get_active(cls, df: pd.DataFrame, col: str) -> pd.DataFrame:
-        pass
+        return df[df[col].isin(["0", "1"])]
 
     @classmethod
     def get_is_pobox(cls, df: pd.DataFrame) -> pd.DataFrame:
@@ -428,3 +465,114 @@ class DataFrameSubsetters(DataFrameOpsBase):
         })
         freq_df = freq_df.sort_values("frequency", ascending=False).reset_index(drop=True)
         return freq_df
+
+class DataFrameDeduplicators(DataFrameOpsBase):
+
+    @classmethod
+    def drop_dups_corps_llcs(cls, id: str, df: pd.DataFrame, subset: list[str]) -> pd.DataFrame:
+        """
+        Drop duplicates with priority given to:
+        1. Rows with non-null values for most columns
+        2. Rows with status="0" or status="1" if status values differ
+
+        Args:
+            df: Input dataframe, containing ONLY rows with duplicate values for clean_name
+            subset: Columns to consider for identifying duplicates
+
+        Returns:
+            Dataframe with duplicates removed according to priority rules
+        """
+        result_df = pd.DataFrame()
+
+        # Group by the subset columns that identify duplicates
+        groups = df.groupby(subset)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            "•",
+            TextColumn("[bold cyan]{task.fields[processed]}/{task.total} records"),
+        ) as progress:
+            task = progress.add_task(
+                f"[yellow]Processing {id} records...",
+                total=len(groups),
+                processed=0,
+            )
+            processed_count = 0
+            for _, group in groups:
+                # Start with an empty Series to build our merged row
+                merged_row = pd.Series(index=df.columns, dtype="object")
+                # Fill in the subset values (these should be identical within the group)
+                for col in subset:
+                    merged_row[col] = group[col].iloc[0]
+                # Handle status column specially
+                if "status" in df.columns:
+                    # Priority for status is "0" or "1" if present
+                    if group["status"].isin(["0", "1"]).any():
+                        # Take "0" or "1", preferring "0" if both exist
+                        if '0' in group["status"].values:
+                            merged_row["status"] = "0"
+                        else:
+                            merged_row["status"] = "1"
+                    else:
+                        # If no "0" or "1", take the first non-null value
+                        merged_row["status"] = group["status"].dropna().iloc[0] if not group[
+                            "status"].isna().all() else None
+                # For all other columns, take the first non-null value
+                for col in [c for c in df.columns if c != "status" and c not in subset]:
+                    non_null_values = group[col].dropna()
+                    if len(non_null_values) > 0:
+                        merged_row[col] = non_null_values.iloc[0]
+                    else:
+                        merged_row[col] = None
+                # Add the merged row to the result
+                result_df = pd.concat([result_df, pd.DataFrame([merged_row])], ignore_index=True)
+                processed_count += 1
+                progress.update(
+                    task,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing record {processed_count}/{len(groups)}"
+                )
+        return result_df
+
+
+class DataFrameConcatenators(DataFrameOpsBase):
+
+    @classmethod
+    def get_merge_address(cls, row: pd.Series, addr_col: str) -> pd.Series:
+        if pd.notnull(row[f"{addr_col}_v"]):
+            return row[f"{addr_col}_v"]
+        else:
+            return row[addr_col]
+
+    @classmethod
+    def combine_corps_llcs(cls, df_corps: pd.DataFrame, df_llcs: pd.DataFrame) -> pd.DataFrame:
+        # rename address cols to address_1, address_2, address_3
+        df_corps["merge_address_1"] = df_corps.apply(
+            lambda row: cls.get_merge_address(row, "clean_president_address"), axis=1
+        )
+        df_corps["merge_address_2"] = df_corps.apply(
+            lambda row: cls.get_merge_address(row, "clean_secretary_address"), axis=1
+        )
+        df_llcs["merge_address_1"] = df_llcs.apply(
+            lambda row: cls.get_merge_address(row, "clean_office_address"), axis=1
+        )
+        df_llcs["merge_address_2"] = df_llcs.apply(
+            lambda row: cls.get_merge_address(row, "clean_manager_member_address"), axis=1
+        )
+        df_llcs["merge_address_3"] = df_llcs.apply(
+            lambda row: cls.get_merge_address(row, "clean_agent_address"), axis=1
+        )
+        # concatenate, take slice of only necessary columns
+        df_corps = df_corps[["clean_name", "core_name", "merge_address_1", "merge_address_2"]]
+        df_llcs = df_llcs[["clean_name", "core_name", "merge_address_1", "merge_address_2", "merge_address_3"]]
+        df_out: pd.DataFrame = pd.concat([df_corps, df_llcs], ignore_index=True)
+        df_out.rename(columns={"clean_name": "entity_clean_name"})
+        df_out.rename(columns={"core_name": "entity_core_name"})
+        return df_out

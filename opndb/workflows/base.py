@@ -53,7 +53,9 @@ from opndb.services.dataframe.ops import (
     DataFrameMergers as merge_df,
     DataFrameSubsetters as subset_df,
     DataFrameColumnGenerators as cols_df,
-    DataFrameColumnManipulators as colm_df
+    DataFrameColumnManipulators as colm_df,
+    DataFrameDeduplicators as dedup_df,
+    DataFrameConcatenators as concat_df,
 )
 from rich.console import Console
 from rich.prompt import Prompt
@@ -334,14 +336,12 @@ class WkflDataClean(WorkflowStandardBase):
 
         # props_taxpayers-specific logic
         if id == "props_taxpayers":
-
             # generate clean name + address concat field
             # t.print_with_dots(f"Concatenating clean name and address fields")
             # df: pd.DataFrame = cols_df.set_name_address_concat(
             #     df, column_manager.name_address_concat_map["clean"]
             # )
             # console.print(f"\"name_address\" field generated ✅")
-
             # split dataframe into properties and taxpayer_records
             t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
             col_manager_p = out_column_managers["properties"]
@@ -351,11 +351,15 @@ class WkflDataClean(WorkflowStandardBase):
             self.dfs_out["properties"] = df_props
             self.dfs_out["taxpayer_records"] = df_taxpayers
             console.print(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\" ✅")
-
         else:
-
             t.print_with_dots("Setting final dataframe")
-            self.dfs_out[id] = df[column_manager.out]
+            t.print_with_dots(f"Dropping duplicates in \"{id}\"")
+            console.print("rows before:", len(df))
+            df_dups, df_non_dups = subset_df.get_duplicates(df, "raw_name")
+            df_dups = dedup_df.drop_dups_corps_llcs(id, df_dups, ["raw_name"])
+            df_out: pd.DataFrame = pd.concat([df_dups, df_non_dups], ignore_index=True)
+            console.print("rows after:", len(df_out))
+            self.dfs_out[id] = df_out[column_manager.out]
             console.print(f"Final dataframe set.")
 
     def execute_unvalidated_generator(self, column_managers, out_column_managers) -> None:
@@ -1077,6 +1081,7 @@ class WkflAnalysisFinal(WorkflowStandardBase):
 
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def load(self) -> None:
         configs = self.config_manager.configs
@@ -1143,8 +1148,12 @@ class WkflRentalSubset(WorkflowStandardBase):
         - Rental-subsetted taxpayer dataset
             - 'ROOT/processed/tax_records_subsetted[FileExt]'
     """
+    WKFL_NAME: str = "RENTAL SUBSET WORKFLOW"
+    WKFL_DESC: str = "Subsets property and taxpayer record datasets for rental properties only."
+
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def load(self) -> None:
         configs = self.config_manager.configs
@@ -1194,6 +1203,8 @@ class WkflRentalSubset(WorkflowStandardBase):
         self.dfs_out["taxpayers_subsetted"] = df_taxpayers[df_taxpayers["is_rental"] == True]
 
     def summary_stats(self):
+        # how many initially subsetted with class codes only
+        # how many additional rentals obtained from validated addresses from initial subset
         pass
 
     def save(self) -> None:
@@ -1221,64 +1232,71 @@ class WkflCleanMerge(WorkflowStandardBase):
         - Single property dataset containing all columns required for string matching & network graph generation
             - 'ROOT/processed/props_prepped[FileExt]'
     """
-    BOOL_COL_MAP: BooleanColumnMap = {
-        "taxpayer_records": [tr.CLEAN_NAME],
-        "corps": [c.PRESIDENT_NAME, c.SECRETARY_NAME],
-        "llcs": [l.MANAGER_MEMBER_NAME, l.AGENT_NAME],
-    }
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
+    WKFL_NAME: str = "INITIAL DATA CLEANING WORKFLOW"
+    WKFL_DESC: str = "Runs basic string cleaners on raw inputted datasets."
 
-    def load(self) -> dict[str, pd.DataFrame]:
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
         load_map: dict[str, Path] = {
-            "taxpayer_records": path_gen.processed_props_subsetted(self.configs),
-            "corps": path_gen.raw_corps(self.configs),
-            "llcs": path_gen.raw_llcs(self.configs),
-            "validated_addrs": path_gen.processed_validated_addrs(self.configs),
+            "taxpayers_subsetted": path_gen.processed_taxpayers_subsetted(configs),
+            "corps_merged": path_gen.processed_corps_merged(configs),
+            "llcs_merged": path_gen.processed_llcs_merged(configs),
         }
-        return self.set_working_dfs(load_map)
+        self.load_dfs(load_map)
 
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    def process(self) -> None:
         # todo: add workflow for fixing taxpayer addresses based on manual research - services/address.py
         # todo: add workflow for fixing taxpayer names based on manual research - services/base.py
+
+        # copy dfs
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_subsetted"].copy()
+        df_corps: pd.DataFrame = self.dfs_in["corps_merged"].copy()
+        df_llcs: pd.DataFrame = self.dfs_in["llcs_merged"].copy()
+
         # add "core_name" columns
-        dfs["taxpayer_records"]["core_name"] = cols_df.set_core_name(dfs["taxpayer_records"], tr.CLEAN_NAME)
-        dfs["corps"]["core_name"] = cols_df.set_core_name(dfs["corps"], c.CLEAN_NAME)
-        dfs["llcs"]["core_name"] = cols_df.set_core_name(dfs["llcs"], l.CLEAN_NAME)
-        # add bool columns for is_common_name, is_org, is_llc, is_person, is_bank
-        for id, cols in self.BOOL_COL_MAP.items():
-            for col in cols:
-                dfs[id]["is_bank"] = cols_df.set_is_bank(dfs[id], col)
-                dfs[id]["is_person"] = cols_df.set_is_person(dfs[id], col)
-                dfs[id]["is_common_name"] = cols_df.set_is_common_name(dfs[id], col)
-                dfs[id]["is_org"] = cols_df.set_is_org(dfs[id], col)
-                dfs[id]["is_llc"] = cols_df.set_is_llc(dfs[id], col)
+        df_taxpayers["core_name"] = cols_df.set_core_name(df_taxpayers, tr.CLEAN_NAME)
+        df_corps["core_name"] = cols_df.set_core_name(df_corps, c.CLEAN_NAME)
+        df_llcs["core_name"] = cols_df.set_core_name(df_llcs, l.CLEAN_NAME)
+
+        # add bool columns for is_org, is_llc, is_person, is_bank
+        df_taxpayers["is_bank"] = cols_df.set_is_bank(df_taxpayers, "clean_name")
+        df_taxpayers["is_trust"] = cols_df.set_is_trust(df_taxpayers, "clean_name")
+        df_taxpayers["is_person"] = cols_df.set_is_person(df_taxpayers, "clean_name")
+        df_taxpayers["is_org"] = cols_df.set_is_org(df_taxpayers, "clean_name")
+        df_taxpayers["is_llc"] = cols_df.set_is_llc(df_taxpayers, "clean_name")
+
         # subset active corps/llcs
         # todo: ask for user input to indicate whether only active llcs/corps should be merged into properties, or if all of them should
-        dfs["corps"] = subset_df.get_active(dfs["corps"], c.STATUS)
-        dfs["llcs"] = subset_df.get_active(dfs["llcs"], l.STATUS)
-        # drop duplicates corps/llcs
-        dfs["corps"].drop_duplicates(subset=[c.CLEAN_NAME], inplace=True)
-        dfs["llcs"].drop_duplicates(subset=[l.CLEAN_NAME], inplace=True)
-        # add validated addrs to corps/llcs
-        for id, df in dfs.items():
-            if id == "taxpayer_records":  # it already has it
-                continue
-            # todo: fix merge_valid_addrs to handle different column names
-            df = merge_df.merge_validated_addrs(df, dfs["validated_addrs"], [])
-        # merge corps/llcs to taxpayer records
-        dfs["taxpayer_records"] = merge_df.merge_orgs(dfs["taxpayer_records"], dfs["corps"])
-        dfs["taxpayer_records"] = merge_df.merge_orgs(dfs["taxpayer_records"], dfs["corps"])
-        return dfs
+        df_corps_active = subset_df.get_active(df_corps, c.STATUS)
+        df_llcs_active = subset_df.get_active(df_llcs, l.STATUS)
 
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+        df_combined = concat_df.combine_corps_llcs(df_corps_active, df_llcs_active)
+
+        # merge corps/llcs to taxpayer records
+        df_taxpayers = merge_df.merge_orgs(df_taxpayers, df_combined, "clean")
+        df_taxpayers = merge_df.merge_orgs(df_taxpayers, df_combined, "core")
+
+        # string matching
+        df_string_matches = StringMatch.match_entities()
+        df_taxpayers = merge_df.merge_orgs(df_taxpayers, df_string_matches, "clean", True)
+
+        # output dfs
+        self.dfs_out["taxpayers_prepped"] = df_taxpayers
+
+    def summary_stats(self) -> None:
         pass
 
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
-        save_map: dict[str, Path] = {}
-        self.save_dfs(dfs, save_map)
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_prepped": path_gen.processed_taxpayers_prepped(configs),
+        }
+        self.save_dfs(save_map)
 
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    def update_configs(self) -> None:
         pass
 
 
