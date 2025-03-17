@@ -77,13 +77,6 @@ class DataFrameMergers(DataFrameOpsBase):
     @classmethod
     def merge_validated_address(cls, df: pd.DataFrame, df_addrs: pd.DataFrame, addr_col: str) -> pd.DataFrame:
         """Merges validated addresses into specified address column in df."""
-        # print("DF COLS:")
-        # for col in df.columns:
-        #     print(col)
-        # print("DF ADDR COLS:")
-        # for col in df_addrs.columns:
-        #     print(col)
-        # print("ADDR COL:", addr_col)
         df_merged: pd.DataFrame = pd.merge(
             df,
             df_addrs[["clean_address", "formatted_address_v"]],
@@ -91,10 +84,7 @@ class DataFrameMergers(DataFrameOpsBase):
             left_on=addr_col,
             right_on="clean_address"
         )
-        # print("DF MERGED COLS:")
-        # for col in df_merged.columns:
-        #     print(col)
-        df_merged.rename(columns={"formatted_address": f"{addr_col}_v"}, inplace=True)
+        df_merged.rename(columns={"formatted_address_v": f"{addr_col}_v"}, inplace=True)
         return df_merged
 
 

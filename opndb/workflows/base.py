@@ -1077,6 +1077,14 @@ class WkflAnalysisFinal(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    def get_banks_dict(self, df: pd.DataFrame) -> dict:
+        banks = {}
+        for standard_name in list(df["standardized_value"].unique()):
+            df_name: pd.DataFrame = df[df["standardized_value"] == standard_name]
+            for raw_name in list(df_name["raw_value"].unique()):
+                banks[raw_name] = standard_name
+        return banks
+
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, Path] = {
@@ -1086,14 +1094,6 @@ class WkflAnalysisFinal(WorkflowStandardBase):
             "taxpayer_records_merged": path_gen.processed_taxpayer_records_merged(configs),
         }
         self.load_dfs(load_map)
-
-    def get_banks_dict(self, df: pd.DataFrame) -> dict:
-        banks = {}
-        for standard_name in list(df["standardized_value"].unique()):
-            df_name: pd.DataFrame = df[df["standardized_value"] == standard_name]
-            for raw_name in list(df_name["raw_value"].unique()):
-                banks[raw_name] = standard_name
-        return banks
 
     def process(self) -> None:
         # copy dfs

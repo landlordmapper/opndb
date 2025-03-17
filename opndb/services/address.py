@@ -48,8 +48,10 @@ class AddressBase:
         if pd.notnull(gcd_sec_unit):
             unit_number = f"{gcd_sec_unit.strip()} {gcd_sec_number.strip()}"
             new_formatted_addr = f"{gcd_formatted_split[0].strip()}, {unit_number}"
-        else:
+        elif pd.notnull(gcd_sec_number):
             new_formatted_addr = f"{gcd_formatted_split[0].strip()} {gcd_sec_number.strip()}"
+        else:
+            new_formatted_addr = f"{gcd_formatted_split[0].strip()}"
 
         new_formatted_addr_split = new_formatted_addr.split()
         if new_formatted_addr_split[-1].strip() == new_formatted_addr_split[-2].strip():

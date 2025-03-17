@@ -7,6 +7,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import re
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 from opndb.constants.columns import AddressAnalysis
 from opndb.types.base import StringMatchParams, NetworkMatchParams
@@ -118,6 +119,52 @@ class StringMatch(MatchBase):
 
     @classmethod
     def match_strings(cls, ref_docs: list[str], query_docs: list[str], params: StringMatchParams):
+
+        # set up vectorizer and index for string matching
+        vectorizer = TfidfVectorizer(min_df=1, analyzer=cls.ngrams)
+        tf_idf_matrix = vectorizer.fit_transform(ref_docs)
+        messy_tf_idf_matrix = vectorizer.transform(query_docs)
+        data_matrix = tf_idf_matrix
+        index = nmslib.init(
+            method=params["nmslib_opts"]["method"],
+            space=params["nmslib_opts"]["space"],
+            data_type=params["nmslib_opts"]["data_type"]
+        )
+        index.addDataPointBatch(data_matrix)
+        index.createIndex()
+
+        # execute query and store good matches
+        query_matrix = messy_tf_idf_matrix
+        nbrs = index.knnQueryBatch(
+            query_matrix,
+            k=params["query_batch_opts"]["K"],
+            num_threads=params["query_batch_opts"]["num_threads"]
+        )
+        mts =[]
+        for i in range(len(nbrs)):  # todo: add progress bar
+            original_nm = query_docs[i]
+            for row in list(range(len(nbrs[i][0]))):
+                try:
+                    matched_nm = ref_docs[nbrs[i][0][row]]
+                    conf = abs(nbrs[i][1][row])
+                except:
+                    matched_nm = "no match found"
+                    conf = None
+                mts.append([original_nm, matched_nm, conf])
+
+        df_matches = pd.DataFrame(mts,columns=["original_doc", "matched_doc", "cont"])
+        df_matches["ldist"] = df_matches[["matched_doc", "original_doc"]].apply(lambda x: lev.distance(x[0], x[1]), axis=1)
+        df_matches["conf1"] = 1 - df_matches["conf"]
+
+        if params["match_threshold"] is not None:
+            df_good_matches = df_matches[(df_matches["ldist"] > 0) & (df_matches["conf1"] > params["match_threshold"]) & (df_matches["conf1"] < 1)].sort_values(by=["conf1"])
+            return df_good_matches  # does this return duplicates? like if there are multiple matches above the threshhold it needs to pick the highest one, NOT include all of them
+        else:
+            return df_matches
+
+
+    @classmethod
+    def match_strings_old(cls, ref_docs: list[str], query_docs: list[str], params: StringMatchParams):
 
         # set up vectorizer and index for string matching
         vectorizer = TfidfVectorizer(min_df=1, analyzer=cls.ngrams)

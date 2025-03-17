@@ -50,7 +50,7 @@ class Processed(FileNames):
     CLASS_CODES: str = "class_codes"
 
     VALIDATED_ADDRS: str = "validated_addrs"
-    UNVALIDATED_ADDRS: str = "unvalidated_addrs_sample_s"
+    UNVALIDATED_ADDRS: str = "unvalidated_addrs"
 
     TAXPAYER_RECORDS_MERGED: str = "taxpayer_records_merged"
     CORPS_MERGED: str = "corps_merged"
