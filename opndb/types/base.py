@@ -158,7 +158,7 @@ class QueryBatchOptions(TypedDict):
     K: int
 
 class StringMatchParams(TypedDict):
-    name_col: str
+    name_col: str | None
     match_threshold: int | float
     include_orgs: bool
     include_unresearched: bool

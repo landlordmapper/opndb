@@ -26,8 +26,6 @@ from rich.progress import (
     SpinnerColumn,
     TextColumn,
     BarColumn,
-    FileSizeColumn,
-    TotalFileSizeColumn,
     TimeRemainingColumn, TimeElapsedColumn
 )
 from rich.console import Console
@@ -47,9 +45,8 @@ class DataFrameMergers(DataFrameOpsBase):
         df_taxpayers: pd.DataFrame,
         df_orgs: pd.DataFrame,
         clean_core: str,
-        string_match: bool = False
+        right_on: str
     ) -> pd.DataFrame:
-        right_on: str = f"entity_{string_match}_name" if not string_match else "entity_string_match"
         df_merge = pd.merge(
             df_taxpayers,
             df_orgs,
@@ -174,7 +171,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         """
         df_orgs: pd.DataFrame = df_addr_analysis[df_addr_analysis["is_landlord_org"] == "t"]
         org_addrs: list[str] = list(df_orgs["value"])
-        df_taxpayers["is_landlord_org"] = df_taxpayers["clean_address"].apply(
+        df_taxpayers["is_landlord_org"] = df_taxpayers["raw_address_v"].apply(
             lambda addr: clean_base.get_is_landlord_org(addr, org_addrs)
         )
         return df_taxpayers
@@ -545,24 +542,24 @@ class DataFrameConcatenators(DataFrameOpsBase):
     def combine_corps_llcs(cls, df_corps: pd.DataFrame, df_llcs: pd.DataFrame) -> pd.DataFrame:
         # rename address cols to address_1, address_2, address_3
         df_corps["merge_address_1"] = df_corps.apply(
-            lambda row: cls.get_merge_address(row, "clean_president_address"), axis=1
+            lambda row: cls.get_merge_address(row, "raw_president_address"), axis=1
         )
         df_corps["merge_address_2"] = df_corps.apply(
-            lambda row: cls.get_merge_address(row, "clean_secretary_address"), axis=1
+            lambda row: cls.get_merge_address(row, "raw_secretary_address"), axis=1
         )
         df_llcs["merge_address_1"] = df_llcs.apply(
-            lambda row: cls.get_merge_address(row, "clean_office_address"), axis=1
+            lambda row: cls.get_merge_address(row, "raw_office_address"), axis=1
         )
         df_llcs["merge_address_2"] = df_llcs.apply(
-            lambda row: cls.get_merge_address(row, "clean_manager_member_address"), axis=1
+            lambda row: cls.get_merge_address(row, "raw_manager_member_address"), axis=1
         )
         df_llcs["merge_address_3"] = df_llcs.apply(
-            lambda row: cls.get_merge_address(row, "clean_agent_address"), axis=1
+            lambda row: cls.get_merge_address(row, "raw_agent_address"), axis=1
         )
         # concatenate, take slice of only necessary columns
         df_corps = df_corps[["clean_name", "core_name", "merge_address_1", "merge_address_2"]]
         df_llcs = df_llcs[["clean_name", "core_name", "merge_address_1", "merge_address_2", "merge_address_3"]]
         df_out: pd.DataFrame = pd.concat([df_corps, df_llcs], ignore_index=True)
-        df_out.rename(columns={"clean_name": "entity_clean_name"})
-        df_out.rename(columns={"core_name": "entity_core_name"})
+        df_out.rename(columns={"clean_name": "entity_clean_name"}, inplace=True)
+        df_out.rename(columns={"core_name": "entity_core_name"}, inplace=True)
         return df_out

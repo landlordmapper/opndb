@@ -1,20 +1,30 @@
-# import nmslib
+import nmslib
 from collections import Counter
 import json
 from typing import List
+import Levenshtein as lev
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer
-
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeRemainingColumn, TimeElapsedColumn
+)
+from rich.console import Console
 from opndb.constants.columns import AddressAnalysis
+from opndb.services.terminal_printers import TerminalBase as t
 from opndb.types.base import StringMatchParams, NetworkMatchParams
 from opndb.services.dataframe.base import DataFrameOpsBase as df_ops
 from opndb.utils import UtilsBase as utils
 
 # todo: add type hints and docstrings where missing
+console = Console()
 
 class MatchBase:
 
@@ -121,19 +131,24 @@ class StringMatch(MatchBase):
     def match_strings(cls, ref_docs: list[str], query_docs: list[str], params: StringMatchParams):
 
         # set up vectorizer and index for string matching
+        t.print_with_dots("Initializing vectorizer")
         vectorizer = TfidfVectorizer(min_df=1, analyzer=cls.ngrams)
+        t.print_with_dots("Generating matrix")
         tf_idf_matrix = vectorizer.fit_transform(ref_docs)
         messy_tf_idf_matrix = vectorizer.transform(query_docs)
         data_matrix = tf_idf_matrix
+        t.print_with_dots("Initializing HNSW index")
         index = nmslib.init(
             method=params["nmslib_opts"]["method"],
             space=params["nmslib_opts"]["space"],
             data_type=params["nmslib_opts"]["data_type"]
         )
+        t.print_with_dots("Adding data to index")
         index.addDataPointBatch(data_matrix)
         index.createIndex()
 
         # execute query and store good matches
+        t.print_with_dots("Executing query")
         query_matrix = messy_tf_idf_matrix
         nbrs = index.knnQueryBatch(
             query_matrix,
@@ -141,71 +156,53 @@ class StringMatch(MatchBase):
             num_threads=params["query_batch_opts"]["num_threads"]
         )
         mts =[]
-        for i in range(len(nbrs)):  # todo: add progress bar
-            original_nm = query_docs[i]
-            for row in list(range(len(nbrs[i][0]))):
-                try:
-                    matched_nm = ref_docs[nbrs[i][0][row]]
-                    conf = abs(nbrs[i][1][row])
-                except:
-                    matched_nm = "no match found"
-                    conf = None
-                mts.append([original_nm, matched_nm, conf])
 
-        df_matches = pd.DataFrame(mts,columns=["original_doc", "matched_doc", "cont"])
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            "•",
+            TextColumn("[bold cyan]{task.fields[processed]}/{task.total} records"),
+        ) as progress:
+            task = progress.add_task(
+                f"[yellow]Processing query results records...",
+                total=len(nbrs),
+                processed=0,
+            )
+            processed_count = 0
+            for i in range(len(nbrs)):  # todo: add progress bar
+                original_nm = query_docs[i]
+                for row in list(range(len(nbrs[i][0]))):
+                    try:
+                        matched_nm = ref_docs[nbrs[i][0][row]]
+                        conf = abs(nbrs[i][1][row])
+                    except:
+                        matched_nm = "no match found"
+                        conf = None
+                    mts.append([original_nm, matched_nm, conf])
+                processed_count += 1
+                progress.update(
+                    task,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing record {processed_count}/{len(nbrs)}"
+                )
+
+        df_matches = pd.DataFrame(mts,columns=["original_doc", "matched_doc", "conf"])
         df_matches["ldist"] = df_matches[["matched_doc", "original_doc"]].apply(lambda x: lev.distance(x[0], x[1]), axis=1)
         df_matches["conf1"] = 1 - df_matches["conf"]
 
         if params["match_threshold"] is not None:
             df_good_matches = df_matches[(df_matches["ldist"] > 0) & (df_matches["conf1"] > params["match_threshold"]) & (df_matches["conf1"] < 1)].sort_values(by=["conf1"])
+            console.print("String matching complete ✅")
             return df_good_matches  # does this return duplicates? like if there are multiple matches above the threshhold it needs to pick the highest one, NOT include all of them
         else:
-            return df_matches
-
-
-    @classmethod
-    def match_strings_old(cls, ref_docs: list[str], query_docs: list[str], params: StringMatchParams):
-
-        # set up vectorizer and index for string matching
-        vectorizer = TfidfVectorizer(min_df=1, analyzer=cls.ngrams)
-        tf_idf_matrix = vectorizer.fit_transform(ref_docs)
-        messy_tf_idf_matrix = vectorizer.transform(query_docs)
-        data_matrix = tf_idf_matrix
-        index = nmslib.init(
-            method=params["nmslib_opts"]["method"],
-            space=params["nmslib_opts"]["space"],
-            data_type=params["nmslib_opts"]["data_type"]
-        )
-        index.addDataPointBatch(data_matrix)
-        index.createIndex()
-
-        # execute query and store good matches
-        query_matrix = messy_tf_idf_matrix
-        nbrs = index.knnQueryBatch(
-            query_matrix,
-            k=params["query_batch_opts"]["K"],
-            num_threads=params["query_batch_opts"]["num_threads"]
-        )
-        mts =[]
-        for i in range(len(nbrs)):  # todo: add progress bar
-            original_nm = query_docs[i]
-            for row in list(range(len(nbrs[i][0]))):
-                try:
-                    matched_nm = ref_docs[nbrs[i][0][row]]
-                    conf = abs(nbrs[i][1][row])
-                except:
-                    matched_nm = "no match found"
-                    conf = None
-                mts.append([original_nm, matched_nm, conf])
-
-        df_matches = pd.DataFrame(mts,columns=["original_doc", "matched_doc", "cont"])
-        df_matches["ldist"] = df_matches[["matched_doc", "original_doc"]].apply(lambda x: lev.distance(x[0], x[1]), axis=1)
-        df_matches["conf1"] = 1 - df_matches["conf"]
-
-        if params["match_threshold"] is not None:
-            df_good_matches = df_matches[(df_matches["ldist"] > 0) & (df_matches["conf1"] > params["match_threshold"]) & (df_matches["conf1"] < 1)].sort_values(by=["conf1"])
-            return df_good_matches  # does this return duplicates? like if there are multiple matches above the threshhold it needs to pick the highest one, NOT include all of them
-        else:
+            console.print("String matching complete ✅")
             return df_matches
 
 
