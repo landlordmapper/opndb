@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
 from pprint import pprint
-from typing import Any, ClassVar, Optional, Tuple
+from typing import Any, ClassVar, Optional, Tuple, List
 
 import nmslib
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
@@ -135,8 +135,8 @@ class WorkflowBase(ABC):
             return WkflRentalSubset(config_manager)
         elif wkfl_id == "clean_merge":
             return WkflCleanMerge(config_manager)
-        # elif configs["wkfl_type"] == "string_match":
-        #     return WkflStringMatch(config_manager)
+        elif wkfl_id == "string_match":
+            return WkflStringMatch(config_manager)
         # elif configs["wkfl_type"] == "network_graph":
         #     return WkflNetworkGraph(config_manager)
         # elif configs["wkfl_type"] == "final_output":
@@ -991,6 +991,7 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
     WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
 
     ANALYSIS_FIELDS: list[str] = [
+        "researched",
         "name",
         "urls",
         "notes",
@@ -1046,6 +1047,7 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
         df_freq: pd.DataFrame = subset_df.generate_frequency_df(df_addrs, "address")
         for field in self.ANALYSIS_FIELDS:
             df_freq[field] = ""
+        df_freq["researched"] = "f"
         self.dfs_out["address_analysis"] = df_freq
 
     def summary_stats(self) -> None:
@@ -1232,6 +1234,7 @@ class WkflCleanMerge(WorkflowStandardBase):
 
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def execute_column_generators(
         self,
@@ -1426,10 +1429,12 @@ class WkflStringMatch(WorkflowStandardBase):
     OUTPUTS:
         - Inputted dataset with string matching result columns
     """
+    WKFL_NAME: str = "TAXPAYER RECORD STRING-MATCHING WORKFLOW"
+    WKFL_DESC: str = "Executes string matching based on concatenation of taxpayer name and address."
     DEFAULT_NMSLIB: NmslibOptions = {
         "method": "hnsw",
         "space": "cosinesimil_sparse_fast",
-        # "data_type": nmslib.DataType.SPARSE_VECTOR
+        "data_type": nmslib.DataType.SPARSE_VECTOR
     }
     DEFAULT_QUERY_BATCH = {
         "num_threads": 8,
@@ -1437,22 +1442,13 @@ class WkflStringMatch(WorkflowStandardBase):
     }
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "props_prepped": path_gen.processed_props_prepped(configs),
-            "address_analysis": path_gen.analysis_address_analysis(configs),
-        }
-        self.load_dfs(load_map)
-
-    def process(self) -> None:
-
-        # 1. SET PARAMS
-        # define default params matrix
-        default_matrix: list[StringMatchParams] = [
+    def execute_param_builder(self) -> List[StringMatchParams]:
+        t.print_with_dots("Building string matching params object")
+        return [
             {
-                "name_col": "",  # todo: handle the name columns
+                "name_col": "clean_name",
                 "match_threshold": 0.85,
                 "include_orgs": False,
                 "include_unresearched": False,
@@ -1460,7 +1456,7 @@ class WkflStringMatch(WorkflowStandardBase):
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
             },
             {
-                "name_col": "",
+                "name_col": "clean_name",
                 "include_orgs": False,
                 "match_threshold": 0.85,
                 "include_unresearched": True,
@@ -1468,7 +1464,7 @@ class WkflStringMatch(WorkflowStandardBase):
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
             },
             {
-                "name_col": "",
+                "name_col": "clean_name",
                 "match_threshold": 0.8,
                 "include_orgs": False,
                 "include_unresearched": True,
@@ -1476,58 +1472,52 @@ class WkflStringMatch(WorkflowStandardBase):
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
             },
         ]
-        # ask user if they want to change the params matrix, make adjustments accordingly
-        # if not, set matrix instance var to default
-        self.params_matrix = default_matrix
 
-        # 2. PREP DATA
+    def execute_column_generators(self, df_taxpayers) -> pd.DataFrame:
+        t.print_with_dots("Generating columns for matching")
         # set address column so that if there is no validated address for a property, the raw address is used instead
-        dfs["props_prepped"]["matching_address"] = dfs["props_prepped"].apply(
-            lambda row: MatchBase.set_matching_address(row), axis=1
-        )
+        df_taxpayers = cols_df.set_match_address(df_taxpayers)
         # add name+address concatenated columns to use for matching
-        dfs["props_prepped"]["name_address_clean"] = StringMatch.concatenate_name_addr(
-            dfs["props_prepped"],
-            "name_address_clean",
-            "clean_name",
-            "matching_address"
-        )
-        dfs["props_prepped"]["name_address_core"] = StringMatch.concatenate_name_addr(
-            dfs["props_prepped"],
-            "name_address_core",
-            "core_name",
-            "matching_address"
-        )
+        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "clean_name", "match_address")
+        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "core_name", "match_address")
+        return df_taxpayers
 
-        # 3. RUN STRING MATCHING
-        # raise exceptions is parameter matrix or input dataframe are empty
-        if self.params_matrix is None:
-            raise Exception("Parameter matrix is empty.")
-
-        # execute param matrix loop for string matching workflow
-        for i, params in enumerate(self.params_matrix):
-            # set include_address column
-            dfs["props_prepped"]["include_address"] = dfs["props_prepped"]["matching_address"].apply(
+    def execute_string_matching(
+        self,
+        params_matrix: List[StringMatchParams],
+        df_taxpayers: pd.DataFrame,
+        df_analysis: pd.DataFrame
+    ) -> pd.DataFrame:
+        """Returns final dataset to be outputted"""
+        t.print_with_dots("Executing string matching")
+        df_matched: pd.DataFrame = df_taxpayers.copy()
+        df_researched: pd.DataFrame = df_analysis[df_analysis["researched"] == "t"]
+        for i, params in enumerate(params_matrix):
+            t.print_equals(f"Matching strings for STRING_MATCHED_NAME_{i+1}")
+            console.print("NAME COLUMN:", params["name_col"])
+            console.print("MATCH THRESHOLD:", params["match_threshold"])
+            console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
+            console.print("NMSLIB OPTIONS:", params["nmslib_opts"])
+            console.print("QUERY BATCH OPTIONS:", params["query_batch_opts"])
+            t.print_with_dots("Setting include_address")
+            df_taxpayers["include_address"] = df_taxpayers["match_address"].apply(
                 lambda addr: MatchBase.check_address(
                     addr,
-                    dfs["address_analysis"],
+                    df_researched,
                     params["include_orgs"],
                     params["include_unresearched"],
                 )
             )
             # filter out addresses
-            df_filtered_addrs: pd.DataFrame = dfs["props_prepped"][dfs["props_prepped"]["include_address"] == True]
+            t.print_with_dots("Filtering out taxpayer records where include_address is False")
+            df_filtered_addrs: pd.DataFrame = df_taxpayers[df_taxpayers["include_address"] == True]
             df_filtered: pd.DataFrame = df_filtered_addrs[[
-                "clean_name", "core_name", "matching_address", "name_address_clean", "name_address_core"
+                "clean_name", "core_name", "match_address", "clean_name_address", "core_name_address"
             ]]
             # set ref & query docs
-            if params["name_col"] == "clean_name":
-                ref_docs: list[str] = list(df_filtered["name_address_clean"].dropna().unique())
-                query_docs: list[str] = list(df_filtered["name_address_clean"].dropna().unique())
-            else:
-                ref_docs: list[str] = list(df_filtered["name_address_core"].dropna().unique())
-                query_docs: list[str] = list(df_filtered["name_address_core"].dropna().unique())
-
+            t.print_with_dots("Setting document objects for HNSW index")
+            ref_docs: list[str] = list(df_filtered[f"{params['name_col']}_address"].dropna().unique())
+            query_docs: list[str] = list(df_filtered[f"{params['name_col']}_address"].dropna().unique())
             # get string matches
             df_matches: pd.DataFrame = StringMatch.match_strings(
                 ref_docs=ref_docs,
@@ -1535,35 +1525,59 @@ class WkflStringMatch(WorkflowStandardBase):
                 params=params
             )
             # generate network graph to associated matches
-            self.df_process_results: pd.DataFrame = NetworkMatchBase.string_match_network_graph(
-                df_process_input=dfs["props_prepped"],
+            df_process_results: pd.DataFrame = NetworkMatchBase.string_match_network_graph(
+                df_process_input=df_taxpayers,
                 df_matches=df_matches,
                 match_count=i,
-                name_address_column=""  # todo: fix this
+                name_address_column=f"{params['name_col']}_address"
             )
+            df_matched = pd.merge(df_matched, df_process_results, how="left", on=f"{params['name_col']}_address")
+            df_matched = ops_df.combine_columns_parallel(df_matched)
+            df_matched.drop_duplicates(subset=[f"{params['name_col']}_address"], inplace=True)
 
-        # 4. MERGE TO ORIGINAL DF
-        # merge output with original properties dataset
-        df_process_output: pd.DataFrame = pd.merge(
-            dfs["props_prepped"],
-            dfs["props_prepped"],
-            how="left",
-            on=""  # todo: fix this
-        )
-        # clean up
-        df_process_output: pd.DataFrame = ops_df.combine_columns_parallel(df_process_output)
-        df_process_output.drop_duplicates(tr.PIN, inplace=True)
-        df_process_output.drop(columns=["original_doc"], inplace=True)  # todo: which other columns should be dropped? - NOT name_address_clean
+            # todo: which cols to drop?
 
-        return {"props_string_matched": df_process_output}
+            console.print("MATCHED DF COLS:")
+            for col in df_matched.columns:
+                console.print(f" >>>> {col}")
+
+        console.print("MATCHED DF COLS (FINAL):")
+        for col in df_matched.columns:
+            console.print(f" >>>> {col}")
+
+        return df_matched
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {
+            "taxpayers_prepped": path_gen.processed_taxpayers_prepped(configs),
+            "address_analysis": path_gen.analysis_address_analysis(configs),
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        # todo: add log/printout of the parameter matrix combinations and how they correspond to the string match columns generated
+        # copy dfs
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_prepped"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        # generate matrix parameters
+        params_matrix: List[StringMatchParams] = self.execute_param_builder()
+        # generate columns
+        df_taxpayers = self.execute_column_generators(df_taxpayers)
+        # run matching
+        df_taxpayers_matched = self.execute_string_matching(params_matrix, df_taxpayers, df_analysis)
+        # set out dfs
+        self.dfs_out["taxpayers_string_matched"] = df_taxpayers_matched
 
     def summary_stats(self) -> None:
         pass
 
     def save(self) -> None:
-        configs
-        save_map: dict[str, Path] = {}
-        self.save_dfs(dfs, save_map)
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_string_matched": path_gen.processed_taxpayers_string_matched(configs),
+        }
+        self.save_dfs(save_map)
 
     def update_configs(self) -> None:
         pass
@@ -1581,80 +1595,69 @@ class WkflNetworkGraph(WorkflowStandardBase):
         - Networked property dataset with columns containing node/edge data for connected components
             - 'ROOT/processed/props_networked[FileExt]'
     """
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
-        self.stage: ClassVar[WorkflowStage] = WorkflowStage.NETWORK_GRAPH
+    WKFL_NAME: str = "NETWORK GRAPH WORKFLOW"
+    WKFL_DESC: str = "Executes network graph generation linking taxpayer, corporate and LLC records."
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
-    def load(self) -> dict[str, pd.DataFrame]:
-        load_map: dict[str, Path] = {
-            "props_string_matched": path_gen.processed_props_string_matched(self.configs),
-            "address_analysis": path_gen.analysis_address_analysis(self.configs),
-        }
-        return self.set_working_dfs(load_map)
-
-    def process(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-        # 1. SET PARAMS
-        # define default params matrix
-        default_matrix: list[NetworkMatchParams] = [
+    def execute_param_builder(self) -> List[NetworkMatchParams]:
+        t.print_with_dots("Building network graph params object")
+        return [
             {
-                "taxpayer_name_col": "",
-                "entity_name_col": "",
+                "taxpayer_name_col": "clean_name",
+                "entity_name_col": "entity_clean_name",
                 "include_orgs": False,
                 "include_unresearched": False,
-                "string_match_name": "",
+                "string_match_name": "string_matched_name_1",
             },
             {
-                "taxpayer_name_col": "",
-                "entity_name_col": "",
+                "taxpayer_name_col": "clean_name",
+                "entity_name_col": "entity_core_name",
                 "include_orgs": False,
                 "include_unresearched": False,
-                "string_match_name": "",
+                "string_match_name": "string_matched_name_3",
             },
             {
-                "taxpayer_name_col": "",
-                "entity_name_col": "",
+                "taxpayer_name_col": "core_name",
+                "entity_name_col": "entity_clean_name",
                 "include_orgs": False,
                 "include_unresearched": True,
-                "string_match_name": "",
+                "string_match_name": "string_matched_name_3",
             },
             {
-                "taxpayer_name_col": "",
-                "entity_name_col": "",
+                "taxpayer_name_col": "clean_name",
+                "entity_name_col": "entity_clean_name",
                 "include_orgs": True,
                 "include_unresearched": False,
-                "string_match_name": "",
+                "string_match_name": "string_matched_name_2",
             },
             {
-                "taxpayer_name_col": "",
-                "entity_name_col": "",
+                "taxpayer_name_col": "clean_name",
+                "entity_name_col": "entity_clean_name",
                 "include_orgs": True,
                 "include_unresearched": True,
-                "string_match_name": "",
+                "string_match_name": "string_matched_name_3",
             },
             {
-                "taxpayer_name_col": "",
-                "entity_name_col": "",
+                "taxpayer_name_col": "core_name",
+                "entity_name_col": "entity_clean_name",
                 "include_orgs": True,
                 "include_unresearched": True,
-                "string_match_name": "",
+                "string_match_name": "string_matched_name_3",
             },
         ]
-        # ask user if they want to change the params matrix, make adjustments accordingly
-        # if not, set matrix instance var to default
-        self.params_matrix = default_matrix
 
-        # 2. DATA PREP
-        dfs["props_string_matched"].drop_duplicates(subset=["name_address_clean"], inplace=True)
-
-        # 3. EXECUTE NETWORK CODE
-        df_process: pd.DataFrame = dfs["props_string_matched"].copy()  # todo: determine if this is necessary
-        for i, params in enumerate(self.params_matrix):
+    def execute_network_graph_generator(
+        self,
+        params_matrix: List[NetworkMatchParams],
+        df_taxpayers: pd.DataFrame,
+        df_analysis: pd.DataFrame
+    ) -> pd.DataFrame:
+        df_researched: pd.DataFrame = df_analysis[df_analysis["researched"] == "t"]
+        for i, params in enumerate(params_matrix):
             # generate network graph and dataframe with component ID column
-            df_rentals_components, gMatches = NetworkMatchBase.rentals_network(
-                dfs["props_string_matched"],
-                dfs["address_analysis"],
-                params
-            )
+            df_rentals_components, gMatches = NetworkMatchBase.rentals_network(i, df_taxpayers, df_researched, params)
             # merge to original dataset
             df_process: pd.DataFrame = pd.merge(
                 df_process,
@@ -1676,17 +1679,39 @@ class WkflNetworkGraph(WorkflowStandardBase):
                 f"final_component_{i+1}",
                 f"network_{i+1}"
             )
+        return pd.DataFrame()
 
-        return {"props_networked": df_process}
+    def load(self):
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {
+            "taxpayers_string_matched": path_gen.processed_taxpayers_string_matched(configs),
+            "address_analysis": path_gen.analysis_address_analysis(configs),
+        }
+        self.load_dfs(load_map)
 
-    def summary_stats(self, dfs_load: dict[str, pd.DataFrame], dfs_process: dict[str, pd.DataFrame]):
+    def process(self) -> None:
+        # copy dfs
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_string_matched"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        # generate matrix parameters
+        params_matrix: List[NetworkMatchParams] = self.execute_param_builder()
+        # run network graph
+        df_networked: pd.DataFrame = self.execute_network_graph_generator(
+            params_matrix, df_taxpayers, df_analysis
+        )
+        self.dfs_out["taxpayers_networked"] = df_networked
+
+    def summary_stats(self) -> None:
         pass
 
-    def save(self, dfs: dict[str, pd.DataFrame], summary_stats) -> None:
-        save_map: dict[str, Path] = {}
-        self.save_dfs(dfs, save_map)
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_networked": path_gen.processed_taxpayers_networked(configs),
+        }
+        self.save_dfs(save_map)
 
-    def update_configs(self, configs: WorkflowConfigs) -> None:
+    def update_configs(self) -> None:
         pass
 
 
@@ -1701,11 +1726,8 @@ class WkflFinalOutput(WorkflowBase):
         - Parquet files & database schema (?)
     """
     stage = WorkflowStage.FINAL_OUTPUT
-    def __init__(self, configs: WorkflowConfigs):
-        super().__init__(configs)
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
 
     def execute(self):
-        # saves final outputs to "final_outputs" directory
-        # set summary stats
-        # update configuration file
         pass

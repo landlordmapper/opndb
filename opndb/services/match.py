@@ -46,55 +46,47 @@ class MatchBase:
     def check_address(
             cls,
             address: str | None,
-            df_analysis: pd.DataFrame,
+            df_researched: pd.DataFrame,
             include_orgs: bool,
             include_unresearched: bool
     ) -> bool:
         """
         Returns "True" if the address SHOULD be included in the network analysis, and False if it should be ignored.
         """
-        aa = AddressAnalysis
         if not address:
             return False
         # the address has NOT already been analyzed
-        if address not in list(df_analysis[aa.ADDRESS].dropna().unique()):
+        if address not in list(df_researched["value"].dropna().unique()):
             return include_unresearched
         # address has been analyzed - check if it should be ignored
         else:
-            df_addr_analysis = df_analysis[df_analysis[aa.ADDRESS] == address]
-            if df_addr_analysis[aa.IS_LANDLORD_ORG].eq("t").any():
+            df_addr_analysis = df_researched[df_researched["value"] == address]
+            if df_addr_analysis["is_landlord_org"].eq("t").any():
                 return include_orgs
-            elif df_addr_analysis[aa.IS_LAWFIRM].eq("t").any():
+            elif df_addr_analysis["is_lawfirm"].eq("t").any():
                 return False
-            elif df_addr_analysis[aa.IS_MISSING_SUITE].eq("t").any():
+            elif df_addr_analysis["is_missing_suite"].eq("t").any():
                 return False
-            elif df_addr_analysis[aa.IS_FINANCIAL_SERVICES].eq("t").any():
+            elif df_addr_analysis["is_financial_services"].eq("t").any():
                 return False
-            elif df_addr_analysis[aa.IS_VIRTUAL_OFFICE_AGENT].eq("t").any():
+            elif df_addr_analysis["is_virtual_office_agent"].eq("t").any():
                 return False
-            elif df_addr_analysis[aa.FIX_ADDRESS].eq("t").any():
+            elif df_addr_analysis["fix_address"].eq("t").any():
                 return False
-            elif df_addr_analysis[aa.IS_IGNORE_MISC].eq("t").any():
+            elif df_addr_analysis["is_ignore_misc"].eq("t").any():
                 return False
             else:
                 return True
 
     @classmethod
     def set_matching_address(cls, row):
-        # todo: fix these column names
-        if pd.isna(row["GCD_FORMATTED_MATCH"]) or row["GCD_FORMATTED_MATCH"].strip() == "":
-            return row["RAW_ADDRESS"]
+        if pd.isna(row["merge_address_1"]) or row["merge_address_1"].strip() == "":
+            return row["raw_address_v"]  # todo: run cleaned addresses through validator and change this to "clean_address_v" throughout the code where needed
         else:
-            return row["GCD_FORMATTED_MATCH"]
+            return row["merge_address_1"]
 
 
 class StringMatch(MatchBase):
-
-    @classmethod
-    def concatenate_name_addr(cls, df: pd.DataFrame, name_addr_col: str, name_col: str, addr_col: str) -> pd.DataFrame:
-        """Generates column with name and address concatenated. Used for string matching workflow."""
-        df[name_addr_col] = df[name_col] + " - " + df[addr_col]
-        return df
 
     @classmethod
     def ngrams(cls, string, n=3):
@@ -528,34 +520,86 @@ class NetworkMatchBase(MatchBase):
             match_count: int,
             name_address_column: str
     ) -> pd.DataFrame:
-
         """Generates network graph for string match results. Outputs dataframe containing network graph results."""
-
         # generate network graph
+        t.print_with_dots("Building network graph for string match results")
         gMatches = nx.Graph()
-        for i, row in df_matches.iterrows():  # todo: add progress bar
-            cls.build_edge(gMatches, row["original_doc"], row["matched_doc"])
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            "•",
+            TextColumn("[bold cyan]{task.fields[processed]}/{task.total} records"),
+        ) as progress:
+            task = progress.add_task(
+                f"[yellow]Building nodes and edges...",
+                total=len(df_matches),
+                processed=0,
+            )
+            processed_count = 0
+            for i, row in df_matches.iterrows():
+                cls.build_edge(gMatches, row["original_doc"], row["matched_doc"])
+                processed_count += 1
+                progress.update(
+                    task,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing record {processed_count}/{len(df_matches)}"
+                )
 
         # loop through each connected component
+        t.print_with_dots("Building dictionary to map taxpayer records to connected components")
         component_map = {}
         component_map_names = {}
-        for i, connections in enumerate(list(nx.connected_components(gMatches))):
-            # pull out name with the shortest length as representative "canonical" name for network
-            shortest = min(connections, key=len)
-            # store key/value pair for original name and new name in dictionary
-            for component in connections:
-                component_map[component] = shortest
-            shortest_two = sorted(connections, key=len)[:3]
-            shortest_names = []
-            for name in shortest_two:
-                name_addr_split = name.split("-")
-                shortest_names.append(name_addr_split[0].strip())
-            # concatenate the two shortest names with " -- " as the separator
-            canonical_name = ' -- '.join(shortest_names)
-            # store key/value pair for original name and new name in dictionary
-            for component in connections:
-                component_map_names[component] = f"{canonical_name} -- {i}"
 
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            "•",
+            TextColumn("[bold cyan]{task.fields[processed]}/{task.total} records"),
+        ) as progress:
+            task = progress.add_task(
+                f"[yellow]Building dictionary...",
+                total=len(df_matches),
+                processed=0,
+            )
+            processed_count = 0
+            for i, connections in enumerate(list(nx.connected_components(gMatches))):
+                # pull out name with the shortest length as representative "canonical" name for network
+                shortest = min(connections, key=len)
+                # store key/value pair for original name and new name in dictionary
+                for component in connections:
+                    component_map[component] = shortest
+                shortest_two = sorted(connections, key=len)[:3]
+                shortest_names = []
+                for name in shortest_two:
+                    name_addr_split = name.split("-")
+                    shortest_names.append(name_addr_split[0].strip())
+                # concatenate the two shortest names with " -- " as the separator
+                canonical_name = ' -- '.join(shortest_names)
+                # store key/value pair for original name and new name in dictionary
+                for component in connections:
+                    component_map_names[component] = f"{canonical_name} -- {i}"
+            processed_count += 1
+            progress.update(
+                task,
+                advance=1,
+                processed=processed_count,
+                description=f"[yellow]Processing record {processed_count}/{len(df_matches)}"
+            )
+
+        t.print_with_dots("Adding components to taxpayer records")
         # add new column for landlord network name
         df_matches["fuzzy_match_name"] = df_matches["original_doc"].apply(lambda x: component_map[x])  # this is likely the redundant column
         df_matches["fuzzy_match_combo"] = df_matches["original_doc"].apply(lambda x: component_map_names[x])
@@ -574,13 +618,20 @@ class NetworkMatchBase(MatchBase):
 
         # Keep good matches and join back to data
         # df_matches.drop_duplicates(subset=['FUZZY_NAME', 'FUZZY_ADDRESS', 'ORIGINAL_DOC'], inplace=True)
-        df_filtered = pd.merge(df_process_input, df_matches[["original_doc", "fuzzy_match_combo"]], how="left", left_on=name_address_column, right_on="original_doc")
+        t.print_with_dots("Merging string matching components into taxpayer records")
+        df_filtered = pd.merge(
+            df_process_input,
+            df_matches[["original_doc", "fuzzy_match_combo"]],
+            how="left",
+            left_on=name_address_column,
+            right_on="original_doc"
+        )
 
         # fill in empty rows with the name of their corresponding CleanName and CleanAddress values from the new dataframe
         # df_filtered['FUZZY_NAME'].fillna(df_filtered['CLEAN_NAME'], inplace=True)
         # df_filtered['FUZZY_ADDRESS'].fillna(df_filtered['CLEAN_ADDRESS'], inplace=True)
         df_filtered = df_filtered.rename(columns={"fuzzy_match_combo": f"string_matched_name_{match_count+1}"})
-
+        console.print("String match data merged ✅")
         return df_filtered
 
 

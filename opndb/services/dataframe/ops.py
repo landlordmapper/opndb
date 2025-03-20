@@ -15,6 +15,7 @@ from opndb.constants.columns import (
 )
 from opndb.services.address import AddressBase as addr
 from opndb.services.dataframe.base import DataFrameOpsBase
+from opndb.services.match import MatchBase
 from opndb.services.string_clean import (
     CleanStringBase as clean_base,
     CleanStringName as clean_name,
@@ -280,6 +281,19 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
     @classmethod
     def set_formatted_address_v(cls, df: pd.DataFrame) -> pd.DataFrame:
         df["formatted_address_v"] = df.apply(lambda row: addr.get_formatted_address_v(row), axis=1)
+        return df
+
+    @classmethod
+    def concatenate_name_addr(cls, df: pd.DataFrame,name_col: str, addr_col: str) -> pd.DataFrame:
+        """Generates column with name and address concatenated. Used for string matching workflow."""
+        df[f"{name_col}_address"] = df[name_col] + " - " + df[addr_col]
+        return df
+
+    @classmethod
+    def set_match_address(cls, df: pd.DataFrame) -> pd.DataFrame:
+        df["match_address"] = df.apply(
+            lambda row: MatchBase.set_matching_address(row), axis=1
+        )
         return df
 
 
