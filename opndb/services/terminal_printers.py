@@ -10,7 +10,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.tree import Tree
 from rich.syntax import Syntax
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn, TimeElapsedColumn
 from rich.live import Live
 from rich.prompt import Prompt, Confirm
 from rich import box
@@ -498,6 +498,28 @@ class TerminalBase:
         est_cost: str = f"${cost:,.2f}"
         console.print(f"{unique_addrs} unique addresses found.")
         console.print(f"[red] Cost for executing Geocodio calls: {est_cost}.[/red]")
+
+    @classmethod
+    def create_progress_bar(cls, description, total, processed=0):
+        """Create a standardized progress bar for OPNDB processing tasks."""
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            "•",
+            TextColumn("[bold cyan]{task.fields[processed]}/{task.total} records"),
+        )
+        task = progress.add_task(
+            description,
+            total=total,
+            processed=processed,
+        )
+        return progress, task
 
 
 class TerminalInteract(TerminalBase):

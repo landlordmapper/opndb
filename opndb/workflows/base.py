@@ -1650,53 +1650,32 @@ class WkflNetworkGraph(WorkflowStandardBase):
         df_analysis: pd.DataFrame
     ) -> pd.DataFrame:
         df_researched: pd.DataFrame = df_analysis[df_analysis["researched"] == "t"]
-        # for i, params in enumerate(params_matrix):
-        params = params_matrix[0]
-        i = 0
-        console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
-        console.print("ENTITY NAME COLUMN:", params["entity_name_col"])
-        console.print("INCLUDE ORGS:", params["include_orgs"])
-        console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
-        console.print("STRING MATCH NAME:", params["string_match_name"])
-        # generate network graph and dataframe with component ID column
-        gMatches = NetworkMatchBase.taxpayers_network(
-            i+1,
-            df_taxpayers,
-            df_researched,
-            params
-        )
-        console.print("CONNECTED COMPONENT COUNT:", nx.number_connected_components(gMatches))
-        console.print("NODES COUNT:", nx.number_of_nodes(gMatches))
-        console.print("EDGES COUNT:", nx.number_of_edges(gMatches))
-
-        # df_taxpayers_networked = NetworkMatchBase.set_taxpayer_component(
-        #     i+1,
-        #     df_taxpayers,
-        #     gMatches,
-        #     params
-        # )
-        # # merge to original dataset
-        # df_taxpayers = pd.merge(
-        #     df_taxpayers,
-        #     df_taxpayers_networked[["name_address_clean", f"final_component_{i+1}"]],
-        #     how="left",
-        #     on="name_address_clean",
-        # )
-        # # set network canonical names
-        # df_process: pd.DataFrame = NetworkMatchBase.set_network_name(
-        #     i+1,
-        #     df_process,
-        #     f"final_component_{i+1}",
-        #     f"network_{i+1}"
-        # )
-        # # set text for node/edge data - should this be a separate dataset? probably
-        # df_process: pd.DataFrame = NetworkMatchBase.set_network_text(
-        #     gMatches,
-        #     df_process,
-        #     f"final_component_{i+1}",
-        #     f"network_{i+1}"
-        # )
-        return gMatches
+        for i, params in enumerate(params_matrix):
+            console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
+            console.print("ENTITY NAME COLUMN:", params["entity_name_col"])
+            console.print("INCLUDE ORGS:", params["include_orgs"])
+            console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
+            console.print("STRING MATCH NAME:", params["string_match_name"])
+            gMatches = NetworkMatchBase.taxpayers_network(
+                df_taxpayers,
+                df_researched,
+                params
+            )
+            df_taxpayers = NetworkMatchBase.set_taxpayer_component(
+                i+1,
+                df_taxpayers,
+                gMatches,
+                params
+            )
+            df_taxpayers = NetworkMatchBase.set_network_name(i+1, df_taxpayers)
+            # # set text for node/edge data - should this be a separate dataset? probably
+            # df_process: pd.DataFrame = NetworkMatchBase.set_network_text(
+            #     gMatches,
+            #     df_process,
+            #     f"final_component_{i+1}",
+            #     f"network_{i+1}"
+            # )
+        return df_taxpayers
 
     def load(self):
         configs = self.config_manager.configs
