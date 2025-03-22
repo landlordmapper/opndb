@@ -76,7 +76,8 @@ class TerminalBase:
             {"name": "Analysis Final", "value": "analysis_final"},
             {"name": "Subset Rentals", "value": "rental_subset"},
             {"name": "Pre-Match Cleaning", "value": "clean_merge"},
-            {"name": "Taxpayer Record String Matching", "value": "string_match"}
+            {"name": "Taxpayer Record String Matching", "value": "string_match"},
+            {"name": "Taxpayer Record Network Graph Generator", "value": "network_graph"},
         ]
 
         # Let user select a workflow

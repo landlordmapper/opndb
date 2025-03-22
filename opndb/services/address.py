@@ -327,16 +327,16 @@ class AddressBase:
 
             # Set up Rich progress display
             with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold blue]{task.description}"),
-                    BarColumn(bar_width=None),
-                    "[progress.percentage]{task.percentage:>3.0f}%",
-                    "•",
-                    TimeElapsedColumn(),
-                    "•",
-                    TimeRemainingColumn(),
-                    "•",
-                    TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                BarColumn(bar_width=None),
+                "[progress.percentage]{task.percentage:>3.0f}%",
+                "•",
+                TimeElapsedColumn(),
+                "•",
+                TimeRemainingColumn(),
+                "•",
+                TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
             ) as progress:
                 geocodio_task = progress.add_task(
                     "[yellow]Processing Geocodio API calls...",

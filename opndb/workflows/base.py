@@ -6,7 +6,7 @@ from enum import IntEnum
 from pathlib import Path
 from pprint import pprint
 from typing import Any, ClassVar, Optional, Tuple, List
-
+import networkx as nx
 import nmslib
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 
@@ -138,8 +138,8 @@ class WorkflowBase(ABC):
             return WkflCleanMerge(config_manager)
         elif wkfl_id == "string_match":
             return WkflStringMatch(config_manager)
-        # elif configs["wkfl_type"] == "network_graph":
-        #     return WkflNetworkGraph(config_manager)
+        elif wkfl_id == "network_graph":
+            return WkflNetworkGraph(config_manager)
         # elif configs["wkfl_type"] == "final_output":
         #     return WkflFinalOutput(config_manager)
         return None
@@ -1591,6 +1591,7 @@ class WkflNetworkGraph(WorkflowStandardBase):
     """
     WKFL_NAME: str = "NETWORK GRAPH WORKFLOW"
     WKFL_DESC: str = "Executes network graph generation linking taxpayer, corporate and LLC records."
+
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
@@ -1649,31 +1650,53 @@ class WkflNetworkGraph(WorkflowStandardBase):
         df_analysis: pd.DataFrame
     ) -> pd.DataFrame:
         df_researched: pd.DataFrame = df_analysis[df_analysis["researched"] == "t"]
-        for i, params in enumerate(params_matrix):
-            # generate network graph and dataframe with component ID column
-            df_rentals_components, gMatches = NetworkMatchBase.rentals_network(i, df_taxpayers, df_researched, params)
-            # merge to original dataset
-            df_process: pd.DataFrame = pd.merge(
-                df_process,
-                df_rentals_components[["name_address_clean", f"final_component_{i+1}"]],
-                how="left",
-                on="name_address_clean",
-            )
-            # set network canonical names
-            df_process: pd.DataFrame = NetworkMatchBase.set_network_name(
-                i+1,
-                df_process,
-                f"final_component_{i+1}",
-                f"network_{i+1}"
-            )
-            # set text for node/edge data - should this be a separate dataset? probably
-            df_process: pd.DataFrame = NetworkMatchBase.set_network_text(
-                gMatches,
-                df_process,
-                f"final_component_{i+1}",
-                f"network_{i+1}"
-            )
-        return pd.DataFrame()
+        # for i, params in enumerate(params_matrix):
+        params = params_matrix[0]
+        i = 0
+        console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
+        console.print("ENTITY NAME COLUMN:", params["entity_name_col"])
+        console.print("INCLUDE ORGS:", params["include_orgs"])
+        console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
+        console.print("STRING MATCH NAME:", params["string_match_name"])
+        # generate network graph and dataframe with component ID column
+        gMatches = NetworkMatchBase.taxpayers_network(
+            i+1,
+            df_taxpayers,
+            df_researched,
+            params
+        )
+        console.print("CONNECTED COMPONENT COUNT:", nx.number_connected_components(gMatches))
+        console.print("NODES COUNT:", nx.number_of_nodes(gMatches))
+        console.print("EDGES COUNT:", nx.number_of_edges(gMatches))
+
+        # df_taxpayers_networked = NetworkMatchBase.set_taxpayer_component(
+        #     i+1,
+        #     df_taxpayers,
+        #     gMatches,
+        #     params
+        # )
+        # # merge to original dataset
+        # df_taxpayers = pd.merge(
+        #     df_taxpayers,
+        #     df_taxpayers_networked[["name_address_clean", f"final_component_{i+1}"]],
+        #     how="left",
+        #     on="name_address_clean",
+        # )
+        # # set network canonical names
+        # df_process: pd.DataFrame = NetworkMatchBase.set_network_name(
+        #     i+1,
+        #     df_process,
+        #     f"final_component_{i+1}",
+        #     f"network_{i+1}"
+        # )
+        # # set text for node/edge data - should this be a separate dataset? probably
+        # df_process: pd.DataFrame = NetworkMatchBase.set_network_text(
+        #     gMatches,
+        #     df_process,
+        #     f"final_component_{i+1}",
+        #     f"network_{i+1}"
+        # )
+        return gMatches
 
     def load(self):
         configs = self.config_manager.configs
