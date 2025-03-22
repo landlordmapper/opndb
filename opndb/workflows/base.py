@@ -24,7 +24,7 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.services.summary_stats import SummaryStats as ss
+from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
     ColumnTaxpayerRecords, ColumnClassCodes, ColumnUnvalidatedAddrs, ColumnValidatedAddrs
 from opndb.services.config import ConfigManager
@@ -90,6 +90,8 @@ class WorkflowBase(ABC):
         for id, path in load_map.items():
             self.dfs_in[id] = ops_df.load_df(path, str)
             if self.dfs_in[id] is not None:
+            # self.dfs_out[id] = ops_df.load_df(path, str)
+            # if self.dfs_out[id] is not None:
                 console.print(f"\"{id}\" successfully loaded from: \n{path}")
         console.print("\n")
         ss.display_load_table(self.dfs_in)
@@ -147,7 +149,7 @@ class WorkflowStandardBase(WorkflowBase):
         try:
             self.load()
             self.process()
-            # self.summary_stats()
+            self.summary_stats()
             self.save()
             # self.update_configs()
         except Exception as e:
@@ -367,6 +369,7 @@ class WkflDataClean(WorkflowStandardBase):
             "class_codes": path_gen.raw_class_codes(configs)
         }
         # load_map: dict[str, Path] = {  # todo: change these back
+        #     "properties": path_gen.processed_properties(configs),
         #     "taxpayer_records": path_gen.processed_taxpayer_records(configs),
         #     "corps": path_gen.processed_corps(configs),
         #     "llcs": path_gen.processed_llcs(configs),
@@ -424,7 +427,14 @@ class WkflDataClean(WorkflowStandardBase):
     # ----SUMMARY STATS GENERATOR----
     # -------------------------------
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSDataClean(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     # -------------
     # ----SAVER----

@@ -412,3 +412,12 @@ class PathGenerators(UtilsBase):
             Analysis.ADDRESS_ANALYSIS,
             configs["load_ext"]
         )
+
+    @classmethod
+    def summary_stats_data_clean(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.SUMMARY_STATS,
+            "data_clean",
+            configs["load_ext"]
+        )
