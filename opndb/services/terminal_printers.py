@@ -466,13 +466,13 @@ class TerminalBase:
         console.print(table)
 
     @classmethod
-    def display_table(cls, table_data):
+    def display_table(cls, title, data):
         # todo: format large numbers to have commas
-        table = Table(title="Dataframes Loaded")
+        table = Table(title=title)
         table.add_column("Dataset Name", justify="right", style="bold yellow")
         table.add_column("File Size", justify="right", style="green")
         table.add_column("Number of Rows", justify="right", style="cyan")
-        for td_obj in table_data:
+        for td_obj in data:
             row_count = int(td_obj["record_count"])
             formatted_count = f"{row_count:,}"
             table.add_row(

@@ -1,7 +1,69 @@
 import pandas as pd
+from rich.console import Console
+from rich.table import Table
+from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
+
+
+console = Console()
 
 class SummaryStats(object):
     # todo: create excel file with tabs for different workflow stages and save summary stats in each tab
+
+    @classmethod
+    def display_load_table(cls, dfs_in):
+        """Prints out summary tables of dataframes loaded into workflow object."""
+        table_data = []
+        for id, df in dfs_in.items():  # todo: standardize this, enforce types
+            if df is None:
+                continue
+            memory_usage = df.memory_usage(deep=True).sum()
+            table_data.append({
+                "dataset_name": id,
+                "file_size": utils.sizeof_fmt(memory_usage),
+                "record_count": len(df)
+            })
+        table = Table(title="Dataframes Loaded")
+        table.add_column("Dataset Name", justify="right", style="bold yellow")
+        table.add_column("File Size", justify="right", style="green")
+        table.add_column("Number of Rows", justify="right", style="cyan")
+        for td_obj in table_data:
+            row_count = int(td_obj["record_count"])
+            formatted_count = f"{row_count:,}"
+            table.add_row(
+                str(td_obj["dataset_name"]),
+                str(td_obj["file_size"]),
+                formatted_count,
+            )
+        console.print(table)
+        console.print("\n")
+
+    @classmethod
+    def display_load_stats_table(cls, dfs_in):
+        for id, df in dfs_in.items():
+            table_data = []
+            for col in df.columns:
+                # Count null values
+                null_count = df[col].isna().sum()
+                # Count empty strings (only for string/object columns)
+                empty_string_count = 0
+                if df[col].dtype == "object":
+                    empty_string_count = (df[col] == "").sum()
+                # Total empty values
+                total_empty = null_count + empty_string_count
+                table_data.append({
+                    "column_name": col,
+                    "null_count": total_empty
+                })
+            table = Table(title=f"{id} ({len(df):,} rows)")
+            table.add_column("Column Name", justify="right", style="bold yellow")
+            table.add_column("Empty/Null Values", justify="right", style="green")
+            for td_obj in table_data:
+                table.add_row(
+                    str(td_obj["column_name"]),
+                    str(f"{td_obj['null_count']:,}"),
+                )
+            console.print(table)
+            console.print("\n")
 
     @classmethod
     def summary_stats_data_clean(cls, dfs_out: dict[str, pd.DataFrame]):

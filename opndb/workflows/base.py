@@ -24,6 +24,7 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
+from opndb.services.summary_stats import SummaryStats as ss
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
     ColumnTaxpayerRecords, ColumnClassCodes, ColumnUnvalidatedAddrs, ColumnValidatedAddrs
 from opndb.services.config import ConfigManager
@@ -90,19 +91,9 @@ class WorkflowBase(ABC):
             self.dfs_in[id] = ops_df.load_df(path, str)
             if self.dfs_in[id] is not None:
                 console.print(f"\"{id}\" successfully loaded from: \n{path}")
-        # prep data for summary table printing
-        table_data = []
-        for id, df in self.dfs_in.items():  # todo: standardize this, enforce types
-            if df is None:
-                continue
-            memory_usage = df.memory_usage(deep=True).sum()
-            table_data.append({
-                "dataset_name": id,
-                "file_size": utils.sizeof_fmt(memory_usage),
-                "record_count": len(df)
-            })
-        t.display_table(table_data)
-        # todo: add summary tables listing columns found in each table
+        console.print("\n")
+        ss.display_load_table(self.dfs_in)
+        ss.display_load_stats_table(self.dfs_in)
 
     def save_dfs(self, save_map: dict[str, Path]) -> None:
         """Saves dataframes to their specified paths."""
@@ -208,7 +199,7 @@ class WkflDataClean(WorkflowStandardBase):
             - 'ROOT/raw/class_codes[FileExt]'
     OUTPUTS:
         - Cleaned taxpayer, corporate and LLC data
-            = 'ROOT/processed/properties[FileExt]'
+            - 'ROOT/processed/properties[FileExt]'
             - 'ROOT/processed/taxpayer_records[FileExt]'
             - 'ROOT/processed/corps[FileExt]'
             - 'ROOT/processed/llcs[FileExt]'
@@ -339,12 +330,6 @@ class WkflDataClean(WorkflowStandardBase):
 
         # props_taxpayers-specific logic
         if id == "props_taxpayers":
-            # generate clean name + address concat field
-            # t.print_with_dots(f"Concatenating clean name and address fields")
-            # df: pd.DataFrame = cols_df.set_name_address_concat(
-            #     df, column_manager.name_address_concat_map["clean"]
-            # )
-            # console.print(f"\"name_address\" field generated ✅")
             # split dataframe into properties and taxpayer_records
             t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
             col_manager_p = out_column_managers["properties"]
@@ -1721,9 +1706,5 @@ class WkflFinalOutput(WorkflowBase):
     OUTPUTS:
         - Parquet files & database schema (?)
     """
-    stage = WorkflowStage.FINAL_OUTPUT
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
-
-    def execute(self):
-        pass
