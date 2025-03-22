@@ -1,4 +1,5 @@
 # 1. Standard library imports
+import gc
 import shutil
 from abc import ABC, abstractmethod
 from enum import IntEnum
@@ -1438,7 +1439,7 @@ class WkflStringMatch(WorkflowStandardBase):
     }
     DEFAULT_QUERY_BATCH = {
         "num_threads": 8,
-        "K": 1
+        "K": 3
     }
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
@@ -1487,15 +1488,15 @@ class WkflStringMatch(WorkflowStandardBase):
         params_matrix: List[StringMatchParams],
         df_taxpayers: pd.DataFrame,
         df_analysis: pd.DataFrame
-    ) -> pd.DataFrame:
+    ):
         """Returns final dataset to be outputted"""
         t.print_with_dots("Executing string matching")
-        df_matched: pd.DataFrame = df_taxpayers.copy()
         df_researched: pd.DataFrame = df_analysis[df_analysis["researched"] == "t"]
         for i, params in enumerate(params_matrix):
             t.print_equals(f"Matching strings for STRING_MATCHED_NAME_{i+1}")
             console.print("NAME COLUMN:", params["name_col"])
             console.print("MATCH THRESHOLD:", params["match_threshold"])
+            console.print("INCLUDE ORGS:", params["include_orgs"])
             console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
             console.print("NMSLIB OPTIONS:", params["nmslib_opts"])
             console.print("QUERY BATCH OPTIONS:", params["query_batch_opts"])
@@ -1510,8 +1511,7 @@ class WkflStringMatch(WorkflowStandardBase):
             )
             # filter out addresses
             t.print_with_dots("Filtering out taxpayer records where include_address is False")
-            df_filtered_addrs: pd.DataFrame = df_taxpayers[df_taxpayers["include_address"] == True]
-            df_filtered: pd.DataFrame = df_filtered_addrs[[
+            df_filtered: pd.DataFrame = df_taxpayers[df_taxpayers["include_address"] == True][[
                 "clean_name", "core_name", "match_address", "clean_name_address", "core_name_address"
             ]]
             # set ref & query docs
@@ -1525,27 +1525,21 @@ class WkflStringMatch(WorkflowStandardBase):
                 params=params
             )
             # generate network graph to associated matches
-            df_process_results: pd.DataFrame = NetworkMatchBase.string_match_network_graph(
-                df_process_input=df_taxpayers,
-                df_matches=df_matches,
-                match_count=i,
-                name_address_column=f"{params['name_col']}_address"
+            df_matches_networked: pd.DataFrame = NetworkMatchBase.string_match_network_graph(df_matches)
+            # t.print_with_dots("Merging string match results into taxpayer records dataset")
+            df_taxpayers = pd.merge(
+                df_taxpayers,
+                df_matches_networked[["original_doc", "fuzzy_match_combo"]],
+                how="left",
+                left_on=f"{params['name_col']}_address",
+                right_on="original_doc"
             )
-            df_matched = pd.merge(df_matched, df_process_results, how="left", on=f"{params['name_col']}_address")
-            df_matched = ops_df.combine_columns_parallel(df_matched)
-            df_matched.drop_duplicates(subset=[f"{params['name_col']}_address"], inplace=True)
+            gc.collect()
+            df_taxpayers.drop(columns="original_doc", inplace=True)
+            df_taxpayers.drop_duplicates(subset="raw_name_address", inplace=True)
+            df_taxpayers.rename(columns={"fuzzy_match_combo": f"string_matched_name_{i+1}"}, inplace=True)
 
-            # todo: which cols to drop?
-
-            console.print("MATCHED DF COLS:")
-            for col in df_matched.columns:
-                console.print(f" >>>> {col}")
-
-        console.print("MATCHED DF COLS (FINAL):")
-        for col in df_matched.columns:
-            console.print(f" >>>> {col}")
-
-        return df_matched
+        return df_taxpayers
 
     def load(self) -> None:
         configs = self.config_manager.configs

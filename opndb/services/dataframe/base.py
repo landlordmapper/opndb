@@ -102,17 +102,18 @@ class DataFrameOpsBase(object):
         :param path: Path to save dataframe, including file extension (UtilsBase.generate_file_path())
         :return: Path to saved dataframe
         """
-        format = path.suffix[1:].lower()
-        if format == "csv":
-            df.to_csv(str(path), index=False)
-        elif format == "parquet":
-            df.to_parquet(str(path), index=False)
-        elif format == "xlsx":
-            df.to_excel(str(path), index=False)
-        elif format == "json":
-            df.to_json(str(path), orient='records', indent=4)
-        else:
-            raise ValueError(f"Unsupported file format: {format}")
+        df.to_csv(str(path), index=False)
+        # format = path.suffix[1:].lower()
+        # if format == "csv":
+        #     df.to_csv(str(path), index=False)
+        # elif format == "parquet":
+        #     df.to_parquet(str(path), index=False)
+        # elif format == "xlsx":
+        #     df.to_excel(str(path), index=False)
+        # elif format == "json":
+        #     df.to_json(str(path), orient='records', indent=4)
+        # else:
+        #     raise ValueError(f"Unsupported file format: {format}")
         return str(path)
 
     @classmethod

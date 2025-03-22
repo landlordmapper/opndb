@@ -547,6 +547,10 @@ class DataFrameConcatenators(DataFrameOpsBase):
 
     @classmethod
     def get_merge_address(cls, row: pd.Series, addr_col: str) -> pd.Series:
+        """
+        Checks whether a validated address exists for the specified address column passed as a parameter. If it DOES
+        exist, it returns it. If it does NOT exist, it returns the raw address.
+        """
         if pd.notnull(row[f"{addr_col}_v"]):
             return row[f"{addr_col}_v"]
         else:
