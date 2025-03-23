@@ -10,6 +10,7 @@ from opndb.services.dataframe.base import DataFrameOpsBase as ops_df
 from opndb.types.base import WorkflowConfigs
 from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
 
+
 console = Console()
 
 class SummaryStatsBase(object):
@@ -86,49 +87,112 @@ class SummaryStatsBase(object):
     def save(self) -> None:
         pass
 
+
 class SSDataClean(SummaryStatsBase):
 
-    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs: dict[str, pd.DataFrame]):
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
         super().__init__()
         self.configs: WorkflowConfigs = configs
-        self.dfs: dict[str, dfs] = dfs
+        self.dfs_out: dict[str, pd.DataFrame] = dfs_out
         self.wkfl_name: str = wkfl_name
         self.data: list[list[str | float | int]] = []
-        self.stats: dict[str, Any] = {
-            "unique_props": {
-                "display_name": "Unique Properties", "value": None
-            },
-            "unique_taxpayers": {
-                "display_name": "Unique Taxpayer Records", "value": None
-            },
-            "unique_corps_raw": {
-                "display_name": "Unique Corporations (Raw)", "value": None
-            },
-            "unique_corps_clean": {
-                "display_name": "Unique Corporations (Clean)", "value": None
-            },
-            "unique_llcs_raw": {
-                "display_name": "Unique LLCs (Raw)", "value": None
-            },
-            "unique_llcs_clean": {
-                "display_name": "Unique LLCs (Clean)", "value": None
-            },
-        }
+        self.stats: dict[str, Any] = {}
 
     def calculate(self) -> None:
         # store references to dataframes
-        df_props = self.dfs["properties"]
-        df_taxpayers = self.dfs["taxpayer_records"]
-        df_corps = self.dfs["corps"]
-        df_llcs = self.dfs["llcs"]
+        df_props = self.dfs_out["properties"]
+        df_taxpayers = self.dfs_out["taxpayer_records"]
+        df_corps = self.dfs_out["corps"]
+        df_llcs = self.dfs_out["llcs"]
+        df_addrs = self.dfs_out["unvalidated_addrs"]
         # calculate figures
-        self.stats["unique_props"]["value"] = len(df_props["pin"].unique())
-        self.stats["unique_taxpayers"]["value"] = len(df_taxpayers["raw_name_address"].unique())
-        self.stats["unique_corps_raw"]["value"] = len(df_corps["raw_name"].unique())
-        self.stats["unique_corps_clean"]["value"] = len(df_corps["clean_name"].unique())
-        self.stats["unique_llcs_raw"]["value"] = len(df_llcs["raw_name"].unique())
-        self.stats["unique_llcs_clean"]["value"] = len(df_llcs["clean_name"].unique())
-        # save data for dataframe output
+        unique_props: int = len(df_props["pin"].unique())
+        unique_taxpayers: int = len(df_taxpayers["raw_name_address"].unique())
+        unique_corps_raw: int = len(df_corps["raw_name"].unique())
+        unique_corps_clean: int = len(df_corps["clean_name"].unique())
+        unique_llcs_raw: int = len(df_llcs["raw_name"].unique())
+        unique_llcs_clean: int = len(df_llcs["clean_name"].unique())
+        unique_addrs: int = len(df_addrs["raw_address"])
+        # set stats
+        self.stats = {
+            "unique_props": {
+                "display_name": "Unique Properties",
+                "value": unique_props
+            },
+            "unique_taxpayers": {
+                "display_name": "Unique Taxpayer Records",
+                "value": unique_taxpayers
+            },
+            "unique_corps_raw": {
+                "display_name": "Unique Corporations (Raw)",
+                "value": unique_corps_raw
+            },
+            "unique_corps_clean": {
+                "display_name": "Unique Corporations (Clean)",
+                "value": unique_corps_clean
+            },
+            "unique_llcs_raw": {
+                "display_name": "Unique LLCs (Raw)",
+                "value": unique_llcs_raw
+            },
+            "unique_llcs_clean": {
+                "display_name": "Unique LLCs (Clean)",
+                "value": unique_llcs_clean
+            },
+            "unique_addrs": {
+                "display_name": "Unique Addresses (Unvalidated)",
+                "value": unique_addrs
+            }
+        }
+        # save data for output
+        for stat, vals in self.stats.items():
+            self.data.append([vals["display_name"], vals["value"]])
+
+    def print(self) -> None:
+        # set table title and columns
+        table = Table(title=f"Summary Stats: {self.wkfl_name}")
+        table.add_column("Stat", justify="right", style="bold yellow")
+        table.add_column("Count", justify="right", style="green")
+        # set table data
+        for stat, vals in self.stats.items():
+            table.add_row(
+                vals["display_name"],
+                str(f"{vals['value']:,}"),
+            )
+        # print table
+        console.print("\n")
+        console.print(table)
+        console.print("\n")
+
+    def save(self) -> None:
+        df_out = pd.DataFrame(self.data, columns=["Stat", "Count"])
+        path: Path = path_gen.summary_stats(self.configs, "data_clean")
+        ops_df.save_df(df_out, path)
+
+
+class SSAddressClean(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs_out: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # store references to dataframes
+        df_addrs = self.dfs_out["unvalidated_addrs"]
+        # calculate figures
+        pobox_count: int = len(df_addrs[df_addrs["is_pobox"] == True])
+        # set stats
+        self.stats = {
+            "pobox_addrs": {
+                "display_name": "PO Box Addresses",
+                "value": pobox_count
+            }
+        }
+        # save data for output
         for stat, vals in self.stats.items():
             self.data.append([vals["display_name"], vals["value"]])
 
@@ -141,84 +205,309 @@ class SSDataClean(SummaryStatsBase):
                 vals["display_name"],
                 str(f"{vals['value']:,}"),
             )
+        # print table
         console.print("\n")
         console.print(table)
         console.print("\n")
 
     def save(self) -> None:
         df_out = pd.DataFrame(self.data, columns=["Stat", "Count"])
-        path: Path = path_gen.summary_stats_data_clean(self.configs)
+        path: Path = path_gen.summary_stats(self.configs, "address_clean")
         ops_df.save_df(df_out, path)
 
-    # @classmethod
-    # def summary_stats_address_initial(cls):
-    #     # unique raw address count total
-    #     # unique raw taxpayer address count
-    #     # unique raw corp & LLC count, total AND per column (differentiate by manager/member addr, office addr, etc.)
-    #     # po box addrs detected
-    #     # po box addrs successfully validated
-    #     # total validated & unvalidated after initial processing
-    #     # number of unique raw name+addresses
-    #     # number of unique cleaned name+addresses
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_address_open_addrs(cls):
-    #     # number of addresses successfully validated by open addresses workflow
-    #     # total validated & unvalidated after open addrs processing
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_address_geocodio(cls):
-    #     # number of addresses passed into geocodio
-    #     # number of addresses successfully validated by geocodio
-    #     # number of addresses unsuccessfully validated by geocodio
-    #     # number of failed geocodio calls
-    #     # final total validated & unvalidated addresses after all validation processing
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_name_analysis(cls):
-    #     # list of standardized names and counts of different variations that were standardized
-    #     # ex:
-    #     # CHICAGO LAND TRUST, 473
-    #     # US BANK, 253
-    #     # DEVON TRUST, 117
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_address_analysis(cls):
-    #     # counts for ll_orgs, law firms, etc
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_rental_subset(cls):
-    #     # number of total properties in dataset
-    #     # number of properties in initial subset
-    #     # number of non-rental properties pulled in from taxpayer addrs after subsetting
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_clean_merge(cls):
-    #     # number of taxpayer records associated with corps
-    #     # number of taxpayer records associated with llcs
-    #     # number of unique corps pulled in
-    #     # number of unique LLCs pulled in
-    #     # number of taxpayer records identified as corp/entities but NOT assigned a corp/LLC
-    #     # number of IS_LLC == True rows vs number of matched LLCs
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_string_matching(cls):
-    #     # use stats from methodology paper
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_network_graph(cls):
-    #     # use stats from methodology paper
-    #     pass
-    #
-    # @classmethod
-    # def summary_stats_final_output(cls):
-    #     # final dataset stats
-    #     pass
+
+class SSAddressGeocodio(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_in: dict[str, pd.DataFrame], dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs_in: dict[str, pd.DataFrame] = dfs_in
+        self.dfs_out: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # store references to dataframes
+        df_valid_before = self.dfs_in["gcd_validated"]
+        df_unvalid_before = self.dfs_in["gcd_unvalidated"]
+        df_valid_after = self.dfs_out["gcd_validated"]
+        df_unvalid_after = self.dfs_out["gcd_unvalidated"]
+        # calculate figures
+        valid_before: int = len(df_valid_before["clean_address"].unique())
+        unvalid_before: int = len(df_unvalid_before["clean_address"].unique())
+        valid_after: int = len(df_valid_after["clean_address"].unique())
+        unvalid_after: int = len(df_unvalid_after["clean_address"].unique())
+        total_valid: int = valid_before + valid_after
+        total_unvalid: int = unvalid_before + unvalid_after
+        # set stats
+        self.stats = {
+            "valid_addrs": {
+                "display_name": "Validated addresses",
+                "value": f"{total_valid:,} (+{valid_after:,})"
+            },
+            "unvalid_addrs": {
+                "display_name": "Unvalidated addresses",
+                "value": f"{total_unvalid:,} (+{unvalid_after:,})"
+            }
+        }
+        # save data for output
+        for stat, vals in self.stats.items():
+            self.data.append([vals["display_name"], vals["value"]])
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSFixUnitsInitial(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSFixUnitsFinal(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSAddressMerge(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSNameAnalysisInitial(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSAddressAnalysisInitial(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # list of standardized names and counts of different variations that were standardized
+        # ex:
+        # CHICAGO LAND TRUST, 473
+        # US BANK, 253
+        # DEVON TRUST, 117
+
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSAnalysisFinal(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSRentalSubset(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # number of total properties in dataset
+        # number of properties in initial subset
+        # number of non-rental properties pulled in from taxpayer addrs after subsetting
+
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSCleanMerge(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # number of taxpayer records associated with corps
+        # number of taxpayer records associated with llcs
+        # number of unique corps pulled in
+        # number of unique LLCs pulled in
+        # number of taxpayer records identified as corp/entities but NOT assigned a corp/LLC
+        # number of IS_LLC == True rows vs number of matched LLCs
+
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSStringMatch(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # use stats from methodology paper
+
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class SSNetworkGraph(SummaryStatsBase):
+
+    def __init__(self, configs: WorkflowConfigs, wkfl_name: str, dfs_out: dict[str, pd.DataFrame]):
+        super().__init__()
+        self.configs: WorkflowConfigs = configs
+        self.dfs: dict[str, pd.DataFrame] = dfs_out
+        self.wkfl_name: str = wkfl_name
+        self.data: list[list[str | float | int]] = []
+        self.stats: dict[str, Any] = {}
+
+    def calculate(self) -> None:
+        # use stats from methodology paper
+
+        # store references to dataframes
+        # calculate figures
+        # set stats
+        pass
+
+    def print(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass

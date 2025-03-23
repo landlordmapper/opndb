@@ -24,7 +24,7 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean
+from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
     ColumnTaxpayerRecords, ColumnClassCodes, ColumnUnvalidatedAddrs, ColumnValidatedAddrs
 from opndb.services.config import ConfigManager
@@ -460,8 +460,7 @@ class WkflDataClean(WorkflowStandardBase):
 
 class WkflAddressClean(WorkflowStandardBase):
     """
-    Initial address validation workflow. Cleans up & validates PO box addresses, updates validated and unvalidated
-    master address files.
+    Initial address validation workflow. Cleans up & validates PO box addresses.
 
     INPUTS:
         - Unvalidated address file
@@ -500,7 +499,14 @@ class WkflAddressClean(WorkflowStandardBase):
         self.dfs_out["unvalidated_addrs"] = df
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSAddressClean(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
@@ -609,7 +615,6 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             failed_diff: int = failed_after - failed_before
             console.print(f"Total failed addresses: {failed_after} (+{failed_diff})")
 
-
         self.dfs_out: dict[str, pd.DataFrame] = {
             "gcd_validated": df_gcd_validated,
             "gcd_unvalidated": df_gcd_unvalidated,
@@ -654,7 +659,14 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         self.execute_geocodio_postprocessor(gcd_results_obj)
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSAddressGeocodio(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs

@@ -414,10 +414,10 @@ class PathGenerators(UtilsBase):
         )
 
     @classmethod
-    def summary_stats_data_clean(cls, configs: WorkflowConfigs) -> Path:
+    def summary_stats(cls, configs: WorkflowConfigs, wkfl_name: str) -> Path:
         return cls.generate_path(
             configs["data_root"],
             Dirs.SUMMARY_STATS,
-            "data_clean",
+            wkfl_name,
             configs["load_ext"]
         )
