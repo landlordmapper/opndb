@@ -421,7 +421,7 @@ class DataFrameSubsetters(DataFrameOpsBase):
                 continue
             elif id == "taxpayer_records":
                 df = df[col_map[id]]
-                df["type"] = id
+                df["origin"] = id
                 df["status"] = None
                 df["active"] = None
                 dfs_to_concat.append(df)
