@@ -1181,6 +1181,7 @@ class WkflRentalSubset(WorkflowStandardBase):
         df_props = cols_df.set_is_rental_initial(df_props, df_class_codes)
         # execute initial subset based on is_rental
         df_rentals_initial: pd.DataFrame = df_props[df_props["is_rental"] == True]
+        console.print("df_rental_initial length:", len(df_rentals_initial))
         console.print("Properties subsetted by class code ✅")
 
         # get unique raw name+addr values for rental subset
@@ -1237,7 +1238,7 @@ class WkflCleanMerge(WorkflowStandardBase):
         - Single property dataset containing all columns required for string matching & network graph generation
             - 'ROOT/processed/props_prepped[FileExt]'
     """
-    WKFL_NAME: str = "PRE-MATCHING DATA CLEANING WORKFLOW"
+    WKFL_NAME: str = "PRE-MATCH CLEANING & MERGING WORKFLOW"
     WKFL_DESC: str = "Runs basic string cleaners on raw inputted datasets."
 
     def __init__(self, config_manager: ConfigManager):
@@ -1372,6 +1373,18 @@ class WkflCleanMerge(WorkflowStandardBase):
         )
         return df_string_merge_final
 
+    def execute_corp_llc_subset(
+        self,
+        df_string_merge_final: pd.DataFrame,
+        df_corps: pd.DataFrame,
+        df_llcs: pd.DataFrame
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        # fetch names of corps and llcs found in taxpayer records
+        names: list[str] = list(df_string_merge_final["entity_clean_name"].dropna().unique())
+        df_corps_sub = df_corps[df_corps["clean_name"].isin(names)]
+        df_llcs_sub = df_llcs[df_llcs["clean_name"].isin(names)]
+        return df_corps_sub, df_llcs_sub
+
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, Path] = {
@@ -1410,7 +1423,12 @@ class WkflCleanMerge(WorkflowStandardBase):
             df_core_merge[df_core_merge["entity_core_name"].notnull()],
             df_string_merge
         ], ignore_index=True)
+        df_corps_sub, df_llcs_sub = self.execute_corp_llc_subset(
+            df_taxpayers, df_corps, df_llcs
+        )
         self.dfs_out["taxpayers_prepped"] = df_taxpayers
+        self.dfs_out["corps_subsetted"] = df_corps_sub
+        self.dfs_out["llcs_subsetted"] = df_llcs_sub
 
     def summary_stats(self) -> None:
         pass
@@ -1419,6 +1437,8 @@ class WkflCleanMerge(WorkflowStandardBase):
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
             "taxpayers_prepped": path_gen.processed_taxpayers_prepped(configs),
+            "corps_subsetted": path_gen.processed_corps_subsetted(configs),
+            "llcs_subsetted": path_gen.processed_llcs_subsetted(configs),
         }
         self.save_dfs(save_map)
 
@@ -1730,3 +1750,29 @@ class WkflFinalOutput(WorkflowBase):
     """
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+
+    def load(self):
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {
+            "taxpayers_networked": path_gen.processed_taxpayers_networked(configs),
+            "corps_subsetted": path_gen.processed_corps_subsetted(configs),
+            "llcs_subsetted": path_gen.processed_llcs_subsetted(configs),
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+            "address_analysis": path_gen.analysis_address_analysis(configs),
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        return None
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass

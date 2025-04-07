@@ -59,6 +59,8 @@ class Processed(FileNames):
     TAXPAYERS_FIXED: str = "taxpayers_fixed"
     TAXPAYERS_SUBSETTED: str = "taxpayers_subsetted"
     TAXPAYERS_PREPPED: str = "taxpayers_prepped"
+    CORPS_SUBSETTED: str = "corps_subsetted"
+    LLCS_SUBSETTED: str = "llcs_subsetted"
     TAXPAYERS_STRING_MATCHED: str = "taxpayers_string_matched"
     TAXPAYERS_NETWORKED: str = "taxpayers_networked"
 

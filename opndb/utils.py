@@ -311,6 +311,24 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
+    def processed_corps_subsetted(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/corps_subsetted[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.CORPS_SUBSETTED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_llcs_subsetted(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/llcs_subsetted[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.LLCS_SUBSETTED,
+            configs["load_ext"]
+        )
+    @classmethod
     def processed_taxpayers_string_matched(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_string_matched[ext]"""
         return cls.generate_path(
