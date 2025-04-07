@@ -31,7 +31,7 @@ class ConfigManager:
             }
             json_configs = {
                 "data_root": str(configs["data_root"].absolute()),
-                "load_ext": ".csv"
+                "load_ext": "csv"
             }
             # Write configs to file with pretty printing
             with open(self._configs_path, "w", encoding="utf-8") as f:

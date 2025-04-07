@@ -28,14 +28,39 @@ class DataFrameOpsBase(object):
     """
 
     @classmethod
-    def load_df(cls, path: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame:
+    def load_df(cls, path: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame | None:
         """
         Loads dataframes based on file format. Reads extension and loads dataframe using corresponding pd.read method.
+        Returns None if the path doesn't exist.'
 
         :param filepath: Complete path to data file to be loaded into dataframe (UtilsBase.generate_file_path())
         :param dtype: Specify data types for columns or entire dataset
         :return: Dataframe containing data from specified file
         """
+
+        if not path.exists():
+            console.print(f"[yellow]File not found: {path}[/yellow]")
+            return None
+
+        # Check if file is empty
+        if path.stat().st_size == 0:
+            console.print(f"[yellow]File is empty: {path}[/yellow]")
+            return None
+
+        # Check file content to see if it's a valid CSV
+        if path.suffix.lower() == ".csv":
+            try:
+                with open(path, "r") as f:
+                    # Read first few lines to see if there's anything parseable
+                    sample = "".join([f.readline() for _ in range(5)])
+
+                if not sample.strip() or "," not in sample:
+                    console.print(f"[yellow]File exists but doesn't contain valid CSV data: {path}[/yellow]")
+                    return None
+            except Exception as e:
+                console.print(f"[yellow]Error inspecting file content: {str(e)}[/yellow]")
+                # Continue trying to load anyway, pandas will handle the error
+
         file_size = path.stat().st_size
         format = path.suffix[1:].lower()
         with Progress(
@@ -77,17 +102,18 @@ class DataFrameOpsBase(object):
         :param path: Path to save dataframe, including file extension (UtilsBase.generate_file_path())
         :return: Path to saved dataframe
         """
-        format = path.suffix[1:].lower()
-        if format == "csv":
-            df.to_csv(str(path), index=False)
-        elif format == "parquet":
-            df.to_parquet(str(path), index=False)
-        elif format == "xlsx":
-            df.to_excel(str(path), index=False)
-        elif format == "json":
-            df.to_json(str(path), orient='records', indent=4)
-        else:
-            raise ValueError(f"Unsupported file format: {format}")
+        df.to_csv(str(path), index=False)
+        # format = path.suffix[1:].lower()
+        # if format == "csv":
+        #     df.to_csv(str(path), index=False)
+        # elif format == "parquet":
+        #     df.to_parquet(str(path), index=False)
+        # elif format == "xlsx":
+        #     df.to_excel(str(path), index=False)
+        # elif format == "json":
+        #     df.to_json(str(path), orient='records', indent=4)
+        # else:
+        #     raise ValueError(f"Unsupported file format: {format}")
         return str(path)
 
     @classmethod

@@ -1,6 +1,7 @@
 import re
 import string
 
+import numpy as np
 import pandas as pd
 import word2number as w2n
 
@@ -76,12 +77,6 @@ class CleanStringBase:
             return False
 
     @classmethod
-    def get_is_common_name(cls, text: str) -> bool:
-        """Checks common names data and returns True if the name passed as a parameter is found within it."""
-        # todo: figure out a better way to check if text is in COMMON_NAMES
-        return text in COMMON_NAMES
-
-    @classmethod
     def get_is_org(cls, text: str) -> bool:
         """Returns True if the string contains keywords associated with organizations."""
         try:
@@ -115,6 +110,16 @@ class CleanStringBase:
             if addr_spaces_removed.startswith(po):
                 return True
         return False
+
+    @classmethod
+    def get_is_common_name(cls, text: str, common_names: list[str]) -> bool:
+        """Returns True if the string is found in common_names list."""
+        return text in common_names
+
+    @classmethod
+    def get_is_landlord_org(cls, text: str, org_addrs: list[str]) -> bool:
+        """Returns True if taxpayer address is found in list of landlord organization addresses."""
+        return text in org_addrs
 
     @classmethod
     def make_upper(cls, text: str) -> str:
@@ -326,6 +331,33 @@ class CleanStringName(CleanStringBase):
         else:
             return text
 
+    @classmethod
+    def fix_banks(cls, row: pd.Series, banks: dict[str, str]) -> pd.Series:
+        """
+        Standardizes names for financial institutions.
+
+        Examples:
+            'CHICAGO TITLE LND TRST' > 'CHICAGO TITLE LAND TRUST COMPANY'
+            'CHIICAGO TITLE & LAND' > 'CHICAGO TITLE LAND TRUST COMPANY'
+            'CHICAGO TITLE & TRUSTE' > 'CHICAGO TITLE LAND TRUST COMPANY'
+        """
+        # Obtain a list of keys from the "banks" dictionary
+        bank_keys = sorted(banks.keys(), key=len, reverse=True)
+
+        text = row["raw_name"]
+
+        # Iterate through each key and check if it's found within the "text" string
+        for key in bank_keys:
+            if key in text:
+                # If found, replace that text with banks[key], adding a space at the end
+                text = text.replace(key, banks[key] + " ")
+                fixed_text = " ".join(item.strip() for item in text.split())
+                row["clean_name"] = fixed_text
+                break
+            else:
+                continue
+        return row
+
 
 class CleanStringAddress(CleanStringBase):
 
@@ -429,6 +461,20 @@ class CleanStringAddress(CleanStringBase):
                 return str(int("".join(filter(str.isdigit, text)))).zfill(5)
         else:
             return ""
+
+    @classmethod
+    def check_sec_num(cls, text: str) -> str | float:
+        """
+        Sting passed into `text` must be fully formatted address. Searches for numbers at the end of street addresses
+        to check for missing secondary numbers in the validated addresses.
+        """
+        street: str = text.split(",")[0].strip()
+        match = re.search(r"(\d+)$", street)
+        if match:
+            return match.group(1)
+        else:
+            return np.nan
+
 
 
 class CleanStringAccuracy(CleanStringBase):

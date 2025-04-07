@@ -40,6 +40,11 @@ class UtilsBase(object):
         return Path(data_root) / subdir / filename
 
     @classmethod
+    def generate_geocodio_partial_path(cls, data_root: str | Path, filename: str, ext: FileExt = "csv") -> Path:
+        return Path(data_root) / "geocodio" / "partials" / f"{filename}.{ext}"
+
+
+    @classmethod
     def is_encoded_empty(cls, x):
         if isinstance(x, str):
             # Check if string contains mostly non-printable characters
@@ -198,6 +203,15 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
+    def processed_properties_rentals(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/taxpayer_records[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.PROPERTIES_RENTALS,
+            configs["load_ext"]
+        )
+    @classmethod
     def processed_corps(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/corps[ext]"""
         return cls.generate_path(
@@ -243,39 +257,75 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
-    def processed_props_subsetted(cls, configs: WorkflowConfigs) -> Path:
+    def processed_taxpayer_records_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/taxpayer_records_merged[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.TAXPAYER_RECORDS_MERGED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_corps_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/corps_merged[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.CORPS_MERGED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_llcs_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/llcs_merged[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.LLCS_MERGED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_taxpayers_fixed(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_subsetted[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.PROPS_SUBSETTED,
+            Processed.TAXPAYERS_FIXED,
             configs["load_ext"]
         )
     @classmethod
-    def processed_props_prepped(cls, configs: WorkflowConfigs) -> Path:
+    def processed_taxpayers_subsetted(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/props_subsetted[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.TAXPAYERS_SUBSETTED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_taxpayers_prepped(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_prepped[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.PROPS_PREPPED,
+            Processed.TAXPAYERS_PREPPED,
             configs["load_ext"]
         )
     @classmethod
-    def processed_props_string_matched(cls, configs: WorkflowConfigs) -> Path:
+    def processed_taxpayers_string_matched(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_string_matched[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.PROPS_STRING_MATCHED,
+            Processed.TAXPAYERS_STRING_MATCHED,
             configs["load_ext"]
         )
     @classmethod
-    def processed_props_networked(cls, configs: WorkflowConfigs) -> Path:
+    def processed_taxpayers_networked(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_networked[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.PROPS_NETWORKED,
+            Processed.TAXPAYERS_NETWORKED,
             configs["load_ext"]
         )
 
@@ -309,6 +359,10 @@ class PathGenerators(UtilsBase):
             Geocodio.GCD_FAILED,
             configs["load_ext"]
         )
+    @classmethod
+    def geocodio_partial(cls, configs: WorkflowConfigs, filename: str) -> Path:
+        """:returns: ROOT/geocodio/partials/gcd_partial_{timestamp}[ext]"""
+        return cls.generate_geocodio_partial_path(configs["data_root"], filename, configs["load_ext"])
 
     # -----------------
     # ----ANALYSIS----
@@ -341,12 +395,12 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
-    def analysis_fixing_tax_addrs(cls, configs: WorkflowConfigs) -> Path:
+    def analysis_fixing_addrs(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/analysis/fixing_tax_addrs[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.ANALYSIS,
-            Analysis.FIXING_TAX_ADDRS,
+            Analysis.FIXING_ADDRS,
             configs["load_ext"]
         )
     @classmethod
@@ -356,5 +410,14 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.ANALYSIS,
             Analysis.ADDRESS_ANALYSIS,
+            configs["load_ext"]
+        )
+
+    @classmethod
+    def summary_stats(cls, configs: WorkflowConfigs, wkfl_name: str) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.SUMMARY_STATS,
+            wkfl_name,
             configs["load_ext"]
         )

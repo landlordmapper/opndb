@@ -299,11 +299,20 @@ class ColumnCorps(ColumnManagerBase):
             {
                 self.RAW_PRESIDENT_ADDRESS: "raw_address",
                 self.CLEAN_PRESIDENT_ADDRESS: "clean_address",
+                self.STATUS: "status",
             },
             {
                 self.RAW_SECRETARY_ADDRESS: "raw_address",
                 self.CLEAN_SECRETARY_ADDRESS: "clean_address",
+                self.STATUS: "status",
             }
+        ]
+
+    @property
+    def validated_address_merge(self):
+        return [
+            self.RAW_PRESIDENT_ADDRESS,
+            self.RAW_SECRETARY_ADDRESS,
         ]
 
 
@@ -563,6 +572,7 @@ class ColumnLLCs(ColumnManagerBase):
                 self.CLEAN_MANAGER_MEMBER_CITY: "clean_city",
                 self.CLEAN_MANAGER_MEMBER_ZIP: "clean_zip",
                 self.CLEAN_MANAGER_MEMBER_ADDRESS: "clean_address",
+                self.STATUS: "status",
             },
             {
                 self.RAW_AGENT_STREET: "raw_street",
@@ -571,6 +581,7 @@ class ColumnLLCs(ColumnManagerBase):
                 self.CLEAN_AGENT_STREET: "clean_street",
                 self.CLEAN_AGENT_ZIP: "clean_zip",
                 self.CLEAN_AGENT_ADDRESS: "clean_address",
+                self.STATUS: "status",
             },
             {
                 self.RAW_OFFICE_STREET: "raw_street",
@@ -581,7 +592,16 @@ class ColumnLLCs(ColumnManagerBase):
                 self.CLEAN_OFFICE_CITY: "clean_city",
                 self.CLEAN_OFFICE_ZIP: "clean_zip",
                 self.CLEAN_OFFICE_ADDRESS: "clean_address",
+                self.STATUS: "status",
             }
+        ]
+
+    @property
+    def validated_address_merge(self):
+        return [
+            self.RAW_OFFICE_ADDRESS,
+            self.RAW_AGENT_ADDRESS,
+            self.RAW_MANAGER_MEMBER_ADDRESS,
         ]
 
 
@@ -632,7 +652,6 @@ class ColumnTaxpayerRecords(ColumnManagerBase):
             self.CLEAN_STATE,
             self.CLEAN_ZIP,
             self.CLEAN_ADDRESS,
-            self.CLEAN_NAME_ADDRESS,
         ]
 
     @property
@@ -649,6 +668,10 @@ class ColumnTaxpayerRecords(ColumnManagerBase):
             self.CLEAN_ZIP,
             self.CLEAN_ADDRESS,
         ]
+
+    @property
+    def validated_address_merge(self):
+        return [self.RAW_ADDRESS]
 
 
 class ColumnProperties(ColumnManagerBase):
@@ -667,7 +690,6 @@ class ColumnProperties(ColumnManagerBase):
         return [
             self.PIN,
             self.RAW_NAME_ADDRESS,
-            self.CLEAN_NAME_ADDRESS,
             self.CLASS_CODE,
             self.NUM_UNITS,
         ]
@@ -680,14 +702,27 @@ class ColumnUnvalidatedAddrs(ColumnManagerBase):
     RAW_STATE: str = "raw_state"
     RAW_ZIP: str = "raw_zip"
     RAW_ADDRESS: str = "raw_address"
-    CLEAN_STREET: str = "raw_street"
-    CLEAN_CITY: str = "raw_city"
-    CLEAN_STATE: str = "raw_state"
-    CLEAN_ZIP: str = "raw_zip"
-    CLEAN_ADDRESS: str = "raw_address"
+    CLEAN_STREET: str = "clean_street"
+    CLEAN_CITY: str = "clean_city"
+    CLEAN_STATE: str = "clean_state"
+    CLEAN_ZIP: str = "clean_zip"
+    CLEAN_ADDRESS: str = "clean_address"
+    IS_POBOX: str = "is_pobox"
 
     def __init__(self):
         super().__init__()
+
+    @property
+    def geocodio_columns(self):
+        return [
+            self.RAW_ADDRESS,
+            self.CLEAN_ADDRESS,
+            self.CLEAN_STREET,
+            self.CLEAN_CITY,
+            self.CLEAN_STATE,
+            self.CLEAN_ZIP,
+            self.IS_POBOX
+        ]
 
 
 class ColumnValidatedAddrs(ColumnManagerBase):
@@ -714,6 +749,30 @@ class ColumnValidatedAddrs(ColumnManagerBase):
 
     def __init__(self):
         super().__init__()
+
+    @property
+    def validated_columns(self):
+        return [
+            self.RAW_ADDRESS,
+            self.CLEAN_ADDRESS,
+            self.NUMBER,
+            self.PREDIRECTIONAL,
+            self.PREFIX,
+            self.STREET,
+            self.SUFFIX,
+            self.POSTDIRECTIONAL,
+            self.SECONDARYUNIT,
+            self.SECONDARYNUMBER,
+            self.CITY,
+            self.COUNTY,
+            self.STATE,
+            self.ZIP,
+            self.COUNTRY,
+            self.LNG,
+            self.LAT,
+            self.ACCURACY,
+            self.FORMATTED_ADDRESS
+        ]
 
 
 class ColumnAddressAnalysis(ColumnManagerBase):
