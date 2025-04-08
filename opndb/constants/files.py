@@ -9,7 +9,7 @@ class Dirs:
     ANALYSIS: str = "analysis"
     PROCESSED: str = "processed"
     SUMMARY_STATS: str = "summary_stats"
-    FINAL_OUTPUTS: str = "final_outputs"
+    OUTPUT: str = "output"
 
 class FileNames:
     """Centralized file naming constants organized by directory structure."""
@@ -68,8 +68,14 @@ class SummaryStats(FileNames):
     """Summary statistics for each stage of the workflow."""
     pass
 
-class FinalOutputs(FileNames):
+class Output(FileNames):
     """Final datasets."""
-    pass
+    NETWORK_CALCS: str = "network_calcs"
+    ENTITY_TYPES: str = "entity_types"
+    ENTITIES: str = "entities"
+    VALIDATED_ADDRESSES: str = "validated_addresses"
+    LLCS: str = "llcs"
+    CORPS: str = "corps"
+    NETWORKS: str = "networks"
+    TAXPAYER_RECORDS: str = "taxpayer_records"
 
-#

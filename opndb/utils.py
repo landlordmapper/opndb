@@ -6,7 +6,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, FileSi
 from opndb.constants.base import DATA_ROOT
 from rich.console import Console
 
-from opndb.constants.files import Dirs, Raw, Processed, Geocodio, Analysis
+from opndb.constants.files import Dirs, Raw, Processed, Geocodio, Analysis, Output
 from opndb.types.base import FileExt, WorkflowConfigs, WorkflowStage
 
 console = Console()
@@ -382,9 +382,9 @@ class PathGenerators(UtilsBase):
         """:returns: ROOT/geocodio/partials/gcd_partial_{timestamp}[ext]"""
         return cls.generate_geocodio_partial_path(configs["data_root"], filename, configs["load_ext"])
 
-    # -----------------
+    # ----------------
     # ----ANALYSIS----
-    # -----------------
+    # ----------------
     @classmethod
     def analysis_frequent_tax_names(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/analysis/frequent_tax_names[ext]"""
@@ -431,11 +431,82 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
 
+    # ---------------------
+    # ----SUMMARY STATS----
+    # ---------------------
     @classmethod
     def summary_stats(cls, configs: WorkflowConfigs, wkfl_name: str) -> Path:
         return cls.generate_path(
             configs["data_root"],
             Dirs.SUMMARY_STATS,
             wkfl_name,
+            configs["load_ext"]
+        )
+
+    # --------------
+    # ----OUTPUT----
+    # --------------
+    @classmethod
+    def output_network_calcs(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.NETWORK_CALCS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_entity_types(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.ENTITY_TYPES,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_entities(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.ENTITIES,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_validated_addresses(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.VALIDATED_ADDRESSES,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_llcs(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.LLCS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_corps(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.CORPS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_networks(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.NETWORKS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_taxpayer_records(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.TAXPAYER_RECORDS,
             configs["load_ext"]
         )
