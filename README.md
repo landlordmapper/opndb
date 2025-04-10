@@ -16,3 +16,13 @@ Very WIP!!
 
 # testing
 - `uv run pytest`
+
+# docs
+
+We use sphinx for documentation.
+
+Create new docs files in `docs/source` as `.md` or `.rst` files. Make sure there is a top level `# Header` so the page gets a name.
+
+Build the docs locally by running `cd docs && uv run make html`
+
+We are not hosting the docs yet... coming soon!!!
