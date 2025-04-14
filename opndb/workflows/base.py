@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Optional, Tuple, List
 import networkx as nx
 import nmslib
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
+import pandera as pa
 
 # 2. Third-party imports
 import pandas as pd
@@ -24,6 +25,7 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
+from opndb.schema.v0_1.schema_raw import PropsTaxpayers, Corps, LLCs, ClassCodes
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
     ColumnTaxpayerRecords, ColumnClassCodes, ColumnUnvalidatedAddrs, ColumnValidatedAddrs
@@ -398,9 +400,37 @@ class WkflDataClean(WorkflowStandardBase):
             "taxpayer_records": ColumnTaxpayerRecords(),
         }
 
+        schema_map = {
+            "props_taxpayers": PropsTaxpayers,
+            "corps": Corps,
+            "llcs": LLCs,
+            "class_codes": ClassCodes
+        }
+
         for id, df_in in self.dfs_in.items():
             t.print_dataset_name(id)
             df: pd.DataFrame = df_in.copy()  # make copy to preserve the loaded dataframes
+
+            # run validator
+            try:
+                # Validate the dataframe against its corresponding schema
+                schema_map[id].validate(df, lazy=True)
+                console.print(f"Validation successful for {id} dataset")
+            except pa.errors.SchemaErrors as err:
+                # Log validation errors
+                console.print(f"Validation failed for {id} dataset")
+                console.print(f"Number of validation errors: {len(err.failure_cases)}")
+
+                # Optional: Print detailed error information
+                if hasattr(err, 'failure_cases'):
+                    error_df = err.failure_cases
+                    console.print(f"First few validation errors:\n{error_df.head()}")
+
+                # Optional: You can decide to raise the exception to stop processing
+                # or continue with a warning
+                console.print(f"Proceeding with {id} despite validation errors")
+                # Uncomment to stop processing on validation failure:
+                # raise err
 
             # specific logic for class_codes
             if id == "class_codes":
