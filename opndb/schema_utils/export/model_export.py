@@ -65,21 +65,32 @@ class ExportReport:
     version_code: str
     schemas: list[ExportableSchema]
 
-    def to_md(self) -> str:
+    def to_md(self, file_path: str | None = None) -> str:
         """
-        Convert the report to a markdown
+        Convert the report to a markdown, returning the markdown.
+
+        If passing file_path, it saves it to the file and returns the file path.
+
+        todo: should the return change based on params? This doesn't seem right
 
         Returns:
             String markdown representation
         """
         lines = [f"## opndb schema version **{self.version_code}**\n"]
         for schema in self.schemas:
-            lines.append(f"### {schema.name}: {schema.description}\n")
+            lines.append(f"### {schema.name}\n")
+            lines.append(f"{schema.description if schema.description else 'No Description'}\n")
             for col in schema.columns:
                 default_str = f" = {col.default}" if col.default else ""
                 lines.append(f"- {col.title}: {col.type}{default_str} {'(Required)' if col.nullable else ''}")
             lines.append("")  # Blank line between schemas
-        return "\n".join(lines)
+        out = "\n".join(lines)
+        if file_path:
+            with open(file_path, "w") as f:
+                f.write(out)
+                return file_path
+        return out
+
 
     def to_pdf(self, file_path: str) -> str:
         """
