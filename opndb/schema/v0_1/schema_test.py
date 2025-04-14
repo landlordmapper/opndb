@@ -7,79 +7,66 @@ import pandera as pa
 class TaxpayerRecords(pa.DataFrameModel):
     raw_name: str = pa.Field(
         nullable=False,
-        required=True,
         title="Raw Taxpayer Name",
         description="Taxpayer name EXACTLY how it appears in the raw data.",
     )
     raw_street: str = pa.Field(
         nullable=False,
-        required=True,
         title="Raw Taxpayer Street",
         description="Taxpayer street address EXACTLY how it appears in the raw data."
     )
     raw_city: str = pa.Field(
         nullable=False,
-        required=True,
         title="Raw Taxpayer City",
         description="Taxpayer city EXACTLY how it appears in the raw data."
     )
     raw_state: str = pa.Field(
         nullable=False,
-        required=True,
         title="Raw Taxpayer State",
         description="Taxpayer state EXACTLY how it appears in the raw data."
     )
     raw_zip: str = pa.Field(
         nullable=False,
-        required=True,
         title="Raw Taxpayer Zip",
         description="Taxpayer zip code EXACTLY how it appears in the raw data."
     )
     raw_address: str = pa.Field(
         nullable=False,
-        required=True,
         title="Raw Taxpayer Address",
         description="Concatenation of raw taxpayer address components."
     )
     raw_name_address: str = pa.Field(
         nullable=False,
-        required=True,
         title="Raw Taxpayer Name+Address",
         description="Concatenation of raw taxpayer name and full address, to be used for identifying unique taxpayer records."
     )
     clean_name: str = pa.Field(
         nullable=False,
-        required=True,
         title="Clean Taxpayer Name",
         description="Taxpayer name AFTER running it through the string cleaners."
     )
     clean_street: str = pa.Field(
         nullable=False,
-        required=True,
         title="Clean Taxpayer Street",
         description="Taxpayer street address AFTER running it through the string cleaners."
     )
     clean_city: str = pa.Field(
         nullable=False,
-        required=True,
         title="Clean Taxpayer City",
         description="Taxpayer city AFTER running it through the string cleaners."
     )
     clean_state: str = pa.Field(
         nullable=False,
-        required=True,
         title="Clean Taxpayer State",
         description="Taxpayer state AFTER running it through the string cleaners."
     )
     clean_zip: str = pa.Field(
         nullable=False,
-        required=True,
         title="Clean Taxpayer Zip",
         description="Taxpayer zip code AFTER running it through the string cleaners."
     )
     clean_address: str = pa.Field(
         nullable=False,
-        required=True,
         title="Clean Taxpayer Address",
         description="Concatenation of clean taxpayer address components."
     )
@@ -90,7 +77,6 @@ class TaxpayerRecordsMerged(TaxpayerRecords):
     """
     clean_address_v: str = pa.Field(
         nullable=True,
-        required=True,
         title="Validated Taxpayer Address",
         description="Validated clean taxpayer mailing address."
     )
@@ -98,13 +84,11 @@ class TaxpayerRecordsMerged(TaxpayerRecords):
 class TaxpayersFixed(TaxpayerRecordsMerged):
     is_common_name: bool = pa.Field(
         nullable=False,
-        required=True,
         title="Is Common Name?",
         description="Boolean column indicating whether or not the taxpayer name is identified as a 'common name' (ex: John Smith, Juan Garcia, etc.)."
     )
     is_landlord_org: bool = pa.Field(
         nullable=False,
-        required=True,
         title="Is Landlord Org?",
         description="Boolean column indicating whether or not the validated taxpayer address is associated with a 'landlord organization' (property management company, wealth management company, realtor, etc.)."
     )
@@ -112,7 +96,6 @@ class TaxpayersFixed(TaxpayerRecordsMerged):
 class TaxpayersSubsetted(TaxpayersFixed):
     is_rental: bool = pa.Field(
         nullable=False,
-        required=True,
         title="Is Rental?",
         description="Boolean column indicating whether or not the taxpayer record is associated with a rental property."
     )
