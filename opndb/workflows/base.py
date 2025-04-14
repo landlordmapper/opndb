@@ -99,6 +99,27 @@ class WorkflowBase(ABC):
         ss.display_load_table(self.dfs_in)
         ss.display_load_stats_table(self.dfs_in)
 
+    def run_validator(self, id: str, df: pd.DataFrame, schema_map: dict[str, Any]) -> None:
+        """Executes panderas validator"""
+        t.print_with_dots(f"Executing validator for {id} dataset")
+        try:
+            # Validate the dataframe against its corresponding schema
+            schema_map[id].validate(df, lazy=True)
+            console.print("✅ Validation successful ✅")
+        except pa.errors.SchemaErrors as err:
+            # Log validation errors
+            console.print("❌ Validation failed  ❌")
+            console.print(f"Number of validation errors: {len(err.failure_cases)}")
+            # Optional: Print detailed error information
+            if hasattr(err, "failure_cases"):
+                error_df = err.failure_cases
+                console.print(f"First few validation errors:\n{error_df.head()}")
+            # Optional: You can decide to raise the exception to stop processing
+            # or continue with a warning
+            console.print(f"Proceeding with {id} despite validation errors")
+            # Uncomment to stop processing on validation failure:
+            # raise err
+
     def save_dfs(self, save_map: dict[str, Path]) -> None:
         """Saves dataframes to their specified paths."""
         console.print("\n")
@@ -384,11 +405,6 @@ class WkflDataClean(WorkflowStandardBase):
     # -----------------
     def process(self) -> None:
 
-        # todo: add validator that checks for required columns, throw error/failure immediately if not
-        # todo: add to columns validator: if _ADDRESS is empty, _STREET and _ZIP must be present; otherwise, if _ADDRESS exists, all others can be empty/missing
-        # todo: add to properties/taxpayer records validator: unique column constraint on PIN
-        # todo: add checks to confirm that dfs_in were loaded correctly that stop this workflow from executing if not
-
         column_manager = {
             "props_taxpayers": ColumnPropsTaxpayers(),
             "corps": ColumnCorps(),
@@ -412,25 +428,7 @@ class WkflDataClean(WorkflowStandardBase):
             df: pd.DataFrame = df_in.copy()  # make copy to preserve the loaded dataframes
 
             # run validator
-            try:
-                # Validate the dataframe against its corresponding schema
-                schema_map[id].validate(df, lazy=True)
-                console.print(f"Validation successful for {id} dataset")
-            except pa.errors.SchemaErrors as err:
-                # Log validation errors
-                console.print(f"Validation failed for {id} dataset")
-                console.print(f"Number of validation errors: {len(err.failure_cases)}")
-
-                # Optional: Print detailed error information
-                if hasattr(err, 'failure_cases'):
-                    error_df = err.failure_cases
-                    console.print(f"First few validation errors:\n{error_df.head()}")
-
-                # Optional: You can decide to raise the exception to stop processing
-                # or continue with a warning
-                console.print(f"Proceeding with {id} despite validation errors")
-                # Uncomment to stop processing on validation failure:
-                # raise err
+            self.run_validator(id, df, schema_map)
 
             # specific logic for class_codes
             if id == "class_codes":
