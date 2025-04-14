@@ -54,6 +54,10 @@ class PropsTaxpayers(OPNDFModel):
     )
 
 class Corps(OPNDFModel):
+    """
+    Raw dataset for state-level corporate records. Note that the availability of address-related columns is subject to
+    the quality of the original data and the ability to parse complete address strings.
+    """
     name: str = pa.Field(
         nullable=False,
         unique=True,
@@ -158,6 +162,10 @@ class Corps(OPNDFModel):
     )
 
 class LLCs(OPNDFModel):
+    """
+    Raw dataset for state-level LLC records. Note that the availability of address-related columns is subject to
+    the quality of the original data and the ability to parse complete address strings.
+    """
     name: str = pa.Field(
         nullable=False,
         unique=True,
@@ -292,6 +300,10 @@ class LLCs(OPNDFModel):
     )
 
 class ClassCodes(OPNDFModel):
+    """
+    Dataset containing building class codes and their meaning. Usually set by the municipality to dictate zoning. Used
+    to subset rental properties.
+    """
     code: str = pa.Field(
         nullable=False,
         unique=True,
