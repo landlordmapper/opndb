@@ -1,7 +1,9 @@
 import pandera as pa
 
+from opndb.validator.df_model import OPNDFModel
 
-class PropsTaxpayers(pa.DataFrameModel):
+
+class PropsTaxpayers(OPNDFModel):
     """
     Raw dataset containing both property and taxpayer record data. The opndb workflow will split up this dataset into
     separate datasets: one for taxpayer records, the other for properties.
@@ -49,7 +51,7 @@ class PropsTaxpayers(pa.DataFrameModel):
         description="Number of rental apartment units in the property."
     )
 
-class Corps(pa.DataFrameModel):
+class Corps(OPNDFModel):
     name: str = pa.Field(
         nullable=False,
         unique=True,
@@ -153,7 +155,7 @@ class Corps(pa.DataFrameModel):
         description="Secretary zip code",
     )
 
-class LLCs(pa.DataFrameModel):
+class LLCs(OPNDFModel):
     name: str = pa.Field(
         nullable=False,
         unique=True,
@@ -287,7 +289,7 @@ class LLCs(pa.DataFrameModel):
         description="Office zip code",
     )
 
-class ClassCodes(pa.DataFrameModel):
+class ClassCodes(OPNDFModel):
     code: str = pa.Field(
         nullable=False,
         unique=True,

@@ -1,10 +1,12 @@
 import pandera as pa
 
+from opndb.validator.df_model import OPNDFModel
+
 
 # -------------------------------
 # ----DATASETS FOR PROCESSING----
 # -------------------------------
-class TaxpayerRecords(pa.DataFrameModel):
+class TaxpayerRecords(OPNDFModel):
     raw_name: str = pa.Field(
         nullable=False,
         title="Raw Taxpayer Name",
@@ -138,7 +140,7 @@ class TaxpayersNetworked(TaxpayersStringMatched):
     network_6: str = pa.Field()
     network_6_short: str = pa.Field()
 
-class UnvalidatedAddrs(pa.DataFrameModel):
+class UnvalidatedAddrs(OPNDFModel):
     raw_street: str = pa.Field()
     raw_city: str = pa.Field()
     raw_state: str = pa.Field()
@@ -159,10 +161,10 @@ class UnvalidatedAddrs(pa.DataFrameModel):
 class UnvalidatedAddrsClean(UnvalidatedAddrs):
     is_pobox: bool = pa.Field()
 
-class GcdValidated(pa.DataFrameModel):
+class GcdValidated(OPNDFModel):
     pass
 
-class GcdUnvalidated(pa.DataFrameModel):
+class GcdUnvalidated(OPNDFModel):
     pass
 
 
