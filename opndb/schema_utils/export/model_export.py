@@ -7,13 +7,11 @@ import inspect
 from pandera.api.base.model import MetaModel as PanderaMetaModel
 from pandera import Column as PanderaColumn, DataFrameSchema
 
-import opndb.schema.v0_1
 from opndb.validator.df_model import OPNDFModel
 import importlib
-import os
 
 BASE_PATH: Final[Path] = Path(__file__)
-SCHEMA_FILE_NAME: Final[str] = "schema.py"
+SCHEMA_MODULE_NAME: Final[str] = "schema_raw" # todo: clarify how we refer to models
 
 
 def normalize_schema_string(schema: str) -> str:
@@ -23,6 +21,7 @@ def normalize_schema_string(schema: str) -> str:
 @dataclass
 class ExportableSchemaColumn:
     title: str
+    nullable: bool
     description: str | None = None
     type: str | None = None
     default: str | None = None
@@ -34,6 +33,7 @@ class ExportableSchemaColumn:
             type=str(column.dtype),
             description=column.description,
             default=str(column.default) if column.default else None,
+            nullable=column.nullable,
         )
 
 
@@ -77,7 +77,7 @@ class ExportReport:
             lines.append(f"### {schema.name}: {schema.description}\n")
             for col in schema.columns:
                 default_str = f" = {col.default}" if col.default else ""
-                lines.append(f"- {col.title}: {col.type}{default_str}")
+                lines.append(f"- {col.title}: {col.type}{default_str} {'(Required)' if col.nullable else ''}")
             lines.append("")  # Blank line between schemas
         return "\n".join(lines)
 
@@ -89,8 +89,8 @@ class ExportReport:
             Path to the PDF file
         """
         from weasyprint import HTML
-        import markdown
-        html_text = markdown.markdown(self.to_md())
+        from markdown.core import markdown
+        html_text = markdown(self.to_md())
         HTML(string=html_text).write_pdf(file_path)
         return file_path
 
@@ -115,15 +115,20 @@ def get_yaml_for_schema(schema_name: str):
 
 def exportables_by_schema_name(schema_name: str) -> list[OPNDFModel]:
     normalized_schema_name: str = normalize_schema_string(schema_name)
-    module_name = f"opndb.schema.{normalized_schema_name}.schema"
+    module_name = f"opndb.schema.{normalized_schema_name}.{SCHEMA_MODULE_NAME}"
     try:
         module = importlib.import_module(module_name)
     except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(f"Schema {normalized_schema_name} not found") from e
+        raise ModuleNotFoundError(f"Schema {normalized_schema_name} not found in module {module_name}") from e
     return get_exportables_from_module(module)
 
 
 def get_exportables_from_module(module: ModuleType) -> list[OPNDFModel]:
+    """
+    Get the things we can export from the models in the module.
+
+    They need to be of type OPNDFModel.
+    """
     from opndb.validator.df_model import OPNDFModel
 
     members: list[tuple[str, Any]] = inspect.getmembers(module, inspect.isclass)
