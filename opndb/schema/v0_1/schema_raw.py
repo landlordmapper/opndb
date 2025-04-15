@@ -14,21 +14,21 @@ class PropsTaxpayers(OPNDFModel):
     # ---------------------------
     # ----COLUMN NAME OBJECTS----
     # ---------------------------
-    RAW: list[str] = [
+    _RAW: list[str] = [
         "tax_name",
         "tax_street",
         "tax_city",
         "tax_state",
         "tax_zip",
     ]
-    CLEAN_RENAME_MAP: dict[str, Any] = {
+    _CLEAN_RENAME_MAP: dict[str, Any] = {
         "tax_name": "clean_name",
         "tax_street": "clean_street",
         "tax_city": "clean_city",
         "tax_state": "clean_state",
         "tax_zip": "clean_zip",
     }
-    RAW_ADDRESS_MAP: list[dict[str, Any]] = [
+    _RAW_ADDRESS_MAP: list[dict[str, Any]] = [
         {
             "full_address": "raw_address",
             "address_cols": [
@@ -39,7 +39,7 @@ class PropsTaxpayers(OPNDFModel):
             ]
         }
     ]
-    NAME_ADDRESS_CONCAT_MAP: dict[str, Any] = {
+    _NAME_ADDRESS_CONCAT_MAP: dict[str, Any] = {
         "raw": {
             "name_addr": "raw_name_address",
             "name": "raw_name",
@@ -51,9 +51,8 @@ class PropsTaxpayers(OPNDFModel):
             "addr": "clean_address"
         }
     }
-    BASIC_CLEAN: list[str] = [
+    _BASIC_CLEAN: list[str] = [
         "pin",
-        "num_units",
         "class_code",
         "clean_name",
         "clean_street",
@@ -61,12 +60,12 @@ class PropsTaxpayers(OPNDFModel):
         "clean_state",
         "clean_zip",
     ]
-    NAME_CLEAN: list[str] = ["clean_name"]
-    ADDRESS_CLEAN: dict[str, Any] = {
-        "street": "clean_street",
-        "zip": "clean_zip",
+    _NAME_CLEAN: list[str] = ["clean_name"]
+    _ADDRESS_CLEAN: dict[str, Any] = {
+        "street": ["clean_street"],
+        "zip": ["clean_zip"],
     }
-    CLEAN_ADDRESS_MAP: list[dict[str, Any]] = [
+    _CLEAN_ADDRESS_MAP: list[dict[str, Any]] = [
         {
             "full_address": "clean_address",
             "address_cols": [
@@ -80,35 +79,35 @@ class PropsTaxpayers(OPNDFModel):
 
     @classmethod
     def raw(cls) -> list[str]:
-        return cls.RAW
+        return cls._RAW
 
     @classmethod
     def clean_rename_map(cls) -> dict[str, Any]:
-        return cls.CLEAN_RENAME_MAP
+        return cls._CLEAN_RENAME_MAP
 
     @classmethod
     def raw_address_map(cls) -> list[dict[str, Any]]:
-        return cls.RAW_ADDRESS_MAP
+        return cls._RAW_ADDRESS_MAP
 
     @classmethod
     def name_address_concat_map(cls) -> dict[str, Any]:
-        return cls.NAME_ADDRESS_CONCAT_MAP
+        return cls._NAME_ADDRESS_CONCAT_MAP
 
     @classmethod
     def basic_clean(cls) -> list[str]:
-        return cls.BASIC_CLEAN
+        return cls._BASIC_CLEAN
 
     @classmethod
     def name_clean(cls) -> list[str]:
-        return cls.NAME_CLEAN
+        return cls._NAME_CLEAN
 
     @classmethod
     def address_clean(cls) -> dict[str, Any]:
-        return cls.ADDRESS_CLEAN
+        return cls._ADDRESS_CLEAN
 
     @classmethod
     def clean_address_map(cls) -> list[dict[str, Any]]:
-        return cls.CLEAN_ADDRESS_MAP
+        return cls._CLEAN_ADDRESS_MAP
 
     # --------------------
     # ----MODEL FIELDS----
@@ -163,23 +162,22 @@ class Corps(OPNDFModel):
     # ---------------------------
     # ----COLUMN NAME OBJECTS----
     # ---------------------------
-
-    RAW: list[str] = [
+    _RAW: list[str] = [
         "name",
         "president_name",
         "president_address",
         "secretary_name",
         "secretary_address",
     ]
-    CLEAN_RENAME_MAP: dict[str, str] = {
+    _CLEAN_RENAME_MAP: dict[str, str] = {
         "name": "clean_name",
         "president_name": "clean_president_name",
         "president_address": "clean_president_address",
         "secretary_name": "clean_secretary_name",
         "secretary_address": "clean_secretary_address",
     }
-    RAW_ADDRESS_MAP: None = None
-    BASIC_CLEAN: list[str] = [
+    _RAW_ADDRESS_MAP: None = None
+    _BASIC_CLEAN: list[str] = [
         "file_number",
         "status",
         "clean_name",
@@ -188,20 +186,20 @@ class Corps(OPNDFModel):
         "clean_secretary_name",
         "clean_secretary_address",
     ]
-    NAME_CLEAN: list[str] = [
+    _NAME_CLEAN: list[str] = [
         "clean_name",
         "clean_president_name",
         "clean_secretary_name",
     ]
-    ADDRESS_CLEAN: dict[str, list[str]] = {
+    _ADDRESS_CLEAN: dict[str, list[str]] = {
         "street": [
             "clean_president_address",
             "clean_secretary_address",
         ],
         "zip": []
     }
-    CLEAN_ADDRESS_MAP: None = None
-    OUT: list[str] = [
+    _CLEAN_ADDRESS_MAP: None = None
+    _OUT: list[str] = [
         "file_number",
         "status",
         "raw_name",
@@ -215,7 +213,7 @@ class Corps(OPNDFModel):
         "clean_secretary_name",
         "clean_secretary_address",
     ]
-    UNVALIDATED_COL_OBJS: list[dict[str, str]] = [
+    _UNVALIDATED_COL_OBJS: list[dict[str, str]] = [
         {
             "raw_president_address": "raw_address",
             "clean_president_address": "clean_address",
@@ -227,50 +225,50 @@ class Corps(OPNDFModel):
             "status": "status",
         }
     ]
-    VALIDATED_ADDRESS_MERGE: list[str] = [
+    _VALIDATED_ADDRESS_MERGE: list[str] = [
         "raw_president_address",
         "raw_secretary_address",
     ]
 
     @classmethod
     def raw(cls) -> list[str]:
-        return cls.RAW
+        return cls._RAW
 
     @classmethod
     def clean_rename_map(cls) -> dict[str, str]:
-        return cls.CLEAN_RENAME_MAP
+        return cls._CLEAN_RENAME_MAP
 
     @classmethod
     def raw_address_map(cls) -> None:
-        return cls.RAW_ADDRESS_MAP
+        return cls._RAW_ADDRESS_MAP
 
     @classmethod
     def basic_clean(cls) -> list[str]:
-        return cls.BASIC_CLEAN
+        return cls._BASIC_CLEAN
 
     @classmethod
     def name_clean(cls) -> list[str]:
-        return cls.NAME_CLEAN
+        return cls._NAME_CLEAN
 
     @classmethod
     def address_clean(cls) -> dict[str, list[str]]:
-        return cls.ADDRESS_CLEAN
+        return cls._ADDRESS_CLEAN
 
     @classmethod
     def clean_address_map(cls) -> None:
-        return cls.CLEAN_ADDRESS_MAP
+        return cls._CLEAN_ADDRESS_MAP
 
     @classmethod
     def out(cls) -> list[str]:
-        return cls.OUT
+        return cls._OUT
 
     @classmethod
     def unvalidated_col_objs(cls) -> list[dict[str, str]]:
-        return cls.UNVALIDATED_COL_OBJS
+        return cls._UNVALIDATED_COL_OBJS
 
     @classmethod
     def validated_address_merge(cls) -> list[str]:
-        return cls.VALIDATED_ADDRESS_MERGE
+        return cls._VALIDATED_ADDRESS_MERGE
 
     # --------------------
     # ----MODEL FIELDS----
@@ -386,7 +384,7 @@ class LLCs(OPNDFModel):
     # ---------------------------
     # ----COLUMN NAME OBJECTS----
     # ---------------------------
-    RAW: list[str] = [
+    _RAW: list[str] = [
         "name",
         "manager_member_name",
         "manager_member_street",
@@ -399,7 +397,7 @@ class LLCs(OPNDFModel):
         "office_city",
         "office_zip",
     ]
-    CLEAN_RENAME_MAP: dict[str, str] = {
+    _CLEAN_RENAME_MAP: dict[str, str] = {
         "name": "clean_name",
         "manager_member_name": "clean_manager_member_name",
         "manager_member_street": "clean_manager_member_street",
@@ -412,7 +410,7 @@ class LLCs(OPNDFModel):
         "office_city": "clean_office_city",
         "office_zip": "clean_office_zip",
     }
-    RAW_ADDRESS_MAP: list[dict[str, list[str]]] = [
+    _RAW_ADDRESS_MAP: list[dict[str, list[str]]] = [
         {
             "full_address": "raw_manager_member_address",
             "address_cols": [
@@ -437,7 +435,7 @@ class LLCs(OPNDFModel):
             ],
         },
     ]
-    BASIC_CLEAN: list[str] = [
+    _BASIC_CLEAN: list[str] = [
         "file_number",
         "status",
         "clean_name",
@@ -452,12 +450,12 @@ class LLCs(OPNDFModel):
         "clean_office_city",
         "clean_office_zip",
     ]
-    NAME_CLEAN: list[str] = [
+    _NAME_CLEAN: list[str] = [
         "clean_name",
         "clean_manager_member_name",
         "clean_agent_name",
     ]
-    ADDRESS_CLEAN: dict[str, list[str]] = {
+    _ADDRESS_CLEAN: dict[str, list[str]] = {
         "street": [
             "clean_manager_member_street",
             "clean_agent_street",
@@ -469,7 +467,7 @@ class LLCs(OPNDFModel):
             "clean_office_zip",
         ],
     }
-    CLEAN_ADDRESS_MAP: list[dict[str, list[str]]] = [
+    _CLEAN_ADDRESS_MAP: list[dict[str, list[str]]] = [
         {
             "full_address": "clean_manager_member_address",
             "address_cols": [
@@ -494,7 +492,7 @@ class LLCs(OPNDFModel):
             ],
         },
     ]
-    OUT: list[str] = [
+    _OUT: list[str] = [
         "file_number",
         "status",
         "raw_name",
@@ -526,7 +524,7 @@ class LLCs(OPNDFModel):
         "clean_office_zip",
         "clean_office_address",
     ]
-    UNVALIDATED_COL_OBJS: list[dict[str, str]] = [
+    _UNVALIDATED_COL_OBJS: list[dict[str, str]] = [
         {
             "raw_manager_member_street": "raw_street",
             "raw_manager_member_city": "raw_city",
@@ -559,7 +557,7 @@ class LLCs(OPNDFModel):
             "status": "status",
         },
     ]
-    VALIDATED_ADDRESS_MERGE: list[str] = [
+    _VALIDATED_ADDRESS_MERGE: list[str] = [
         "raw_office_address",
         "raw_agent_address",
         "raw_manager_member_address",
@@ -567,43 +565,43 @@ class LLCs(OPNDFModel):
 
     @classmethod
     def raw(cls) -> list[str]:
-        return cls.RAW
+        return cls._RAW
 
     @classmethod
     def clean_rename_map(cls) -> dict[str, str]:
-        return cls.CLEAN_RENAME_MAP
+        return cls._CLEAN_RENAME_MAP
 
     @classmethod
     def raw_address_map(cls) -> list[dict[str, list[str]]]:
-        return cls.RAW_ADDRESS_MAP
+        return cls._RAW_ADDRESS_MAP
 
     @classmethod
     def basic_clean(cls) -> list[str]:
-        return cls.BASIC_CLEAN
+        return cls._BASIC_CLEAN
 
     @classmethod
     def name_clean(cls) -> list[str]:
-        return cls.NAME_CLEAN
+        return cls._NAME_CLEAN
 
     @classmethod
     def address_clean(cls) -> dict[str, list[str]]:
-        return cls.ADDRESS_CLEAN
+        return cls._ADDRESS_CLEAN
 
     @classmethod
     def clean_address_map(cls) -> list[dict[str, list[str]]]:
-        return cls.CLEAN_ADDRESS_MAP
+        return cls._CLEAN_ADDRESS_MAP
 
     @classmethod
     def out(cls) -> list[str]:
-        return cls.OUT
+        return cls._OUT
 
     @classmethod
     def unvalidated_col_objs(cls) -> list[dict[str, str]]:
-        return cls.UNVALIDATED_COL_OBJS
+        return cls._UNVALIDATED_COL_OBJS
 
     @classmethod
     def validated_address_merge(cls) -> list[str]:
-        return cls.VALIDATED_ADDRESS_MERGE
+        return cls._VALIDATED_ADDRESS_MERGE
 
     # --------------------
     # ----MODEL FIELDS----
@@ -749,7 +747,7 @@ class ClassCodes(OPNDFModel):
     # ---------------------------
     # ----COLUMN NAME OBJECTS----
     # ---------------------------
-    BASIC_CLEAN: list[str] = [
+    _BASIC_CLEAN: list[str] = [
         "code",
         "category",
         "description",
@@ -758,7 +756,7 @@ class ClassCodes(OPNDFModel):
 
     @classmethod
     def basic_clean(cls) -> list[str]:
-        return cls.BASIC_CLEAN
+        return cls._BASIC_CLEAN
 
     # --------------------
     # ----MODEL FIELDS----

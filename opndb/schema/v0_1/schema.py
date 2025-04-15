@@ -5,8 +5,96 @@ from opndb.validator.df_model import OPNDFModel
 
 VALID_ZIP_CODE_REGEX: Final[re] = r"^\d{5}(-\d{4})?$"
 
+class Properties(OPNDFModel):
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    _OUT: list[str] = ["pin", "raw_name_address", "class_code"]
+
+    @classmethod
+    def out(cls) -> list[str]:
+        return cls._OUT
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
+    pin: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="PIN",
+        description="Unique tax identifier for the property",
+    )
+    raw_name_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Name Address",
+        description="Concatenation of raw taxpayer name and address. Used as unique identifier for taxpayer records."
+    )
+    clean_name_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Name Address",
+        description="Concatenation of clean taxpayer name and address. Can be used as unique identifier for taxpayer records."
+    )
+    class_code: str = pa.Field(
+        nullable=False,
+        title="Class Code",
+        description="Municipal code indicating land use for the property, required for subsetting rental properties."
+    )
+    num_units: int | None = pa.Field(
+        nullable=True,
+        title="Number of Units",
+        description="Number of rental apartment units in the property."
+    )
 
 class TaxpayerRecords(OPNDFModel):
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    _OUT: list[str] = [
+        "raw_name",
+        "raw_street",
+        "raw_city",
+        "raw_state",
+        "raw_zip",
+        "raw_address",
+        "raw_name_address",
+        "clean_name",
+        "clean_street",
+        "clean_city",
+        "clean_state",
+        "clean_zip",
+        "clean_address",
+    ]
+    _UNVALIDATED_ADDR_COLS: list[str] = [
+        "raw_street",
+        "raw_city",
+        "raw_state",
+        "raw_zip",
+        "raw_address",
+        "clean_street",
+        "clean_city",
+        "clean_state",
+        "clean_zip",
+        "clean_address",
+    ]
+    _VALIDATED_ADDRESS_MERGE: list[str] = ["raw_address"]
+
+    @classmethod
+    def out(cls) -> list[str]:
+        return cls._OUT
+
+    @classmethod
+    def unvalidated_addr_cols(cls) -> list[str]:
+        return cls._UNVALIDATED_ADDR_COLS
+
+    @classmethod
+    def validated_address_merge(cls) -> list[str]:
+        return cls._VALIDATED_ADDRESS_MERGE
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     raw_name: str = pa.Field(
         nullable=False,
         title="Raw Taxpayer Name",
@@ -39,6 +127,7 @@ class TaxpayerRecords(OPNDFModel):
     )
     raw_name_address: str = pa.Field(
         nullable=False,
+        unique=True,
         title="Raw Taxpayer Name+Address",
         description="Concatenation of raw taxpayer name and full address, to be used for identifying unique taxpayer records."
     )
@@ -77,6 +166,9 @@ class TaxpayerRecordsMerged(TaxpayerRecords):
     """
     Outputted taxpayer record dataset resulting from the AddressMerge workflow
     """
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     clean_address_v: str = pa.Field(
         nullable=True,
         title="Validated Taxpayer Address",
@@ -84,6 +176,9 @@ class TaxpayerRecordsMerged(TaxpayerRecords):
     )
 
 class TaxpayersFixed(TaxpayerRecordsMerged):
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     is_common_name: bool = pa.Field(
         nullable=False,
         title="Is Common Name?",
@@ -96,6 +191,9 @@ class TaxpayersFixed(TaxpayerRecordsMerged):
     )
 
 class TaxpayersSubsetted(TaxpayersFixed):
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     is_rental: bool = pa.Field(
         nullable=False,
         title="Is Rental?",
@@ -103,6 +201,9 @@ class TaxpayersSubsetted(TaxpayersFixed):
     )
 
 class TaxpayersPrepped(TaxpayersSubsetted):
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     core_name: str = pa.Field()
     is_trust: bool = pa.Field()
     is_person: bool = pa.Field()
@@ -118,6 +219,9 @@ class TaxpayersPrepped(TaxpayersSubsetted):
     is_string_match: bool = pa.Field()
 
 class TaxpayersStringMatched(TaxpayersPrepped):
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     match_address: str = pa.Field()
     clean_name_address: str = pa.Field()
     core_name_address: str = pa.Field()
@@ -127,6 +231,9 @@ class TaxpayersStringMatched(TaxpayersPrepped):
     string_matched_name_3: str = pa.Field()
 
 class TaxpayersNetworked(TaxpayersStringMatched):
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     network_1: str = pa.Field()
     network_1_short: str = pa.Field()
     network_2: str = pa.Field()
@@ -141,6 +248,26 @@ class TaxpayersNetworked(TaxpayersStringMatched):
     network_6_short: str = pa.Field()
 
 class UnvalidatedAddrs(OPNDFModel):
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    _GEOCODIO_COLUMNS: list[str] = [
+        "raw_address",
+        "clean_address",
+        "clean_street",
+        "clean_city",
+        "clean_state",
+        "clean_zip",
+        "is_pobox",
+    ]
+
+    @classmethod
+    def geocodio_columns(cls) -> list[str]:
+        return cls._GEOCODIO_COLUMNS
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     raw_street: str = pa.Field()
     raw_city: str = pa.Field()
     raw_state: str = pa.Field()
@@ -162,9 +289,43 @@ class UnvalidatedAddrsClean(UnvalidatedAddrs):
     is_pobox: bool = pa.Field()
 
 class GcdValidated(OPNDFModel):
-    pass
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    _VALIDATED_COLUMNS: list[str] = [
+        "raw_address",
+        "clean_address",
+        "number",
+        "predirectional",
+        "prefix",
+        "street",
+        "suffix",
+        "postdirectional",
+        "secondaryunit",
+        "secondarynumber",
+        "city",
+        "county",
+        "state",
+        "zip",
+        "country",
+        "lng",
+        "lat",
+        "accuracy",
+        "formatted_address",
+    ]
+
+    @classmethod
+    def validated_columns(cls) -> list[str]:
+        return cls._VALIDATED_COLUMNS
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
 
 class GcdUnvalidated(OPNDFModel):
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     pass
 
 

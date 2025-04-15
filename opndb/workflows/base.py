@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
 from pprint import pprint
-from typing import Any, ClassVar, Optional, Tuple, List
+from typing import Any, ClassVar, Optional, Tuple, List, Type
 import networkx as nx
 import nmslib
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
@@ -25,6 +25,7 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
+from opndb.schema.v0_1.schema import TaxpayerRecords, Properties
 from opndb.schema.v0_1.schema_raw import PropsTaxpayers, Corps, LLCs, ClassCodes
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
@@ -66,6 +67,7 @@ from opndb.services.dataframe.ops import (
 from rich.console import Console
 from rich.prompt import Prompt
 
+from opndb.validator.df_model import OPNDFModel
 
 console = Console()
 
@@ -99,12 +101,12 @@ class WorkflowBase(ABC):
         ss.display_load_table(self.dfs_in)
         ss.display_load_stats_table(self.dfs_in)
 
-    def run_validator(self, id: str, df: pd.DataFrame, schema_map: dict[str, Any]) -> None:
+    def run_validator(self, id: str, df: pd.DataFrame, schema) -> None:
         """Executes panderas validator"""
         t.print_with_dots(f"Executing validator for {id} dataset")
         try:
             # Validate the dataframe against its corresponding schema
-            schema_map[id].validate(df, lazy=True)
+            schema.validate(df, lazy=True)
             console.print("✅ Validation successful ✅")
         except pa.errors.SchemaErrors as err:
             # Log validation errors
@@ -239,38 +241,38 @@ class WkflDataClean(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
-    def execute_pre_cleaning(self, id: str, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+    def execute_pre_cleaning(self, id: str, df: pd.DataFrame, schema) -> pd.DataFrame:
 
         t.print_equals("Executing pre-cleaning operations")
 
         # generate raw_prefixed columns
         t.print_with_dots(f"Setting raw columns for \"{id}\"")
-        df: pd.DataFrame = cols_df.set_raw_columns(df, column_manager.raw)
+        df: pd.DataFrame = cols_df.set_raw_columns(df, schema.raw())
         console.print(f"Raw columns generated ✅")
 
         # rename columns to prepare for cleaning
-        df.rename(columns=column_manager.clean_rename_map, inplace=True)
+        df.rename(columns=schema.clean_rename_map(), inplace=True)
 
         # create raw_address field
         t.print_with_dots(f"Generating full raw address columns (if not already present)")
-        df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.raw_address_map, id)
+        df: pd.DataFrame = cols_df.set_full_address_fields(df, schema.raw_address_map(), id)
         console.print(f"Full raw address columns generated ✅")
 
         # props_taxpayers-specific logic - concatenate raw name + raw address
         if id == "props_taxpayers":
             t.print_with_dots(f"Concatenating raw name and address fields")
             df: pd.DataFrame = cols_df.set_name_address_concat(
-                df, column_manager.name_address_concat_map["raw"]
+                df, schema.name_address_concat_map()["raw"]
             )
             console.print(f"\"name_address\" field generated ✅")
 
         return df
 
-    def execute_basic_cleaning(self, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+    def execute_basic_cleaning(self, df: pd.DataFrame, schema) -> pd.DataFrame:
 
         t.print_equals(f"Executing basic operations (all data columns)")
 
-        cols: list[str] = column_manager.basic_clean
+        cols: list[str] = schema.basic_clean()
 
         t.print_with_dots("Converting letters to uppercase")
         df = clean_df_base.make_upper(df, cols)
@@ -300,20 +302,20 @@ class WkflDataClean(WorkflowStandardBase):
 
         return df
 
-    def execute_name_column_cleaning(self, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+    def execute_name_column_cleaning(self, df: pd.DataFrame, schema) -> pd.DataFrame:
 
         t.print_equals(f"Executing cleaning operations (name columns only)")
-        cols: list[str] = column_manager.name_clean
+        cols: list[str] = schema.name_clean()
         df = clean_df_name.switch_the(df, cols)
         console.print(f"Name field cleaning complete ✅")
 
         return df
 
-    def execute_address_column_cleaning(self, df: pd.DataFrame, column_manager) -> pd.DataFrame:
+    def execute_address_column_cleaning(self, df: pd.DataFrame, schema) -> pd.DataFrame:
 
         t.print_equals(f"Executing cleaning operations (address columns only)")
 
-        for col in column_manager.address_clean["street"]:
+        for col in schema.address_clean()["street"]:
 
             t.print_with_dots("Converting directionals to their abbreviations")
             df = clean_df_addr.convert_nsew(df, [col])
@@ -324,7 +326,7 @@ class WkflDataClean(WorkflowStandardBase):
             t.print_with_dots("Converting street suffixes")
             df = clean_df_addr.convert_street_suffixes(df, [col])
 
-        for col in column_manager.address_clean["zip"]:
+        for col in schema.address_clean()["zip"]:
 
             t.print_with_dots("Fixing zip codes...")
             df = clean_df_addr.fix_zip(df, [col])
@@ -344,37 +346,39 @@ class WkflDataClean(WorkflowStandardBase):
     #         console.print(f"Skipping additional string cleaning.")
     #     return df
 
-    def execute_post_cleaning(self, id: str, df: pd.DataFrame, column_manager, out_column_managers) -> None:
+    def execute_post_cleaning(self, id: str, df: pd.DataFrame, schema_map) -> None:
 
         t.print_equals(f"Executing post-cleaning operations")
 
         # add clean full address fields
         t.print_with_dots("Setting clean full address fields")
-        df: pd.DataFrame = cols_df.set_full_address_fields(df, column_manager.clean_address_map, id)
+        df: pd.DataFrame = cols_df.set_full_address_fields(df, schema_map[id].clean_address_map(), id)
         t.print_with_dots("Full clean address fields generated ✅")
 
         # props_taxpayers-specific logic
         if id == "props_taxpayers":
             # split dataframe into properties and taxpayer_records
             t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
-            col_manager_p = out_column_managers["properties"]
-            col_manager_t = out_column_managers["taxpayer_records"]
-            df_props, df_taxpayers = subset_df.split_props_taxpayers(df, col_manager_p.out, col_manager_t.out)
+            df_props, df_taxpayers = subset_df.split_props_taxpayers(
+                df,
+                schema_map["properties"].out(),
+                schema_map["taxpayer_records"].out()
+            )
             df_taxpayers.dropna(subset=["raw_name"], inplace=True)
             self.dfs_out["properties"] = df_props
             self.dfs_out["taxpayer_records"] = df_taxpayers
             console.print(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\" ✅")
         else:
             t.print_with_dots("Setting final dataframe")
-            self.dfs_out[id] = df[column_manager.out]
+            self.dfs_out[id] = df[schema_map[id].out()]
             console.print(f"Final dataframe set.")
 
-    def execute_unvalidated_generator(self, column_managers, out_column_managers) -> None:
+    def execute_unvalidated_generator(self, schema_map) -> None:
         t.print_with_dots(f"Generating \"unvalidated_addrs\"...")
         col_map = {
-            "taxpayer_records": out_column_managers["taxpayer_records"].unvalidated_addr_cols,
-            "corps": column_managers["corps"].unvalidated_col_objs,
-            "llcs": column_managers["llcs"].unvalidated_col_objs,
+            "taxpayer_records": schema_map["taxpayer_records"].unvalidated_addr_cols(),
+            "corps": schema_map["corps"].unvalidated_col_objs(),
+            "llcs": schema_map["llcs"].unvalidated_col_objs(),
         }
         df_unvalidated: pd.DataFrame = subset_df.generate_unvalidated_df(self.dfs_out, col_map)
         self.dfs_out["unvalidated_addrs"] = df_unvalidated.drop_duplicates(subset=["clean_address"])
@@ -405,22 +409,13 @@ class WkflDataClean(WorkflowStandardBase):
     # -----------------
     def process(self) -> None:
 
-        column_manager = {
-            "props_taxpayers": ColumnPropsTaxpayers(),
-            "corps": ColumnCorps(),
-            "llcs": ColumnLLCs(),
-            "class_codes": ColumnClassCodes()
-        }
-        out_column_manager = {
-            "properties": ColumnProperties(),
-            "taxpayer_records": ColumnTaxpayerRecords(),
-        }
-
         schema_map = {
             "props_taxpayers": PropsTaxpayers,
             "corps": Corps,
             "llcs": LLCs,
-            "class_codes": ClassCodes
+            "class_codes": ClassCodes,
+            "properties": Properties,
+            "taxpayer_records": TaxpayerRecords,
         }
 
         for id, df_in in self.dfs_in.items():
@@ -428,28 +423,28 @@ class WkflDataClean(WorkflowStandardBase):
             df: pd.DataFrame = df_in.copy()  # make copy to preserve the loaded dataframes
 
             # run validator
-            self.run_validator(id, df, schema_map)
+            self.run_validator(id, df, schema_map[id])
 
             # specific logic for class_codes
             if id == "class_codes":
-                df: pd.DataFrame = self.execute_basic_cleaning(df, column_manager[id])
+                df: pd.DataFrame = self.execute_basic_cleaning(df, schema_map[id])
                 self.dfs_out[id] = df
                 continue
 
             # PRE-CLEANING OPERATIONS
-            df = self.execute_pre_cleaning(id, df, column_manager[id])
+            df = self.execute_pre_cleaning(id, df, schema_map[id])
 
             # # MAIN CLEANING OPERATIONS
-            df = self.execute_basic_cleaning(df, column_manager[id])
-            df = self.execute_name_column_cleaning(df, column_manager[id])
-            df = self.execute_address_column_cleaning(df, column_manager[id])
+            df = self.execute_basic_cleaning(df, schema_map[id])
+            df = self.execute_name_column_cleaning(df, schema_map[id])
+            df = self.execute_address_column_cleaning(df, schema_map[id])
             # df: pd.DataFrame = self.execute_accuracy_implications("props_taxpayers", df)
 
             # POST-CLEANING OPERATIONS
-            self.execute_post_cleaning(id, df, column_manager[id], out_column_manager)
+            self.execute_post_cleaning(id, df, schema_map)
 
         # GENERATE UNVALIDATED ADDRESS DATASET
-        self.execute_unvalidated_generator(column_manager, out_column_manager)
+        self.execute_unvalidated_generator(schema_map)
 
     # -------------------------------
     # ----SUMMARY STATS GENERATOR----
