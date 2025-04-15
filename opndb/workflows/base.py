@@ -25,7 +25,7 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.schema.v0_1.schema import TaxpayerRecords, Properties
+from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs
 from opndb.schema.v0_1.schema_raw import PropsTaxpayers, Corps, LLCs, ClassCodes
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
@@ -512,13 +512,13 @@ class WkflAddressClean(WorkflowStandardBase):
 
     def process(self) -> None:
         t.print_dataset_name("unvalidated_addrs")
-        t.print_equals("Executing initial address operations")
-        column_manager = {"unvalidated_addrs": ColumnUnvalidatedAddrs()}
         df: pd.DataFrame = self.dfs_in["unvalidated_addrs"].copy()
+        self.run_validator("unvalidated_addrs", df, UnvalidatedAddrs)
+        t.print_equals("Executing initial address operations")
         t.print_with_dots("Setting is_pobox column")
-        df = cols_df.set_is_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
+        df = cols_df.set_is_pobox(df, "clean_address")
         t.print_with_dots("Cleaning up PO box addresses")
-        df = colm_df.fix_pobox(df, column_manager["unvalidated_addrs"].CLEAN_ADDRESS)
+        df = colm_df.fix_pobox(df, "clean_address")
         self.dfs_out["unvalidated_addrs"] = df
 
     def summary_stats(self) -> None:

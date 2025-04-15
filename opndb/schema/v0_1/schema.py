@@ -268,25 +268,84 @@ class UnvalidatedAddrs(OPNDFModel):
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
-    raw_street: str = pa.Field()
-    raw_city: str = pa.Field()
-    raw_state: str = pa.Field()
-    raw_zip: str = pa.Field()
-    raw_address: str = pa.Field()
-    clean_street: str = pa.Field()
-    clean_city: str = pa.Field()
-    clean_state: str = pa.Field()
-    clean_zip: str = pa.Field()
-    clean_address: str = pa.Field()
-    addr_type: str = pa.Field()
-    origin: str = pa.Field()
-    active: bool = pa.Field(
+    raw_street: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Street",
+        description="Raw street address (street number, street name and secondary address information)",
+    )
+    raw_city: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw City",
+    )
+    raw_state: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw State",
+    )
+    raw_zip: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Zip Code",
+    )
+    raw_address: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="Raw Address",
+        description="Concatenated mailing address as appears in the raw data. Required regardless of whether the address is split into separate components (street, city, state, zip)."
+    )
+    clean_street: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Street",
+        description="Clean street address (street number, street name and secondary address information)",
+    )
+    clean_city: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean City",
+    )
+    clean_state: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean State",
+    )
+    clean_zip: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Zip Code",
+    )
+    clean_address: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="Raw Address",
+        description="Concatenated and cleaned full mailing address. Required regardless of whether the address is split into separate components (street, city, state, zip)."
+    )
+    addr_type: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Address Type",
+    )
+    origin: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Origin",
+    )
+    active: str = pa.Field(
+        nullable=True,
+        unique=False,
         title="Active?",
         description="Boolean column representing whether or not the corporate or LLC record from which the address originates is active or inactive."
     )
 
 class UnvalidatedAddrsClean(UnvalidatedAddrs):
-    is_pobox: bool = pa.Field()
+    is_pobox: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is PO Box?",
+        description="Boolean indicating whether the street address has been identified as a PO Box."
+    )
 
 class GcdValidated(OPNDFModel):
     # ---------------------------

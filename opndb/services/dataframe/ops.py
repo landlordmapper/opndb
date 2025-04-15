@@ -428,7 +428,7 @@ class DataFrameSubsetters(DataFrameOpsBase):
             else:
                 for addr_cols in col_map[id]:  # col_map[id]: list[dict[str, str]]
                     df_addr = df[addr_cols.keys()].copy()
-                    df_addr["type"] = id
+                    df_addr["addr_type"] = id
                     df_addr["active"] = df_addr["status"].isin(["0", "1"])
                     df_addr.rename(columns=addr_cols, inplace=True)
                     dfs_to_concat.append(df_addr)
