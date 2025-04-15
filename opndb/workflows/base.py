@@ -22,10 +22,10 @@ from opndb.constants.columns import (
     Corps as c,
     LLCs as l,
     Properties as p,
-    PropsTaxpayers as pt
+    PropsTaxpayers as pt, ValidatedAddrs
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs
+from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean
 from opndb.schema.v0_1.schema_raw import PropsTaxpayers, Corps, LLCs, ClassCodes
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
@@ -568,7 +568,7 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
-    def execute_gcd_address_subset(self, df_unvalidated: pd.DataFrame, column_manager) -> pd.DataFrame:
+    def execute_gcd_address_subset(self, df_unvalidated: pd.DataFrame, schema) -> pd.DataFrame:
         """
         Subsets unvalidated master address file by filtering out addresses that have already been validated. Returns
         dataframe slice containing only columns required for processing Geocodio API calls.
@@ -578,7 +578,7 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             df_addrs: pd.DataFrame = df_unvalidated[~df_unvalidated["clean_address"].isin(validated_addrs)]
         else:
             df_addrs: pd.DataFrame = df_unvalidated
-        return df_addrs[column_manager["unvalidated_addrs"].geocodio_columns]
+        return df_addrs[schema.geocodio_columns()]
 
     def execute_api_key_handler_warning(self, df_addrs: pd.DataFrame) -> bool:
         """
@@ -657,14 +657,13 @@ class WkflAddressGeocodio(WorkflowStandardBase):
     def process(self):
 
         configs = self.config_manager.configs
-        column_manager = {
-            "unvalidated_addrs": ColumnUnvalidatedAddrs(),
-            "validated_addrs": ColumnValidatedAddrs(),
-        }
         dfs = {id: df.copy() for id, df in self.dfs_in.items() if df is not None}
 
+        # run validator for unvalidated addresses
+        self.run_validator("unvalidated_addrs", dfs["unvalidated_addrs"], UnvalidatedAddrsClean)
+
         # fetch addresses to be geocoded
-        df_addrs: pd.DataFrame = self.execute_gcd_address_subset(dfs["unvalidated_addrs"], column_manager)
+        df_addrs: pd.DataFrame = self.execute_gcd_address_subset(dfs["unvalidated_addrs"], UnvalidatedAddrsClean)
 
         # get geocodio api key from user if not already exists in configs.json
         cont: bool = self.execute_api_key_handler_warning(df_addrs)
@@ -674,7 +673,7 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         gcd_results_obj: GeocodioReturnObject = addr.run_geocodio(
             configs["geocodio_api_key"],
             df_addrs,
-            column_manager["unvalidated_addrs"].CLEAN_ADDRESS,
+            "clean_address",
             self.config_manager.configs
         )
 

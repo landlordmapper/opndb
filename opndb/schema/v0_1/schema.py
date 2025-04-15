@@ -248,23 +248,6 @@ class TaxpayersNetworked(TaxpayersStringMatched):
     network_6_short: str = pa.Field()
 
 class UnvalidatedAddrs(OPNDFModel):
-    # ---------------------------
-    # ----COLUMN NAME OBJECTS----
-    # ---------------------------
-    _GEOCODIO_COLUMNS: list[str] = [
-        "raw_address",
-        "clean_address",
-        "clean_street",
-        "clean_city",
-        "clean_state",
-        "clean_zip",
-        "is_pobox",
-    ]
-
-    @classmethod
-    def geocodio_columns(cls) -> list[str]:
-        return cls._GEOCODIO_COLUMNS
-
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
@@ -318,7 +301,7 @@ class UnvalidatedAddrs(OPNDFModel):
     )
     clean_address: str = pa.Field(
         nullable=False,
-        unique=True,
+        unique=False,
         title="Raw Address",
         description="Concatenated and cleaned full mailing address. Required regardless of whether the address is split into separate components (street, city, state, zip)."
     )
@@ -340,6 +323,23 @@ class UnvalidatedAddrs(OPNDFModel):
     )
 
 class UnvalidatedAddrsClean(UnvalidatedAddrs):
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    _GEOCODIO_COLUMNS: list[str] = [
+        "raw_address",
+        "clean_address",
+        "clean_street",
+        "clean_city",
+        "clean_state",
+        "clean_zip",
+        "is_pobox",
+    ]
+
+    @classmethod
+    def geocodio_columns(cls) -> list[str]:
+        return cls._GEOCODIO_COLUMNS
+
     is_pobox: str = pa.Field(
         nullable=False,
         unique=False,
@@ -347,7 +347,7 @@ class UnvalidatedAddrsClean(UnvalidatedAddrs):
         description="Boolean indicating whether the street address has been identified as a PO Box."
     )
 
-class GcdValidated(OPNDFModel):
+class Geocodio(OPNDFModel):
     # ---------------------------
     # ----COLUMN NAME OBJECTS----
     # ---------------------------
@@ -380,12 +380,117 @@ class GcdValidated(OPNDFModel):
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
-
-class GcdUnvalidated(OPNDFModel):
-    # --------------------
-    # ----MODEL FIELDS----
-    # --------------------
-    pass
+    raw_address: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="Raw Address",
+        description="Concatenated mailing address as appears in the raw data. Required regardless of whether the address is split into separate components (street, city, state, zip)."
+    )
+    clean_address: str = pa.Field(
+        nullable=False,
+        unique=False,  # todo: this should be true
+        title="Clean Address",
+        description="Concatenated and cleaned full mailing address. Required regardless of whether the address is split into separate components (street, city, state, zip)."
+    )
+    number: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Street Number",
+    )
+    predirectional: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street Predirectional",
+        description="Predirectional value for street address (Ex: 'N' in '123 N OAK ST')"
+    )
+    prefix: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street Prefix",
+        description="Prefix for street address (Ex: 'AVE' in '4754 AVE H')"
+    )
+    street: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Street Name",
+    )
+    suffix: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street Suffix",
+        description="Suffix for street address (Ex: 'ST' in '123 OAK ST')"
+    )
+    postdirectional: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street Postdirectional",
+        description="Postdirectional value for street address (Ex: 'N' in '123 OAK ST N')"
+    )
+    secondaryunit: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street Secondary Unit",
+        description="Descriptor for secondary address (Ex: 'SUITE' in 'SUITE 101')"
+    )
+    secondarynumber: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street Secondary Number",
+        description="Number component of the secondary address (Ex: '101' in 'SUITE 101')"
+    )
+    city: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="City",
+    )
+    county: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="County",
+    )
+    state: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="State",
+    )
+    zip: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Zip Code",
+    )
+    country: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Country",
+    )
+    lng: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Longitude",
+    )
+    lat: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Latitude",
+    )
+    accuracy: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Accuracy",
+        description="Accuracy score provided by Geocodio"
+    )
+    formatted_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Formatted Address",
+        description="Concatenation of all address components into a single string."
+    )
+    is_pobox: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is PO Box?",
+        description="Boolean indicating whether the street address has been identified as a PO Box."
+    )
 
 
 # --------------------------

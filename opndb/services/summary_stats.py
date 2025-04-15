@@ -50,6 +50,8 @@ class SummaryStatsBase(object):
     @classmethod
     def display_load_stats_table(cls, dfs_in):
         for id, df in dfs_in.items():
+            if df is None:
+                continue
             table_data = []
             for col in df.columns:
                 # Count null values
