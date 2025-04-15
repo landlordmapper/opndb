@@ -1,8 +1,5 @@
-import pandas as pd
-from pandera.typing import Series
+from typing import Any
 import pandera as pa
-from pandera import Check
-
 from opndb.validator.df_model import OPNDFModel
 
 
@@ -10,7 +7,112 @@ class PropsTaxpayers(OPNDFModel):
     """
     Raw dataset containing both property and taxpayer record data. The opndb workflow will split up this dataset into
     separate datasets: one for taxpayer records, the other for properties.
+
+    Constants defined at top of class are used for data processing, specifically to indicate which columns should be
+    renamed, iterated over, etc. Each constant corresponds to a class method returning the value of the constant.
     """
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    RAW: list[str] = [
+        "tax_name",
+        "tax_street",
+        "tax_city",
+        "tax_state",
+        "tax_zip",
+    ]
+    CLEAN_RENAME_MAP: dict[str, Any] = {
+        "tax_name": "clean_name",
+        "tax_street": "clean_street",
+        "tax_city": "clean_city",
+        "tax_state": "clean_state",
+        "tax_zip": "clean_zip",
+    }
+    RAW_ADDRESS_MAP: list[dict[str, Any]] = [
+        {
+            "full_address": "raw_address",
+            "address_cols": [
+                "raw_street",
+                "raw_city",
+                "raw_state",
+                "raw_zip",
+            ]
+        }
+    ]
+    NAME_ADDRESS_CONCAT_MAP: dict[str, Any] = {
+        "raw": {
+            "name_addr": "raw_name_address",
+            "name": "raw_name",
+            "addr": "raw_address"
+        },
+        "clean": {
+            "name_addr": "clean_name_address",
+            "name": "clean_name",
+            "addr": "clean_address"
+        }
+    }
+    BASIC_CLEAN: list[str] = [
+        "pin",
+        "num_units",
+        "class_code",
+        "clean_name",
+        "clean_street",
+        "clean_city",
+        "clean_state",
+        "clean_zip",
+    ]
+    NAME_CLEAN: list[str] = ["clean_name"]
+    ADDRESS_CLEAN: dict[str, Any] = {
+        "street": "clean_street",
+        "zip": "clean_zip",
+    }
+    CLEAN_ADDRESS_MAP: list[dict[str, Any]] = [
+        {
+            "full_address": "clean_address",
+            "address_cols": [
+                "clean_street",
+                "clean_city",
+                "clean_state",
+                "clean_zip",
+            ]
+        }
+    ]
+
+    @classmethod
+    def raw(cls) -> list[str]:
+        return cls.RAW
+
+    @classmethod
+    def clean_rename_map(cls) -> dict[str, Any]:
+        return cls.CLEAN_RENAME_MAP
+
+    @classmethod
+    def raw_address_map(cls) -> list[dict[str, Any]]:
+        return cls.RAW_ADDRESS_MAP
+
+    @classmethod
+    def name_address_concat_map(cls) -> dict[str, Any]:
+        return cls.NAME_ADDRESS_CONCAT_MAP
+
+    @classmethod
+    def basic_clean(cls) -> list[str]:
+        return cls.BASIC_CLEAN
+
+    @classmethod
+    def name_clean(cls) -> list[str]:
+        return cls.NAME_CLEAN
+
+    @classmethod
+    def address_clean(cls) -> dict[str, Any]:
+        return cls.ADDRESS_CLEAN
+
+    @classmethod
+    def clean_address_map(cls) -> list[dict[str, Any]]:
+        return cls.CLEAN_ADDRESS_MAP
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     pin: str = pa.Field(
         nullable=False,
         unique=True,
@@ -58,6 +160,121 @@ class Corps(OPNDFModel):
     Raw dataset for state-level corporate records. Note that the availability of address-related columns is subject to
     the quality of the original data and the ability to parse complete address strings.
     """
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+
+    RAW: list[str] = [
+        "name",
+        "president_name",
+        "president_address",
+        "secretary_name",
+        "secretary_address",
+    ]
+    CLEAN_RENAME_MAP: dict[str, str] = {
+        "name": "clean_name",
+        "president_name": "clean_president_name",
+        "president_address": "clean_president_address",
+        "secretary_name": "clean_secretary_name",
+        "secretary_address": "clean_secretary_address",
+    }
+    RAW_ADDRESS_MAP: None = None
+    BASIC_CLEAN: list[str] = [
+        "file_number",
+        "status",
+        "clean_name",
+        "clean_president_name",
+        "clean_president_address",
+        "clean_secretary_name",
+        "clean_secretary_address",
+    ]
+    NAME_CLEAN: list[str] = [
+        "clean_name",
+        "clean_president_name",
+        "clean_secretary_name",
+    ]
+    ADDRESS_CLEAN: dict[str, list[str]] = {
+        "street": [
+            "clean_president_address",
+            "clean_secretary_address",
+        ],
+        "zip": []
+    }
+    CLEAN_ADDRESS_MAP: None = None
+    OUT: list[str] = [
+        "file_number",
+        "status",
+        "raw_name",
+        "raw_president_name",
+        "raw_president_address",
+        "raw_secretary_name",
+        "raw_secretary_address",
+        "clean_name",
+        "clean_president_name",
+        "clean_president_address",
+        "clean_secretary_name",
+        "clean_secretary_address",
+    ]
+    UNVALIDATED_COL_OBJS: list[dict[str, str]] = [
+        {
+            "raw_president_address": "raw_address",
+            "clean_president_address": "clean_address",
+            "status": "status",
+        },
+        {
+            "raw_secretary_address": "raw_address",
+            "clean_secretary_address": "clean_address",
+            "status": "status",
+        }
+    ]
+    VALIDATED_ADDRESS_MERGE: list[str] = [
+        "raw_president_address",
+        "raw_secretary_address",
+    ]
+
+    @classmethod
+    def raw(cls) -> list[str]:
+        return cls.RAW
+
+    @classmethod
+    def clean_rename_map(cls) -> dict[str, str]:
+        return cls.CLEAN_RENAME_MAP
+
+    @classmethod
+    def raw_address_map(cls) -> None:
+        return cls.RAW_ADDRESS_MAP
+
+    @classmethod
+    def basic_clean(cls) -> list[str]:
+        return cls.BASIC_CLEAN
+
+    @classmethod
+    def name_clean(cls) -> list[str]:
+        return cls.NAME_CLEAN
+
+    @classmethod
+    def address_clean(cls) -> dict[str, list[str]]:
+        return cls.ADDRESS_CLEAN
+
+    @classmethod
+    def clean_address_map(cls) -> None:
+        return cls.CLEAN_ADDRESS_MAP
+
+    @classmethod
+    def out(cls) -> list[str]:
+        return cls.OUT
+
+    @classmethod
+    def unvalidated_col_objs(cls) -> list[dict[str, str]]:
+        return cls.UNVALIDATED_COL_OBJS
+
+    @classmethod
+    def validated_address_merge(cls) -> list[str]:
+        return cls.VALIDATED_ADDRESS_MERGE
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     name: str = pa.Field(
         nullable=False,
         unique=True,
@@ -166,6 +383,231 @@ class LLCs(OPNDFModel):
     Raw dataset for state-level LLC records. Note that the availability of address-related columns is subject to
     the quality of the original data and the ability to parse complete address strings.
     """
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    RAW: list[str] = [
+        "name",
+        "manager_member_name",
+        "manager_member_street",
+        "manager_member_city",
+        "manager_member_zip",
+        "agent_name",
+        "agent_street",
+        "agent_zip",
+        "office_street",
+        "office_city",
+        "office_zip",
+    ]
+    CLEAN_RENAME_MAP: dict[str, str] = {
+        "name": "clean_name",
+        "manager_member_name": "clean_manager_member_name",
+        "manager_member_street": "clean_manager_member_street",
+        "manager_member_city": "clean_manager_member_city",
+        "manager_member_zip": "clean_manager_member_zip",
+        "agent_name": "clean_agent_name",
+        "agent_street": "clean_agent_street",
+        "agent_zip": "clean_agent_zip",
+        "office_street": "clean_office_street",
+        "office_city": "clean_office_city",
+        "office_zip": "clean_office_zip",
+    }
+    RAW_ADDRESS_MAP: list[dict[str, list[str]]] = [
+        {
+            "full_address": "raw_manager_member_address",
+            "address_cols": [
+                "raw_manager_member_street",
+                "raw_manager_member_city",
+                "raw_manager_member_zip",
+            ],
+        },
+        {
+            "full_address": "raw_agent_address",
+            "address_cols": [
+                "raw_agent_street",
+                "raw_agent_zip",
+            ],
+        },
+        {
+            "full_address": "raw_office_address",
+            "address_cols": [
+                "raw_office_street",
+                "raw_office_city",
+                "raw_office_zip",
+            ],
+        },
+    ]
+    BASIC_CLEAN: list[str] = [
+        "file_number",
+        "status",
+        "clean_name",
+        "clean_manager_member_name",
+        "clean_manager_member_street",
+        "clean_manager_member_city",
+        "clean_manager_member_zip",
+        "clean_agent_name",
+        "clean_agent_street",
+        "clean_agent_zip",
+        "clean_office_street",
+        "clean_office_city",
+        "clean_office_zip",
+    ]
+    NAME_CLEAN: list[str] = [
+        "clean_name",
+        "clean_manager_member_name",
+        "clean_agent_name",
+    ]
+    ADDRESS_CLEAN: dict[str, list[str]] = {
+        "street": [
+            "clean_manager_member_street",
+            "clean_agent_street",
+            "clean_office_street",
+        ],
+        "zip": [
+            "clean_manager_member_zip",
+            "clean_agent_zip",
+            "clean_office_zip",
+        ],
+    }
+    CLEAN_ADDRESS_MAP: list[dict[str, list[str]]] = [
+        {
+            "full_address": "clean_manager_member_address",
+            "address_cols": [
+                "clean_manager_member_street",
+                "clean_manager_member_city",
+                "clean_manager_member_zip",
+            ],
+        },
+        {
+            "full_address": "clean_agent_address",
+            "address_cols": [
+                "clean_agent_street",
+                "clean_agent_zip",
+            ],
+        },
+        {
+            "full_address": "clean_office_address",
+            "address_cols": [
+                "clean_office_street",
+                "clean_office_city",
+                "clean_office_zip",
+            ],
+        },
+    ]
+    OUT: list[str] = [
+        "file_number",
+        "status",
+        "raw_name",
+        "raw_manager_member_name",
+        "raw_manager_member_street",
+        "raw_manager_member_city",
+        "raw_manager_member_zip",
+        "raw_manager_member_address",
+        "raw_agent_name",
+        "raw_agent_street",
+        "raw_agent_zip",
+        "raw_agent_address",
+        "raw_office_street",
+        "raw_office_city",
+        "raw_office_zip",
+        "raw_office_address",
+        "clean_name",
+        "clean_manager_member_name",
+        "clean_manager_member_street",
+        "clean_manager_member_city",
+        "clean_manager_member_zip",
+        "clean_manager_member_address",
+        "clean_agent_name",
+        "clean_agent_street",
+        "clean_agent_zip",
+        "clean_agent_address",
+        "clean_office_street",
+        "clean_office_city",
+        "clean_office_zip",
+        "clean_office_address",
+    ]
+    UNVALIDATED_COL_OBJS: list[dict[str, str]] = [
+        {
+            "raw_manager_member_street": "raw_street",
+            "raw_manager_member_city": "raw_city",
+            "raw_manager_member_zip": "raw_zip",
+            "raw_manager_member_address": "raw_address",
+            "clean_manager_member_street": "clean_street",
+            "clean_manager_member_city": "clean_city",
+            "clean_manager_member_zip": "clean_zip",
+            "clean_manager_member_address": "clean_address",
+            "status": "status",
+        },
+        {
+            "raw_agent_street": "raw_street",
+            "raw_agent_zip": "raw_zip",
+            "raw_agent_address": "raw_address",
+            "clean_agent_street": "clean_street",
+            "clean_agent_zip": "clean_zip",
+            "clean_agent_address": "clean_address",
+            "status": "status",
+        },
+        {
+            "raw_office_street": "raw_street",
+            "raw_office_city": "raw_city",
+            "raw_office_zip": "raw_zip",
+            "raw_office_address": "raw_address",
+            "clean_office_street": "clean_street",
+            "clean_office_city": "clean_city",
+            "clean_office_zip": "clean_zip",
+            "clean_office_address": "clean_address",
+            "status": "status",
+        },
+    ]
+    VALIDATED_ADDRESS_MERGE: list[str] = [
+        "raw_office_address",
+        "raw_agent_address",
+        "raw_manager_member_address",
+    ]
+
+    @classmethod
+    def raw(cls) -> list[str]:
+        return cls.RAW
+
+    @classmethod
+    def clean_rename_map(cls) -> dict[str, str]:
+        return cls.CLEAN_RENAME_MAP
+
+    @classmethod
+    def raw_address_map(cls) -> list[dict[str, list[str]]]:
+        return cls.RAW_ADDRESS_MAP
+
+    @classmethod
+    def basic_clean(cls) -> list[str]:
+        return cls.BASIC_CLEAN
+
+    @classmethod
+    def name_clean(cls) -> list[str]:
+        return cls.NAME_CLEAN
+
+    @classmethod
+    def address_clean(cls) -> dict[str, list[str]]:
+        return cls.ADDRESS_CLEAN
+
+    @classmethod
+    def clean_address_map(cls) -> list[dict[str, list[str]]]:
+        return cls.CLEAN_ADDRESS_MAP
+
+    @classmethod
+    def out(cls) -> list[str]:
+        return cls.OUT
+
+    @classmethod
+    def unvalidated_col_objs(cls) -> list[dict[str, str]]:
+        return cls.UNVALIDATED_COL_OBJS
+
+    @classmethod
+    def validated_address_merge(cls) -> list[str]:
+        return cls.VALIDATED_ADDRESS_MERGE
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     name: str = pa.Field(
         nullable=False,
         unique=True,
@@ -304,6 +746,23 @@ class ClassCodes(OPNDFModel):
     Dataset containing building class codes and their meaning. Usually set by the municipality to dictate zoning. Used
     to subset rental properties.
     """
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    BASIC_CLEAN: list[str] = [
+        "code",
+        "category",
+        "description",
+        "is_rental"
+    ]
+
+    @classmethod
+    def basic_clean(cls) -> list[str]:
+        return cls.BASIC_CLEAN
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     code: str = pa.Field(
         nullable=False,
         unique=True,

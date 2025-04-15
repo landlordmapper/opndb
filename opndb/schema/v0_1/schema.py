@@ -1,126 +1,174 @@
 import re
-from enum import StrEnum
 from typing import Final
-
-import pandas as pd
 import pandera as pa
-from pandas import CategoricalDtype
-from pandera import DateTime
-
-from opndb.validator.df_model import OPNDFModel, OPNDFStrEnum
-from pandera.typing import Series
+from opndb.validator.df_model import OPNDFModel
 
 VALID_ZIP_CODE_REGEX: Final[re] = r"^\d{5}(-\d{4})?$"
 
 
-class CodeViolationStatus(OPNDFStrEnum):
-    OPEN = "open"
-    CLOSED = "closed"
+class TaxpayerRecords(OPNDFModel):
+    raw_name: str = pa.Field(
+        nullable=False,
+        title="Raw Taxpayer Name",
+        description="Taxpayer name EXACTLY how it appears in the raw data.",
+    )
+    raw_street: str = pa.Field(
+        nullable=False,
+        title="Raw Taxpayer Street",
+        description="Taxpayer street address EXACTLY how it appears in the raw data."
+    )
+    raw_city: str = pa.Field(
+        nullable=False,
+        title="Raw Taxpayer City",
+        description="Taxpayer city EXACTLY how it appears in the raw data."
+    )
+    raw_state: str = pa.Field(
+        nullable=False,
+        title="Raw Taxpayer State",
+        description="Taxpayer state EXACTLY how it appears in the raw data."
+    )
+    raw_zip: str = pa.Field(
+        nullable=False,
+        title="Raw Taxpayer Zip",
+        description="Taxpayer zip code EXACTLY how it appears in the raw data."
+    )
+    raw_address: str = pa.Field(
+        nullable=False,
+        title="Raw Taxpayer Address",
+        description="Concatenation of raw taxpayer address components."
+    )
+    raw_name_address: str = pa.Field(
+        nullable=False,
+        title="Raw Taxpayer Name+Address",
+        description="Concatenation of raw taxpayer name and full address, to be used for identifying unique taxpayer records."
+    )
+    clean_name: str = pa.Field(
+        nullable=False,
+        title="Clean Taxpayer Name",
+        description="Taxpayer name AFTER running it through the string cleaners."
+    )
+    clean_street: str = pa.Field(
+        nullable=False,
+        title="Clean Taxpayer Street",
+        description="Taxpayer street address AFTER running it through the string cleaners."
+    )
+    clean_city: str = pa.Field(
+        nullable=False,
+        title="Clean Taxpayer City",
+        description="Taxpayer city AFTER running it through the string cleaners."
+    )
+    clean_state: str = pa.Field(
+        nullable=False,
+        title="Clean Taxpayer State",
+        description="Taxpayer state AFTER running it through the string cleaners."
+    )
+    clean_zip: str = pa.Field(
+        nullable=False,
+        title="Clean Taxpayer Zip",
+        description="Taxpayer zip code AFTER running it through the string cleaners."
+    )
+    clean_address: str = pa.Field(
+        nullable=False,
+        title="Clean Taxpayer Address",
+        description="Concatenation of clean taxpayer address components."
+    )
 
-class Building(OPNDFModel):
+class TaxpayerRecordsMerged(TaxpayerRecords):
     """
-    A standing structure that people live in
+    Outputted taxpayer record dataset resulting from the AddressMerge workflow
     """
-    pin: Series[str] = pa.Field(description="Property PIN / unique tax ID")
-    class_code: Series[str] = pa.Field(
-        description="Property class code"
-    )  # todo: need to know what format, is this cross-city, etc
-    taxpayer_name: Series[str] = pa.Field(description="Name of the taxpayer")
-    taxpayer_address: Series[str] = pa.Field(description="Address of the taxpayer")
-    units_quantity: Series[int] = pa.Field(
-        description="Number of units in the building"
-    )
-    year_built: Series[int] = pa.Field(
-        lt=3000,
-        default=None,
+    clean_address_v: str = pa.Field(
         nullable=True,
-        coerce=True,
-        description="Year building was built",
+        title="Validated Taxpayer Address",
+        description="Validated clean taxpayer mailing address."
     )
 
-
-class Address(OPNDFModel):
-    street_number: Series[str] = pa.Field(description="Street number")
-    street_name: Series[str] = pa.Field(description="Street name (excluding number)")
-    street_suffix: Series[str] = pa.Field(
-        description="Street suffix (e.g., St, Ave, Blvd)"
+class TaxpayersFixed(TaxpayerRecordsMerged):
+    is_common_name: bool = pa.Field(
+        nullable=False,
+        title="Is Common Name?",
+        description="Boolean column indicating whether or not the taxpayer name is identified as a 'common name' (ex: John Smith, Juan Garcia, etc.)."
     )
-    unit: Series[str] = pa.Field(
-        nullable=True, description="Apartment, suite, or unit number"
-    )
-    city: Series[str] = pa.Field(description="City name")
-    state: Series[str] = pa.Field(description="Two-letter USPS state abbreviation")
-    zip_code: Series[str] = pa.Field(description="5-digit ZIP or ZIP+4")
-
-    @pa.check("zip_code", regex=True, name="zip_code")
-    def zip_code_regex(cls, a: Series[str]) -> Series[bool]:
-        return a.str.match(VALID_ZIP_CODE_REGEX)
-
-
-class Corporation(OPNDFModel):
-    file_number: Series[str] = pa.Field(description="File number")  # todo: what is this
-    creation_date: Series[DateTime] = pa.Field(
-        description="Date of creation", nullable=True
-    )
-    president_name: Series[str] = pa.Field(
-        description="Name of the corporation president", nullable=True
-    )
-    president_address: Series[str] = pa.Field(
-        description="Address of the corporation president", nullable=True
-    )
-    secretary_name: Series[str] = pa.Field(
-        description="Name of the corporation secretary", nullable=True
-    )
-    secretary_address: Series[str] = pa.Field(
-        description="Address of the corporation secretary", nullable=True
+    is_landlord_org: bool = pa.Field(
+        nullable=False,
+        title="Is Landlord Org?",
+        description="Boolean column indicating whether or not the validated taxpayer address is associated with a 'landlord organization' (property management company, wealth management company, realtor, etc.)."
     )
 
-
-class LLC(OPNDFModel):
-    file_number: Series[str] = pa.Field(description="File number")  # todo: what is this
-    creation_Date: Series[DateTime] = pa.Field(
-        description="Date of creation", nullable=True
-    )
-    manager_name: Series[str] = pa.Field(
-        description="Name of the LLC manager", nullable=True
-    )
-    manager_address: Series[str] = pa.Field(
-        description="Address of the LLC manager", nullable=True
-    )
-    agent_name: Series[str] = pa.Field(
-        description="Name of the LLC agent", nullable=True
-    )
-    agent_address: Series[str] = pa.Field(
-        description="Address of the LLC agent", nullable=True
-    )
-    office_address: Series[str] = pa.Field(
-        description="Address of the office", nullable=True
+class TaxpayersSubsetted(TaxpayersFixed):
+    is_rental: bool = pa.Field(
+        nullable=False,
+        title="Is Rental?",
+        description="Boolean column indicating whether or not the taxpayer record is associated with a rental property."
     )
 
+class TaxpayersPrepped(TaxpayersSubsetted):
+    core_name: str = pa.Field()
+    is_trust: bool = pa.Field()
+    is_person: bool = pa.Field()
+    is_org: bool = pa.Field()
+    is_llc: bool = pa.Field()
+    entity_clean_name: str = pa.Field()
+    entity_core_name: str = pa.Field()
+    merge_address_1: str = pa.Field()
+    merge_address_2: str = pa.Field()
+    merge_address_3: str = pa.Field()
+    is_clean_match: bool = pa.Field()
+    is_core_match: bool = pa.Field()
+    is_string_match: bool = pa.Field()
 
-class PropertySale(OPNDFModel):
-    property_pin: Series[str] = pa.Field(description="Property PIN / unique tax ID")
-    sale_date: Series[DateTime] = pa.Field(description="Date of sale")
-    sale_price: Series[int] = pa.Field(description="Sale price of the property")
-    seller_name: Series[str] = pa.Field(description="Name of the seller")
-    buyer_name: Series[str] = pa.Field(description="Name of the buyer")
+class TaxpayersStringMatched(TaxpayersPrepped):
+    match_address: str = pa.Field()
+    clean_name_address: str = pa.Field()
+    core_name_address: str = pa.Field()
+    include_address: bool = pa.Field()
+    string_matched_name_1: str = pa.Field()
+    string_matched_name_2: str = pa.Field()
+    string_matched_name_3: str = pa.Field()
+
+class TaxpayersNetworked(TaxpayersStringMatched):
+    network_1: str = pa.Field()
+    network_1_short: str = pa.Field()
+    network_2: str = pa.Field()
+    network_2_short: str = pa.Field()
+    network_3: str = pa.Field()
+    network_3_short: str = pa.Field()
+    network_4: str = pa.Field()
+    network_4_short: str = pa.Field()
+    network_5: str = pa.Field()
+    network_5_short: str = pa.Field()
+    network_6: str = pa.Field()
+    network_6_short: str = pa.Field()
+
+class UnvalidatedAddrs(OPNDFModel):
+    raw_street: str = pa.Field()
+    raw_city: str = pa.Field()
+    raw_state: str = pa.Field()
+    raw_zip: str = pa.Field()
+    raw_address: str = pa.Field()
+    clean_street: str = pa.Field()
+    clean_city: str = pa.Field()
+    clean_state: str = pa.Field()
+    clean_zip: str = pa.Field()
+    clean_address: str = pa.Field()
+    addr_type: str = pa.Field()
+    origin: str = pa.Field()
+    active: bool = pa.Field(
+        title="Active?",
+        description="Boolean column representing whether or not the corporate or LLC record from which the address originates is active or inactive."
+    )
+
+class UnvalidatedAddrsClean(UnvalidatedAddrs):
+    is_pobox: bool = pa.Field()
+
+class GcdValidated(OPNDFModel):
+    pass
+
+class GcdUnvalidated(OPNDFModel):
+    pass
 
 
-class CodeViolation(OPNDFModel):
-    date_opened: Series[DateTime] = pa.Field(
-        description="Date the violation was opened"
-    )
-    date_updated: Series[DateTime] = pa.Field(
-        description="Date the violation was updated", nullable=True
-    )
-    respondent_name: Series[str] = pa.Field(description="Name of respondant")
-    fine_imposed: Series[int] = pa.Field(
-        description="Fine imposed for the violation", nullable=True
-    )
-    liable: Series[bool] = pa.Field(
-        description="Whether the respondent was found liable for the violation",
-        nullable=True,
-    )
-    status: CategoricalDtype(categories=list(CodeViolationStatus)) = pa.Field(
-        description="Status of the violation"
-    )
+# --------------------------
+# ----OUTPUTTED DATASETS----
+# --------------------------
+# these will be the final outputted datasets to be stored in the s3 bucket and available to be pulled down and used
