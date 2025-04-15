@@ -26,7 +26,7 @@ from opndb.constants.columns import (
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
 from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean
-from opndb.schema.v0_1.schema_raw import PropsTaxpayers, Corps, LLCs, ClassCodes
+from opndb.schema.v0_1.schema_raw import PropsTaxpayers, CorpsRaw, LLCsRaw, ClassCodes
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
     ColumnTaxpayerRecords, ColumnClassCodes, ColumnUnvalidatedAddrs, ColumnValidatedAddrs
@@ -411,8 +411,8 @@ class WkflDataClean(WorkflowStandardBase):
 
         schema_map = {
             "props_taxpayers": PropsTaxpayers,
-            "corps": Corps,
-            "llcs": LLCs,
+            "corps": CorpsRaw,
+            "llcs": LLCsRaw,
             "class_codes": ClassCodes,
             "properties": Properties,
             "taxpayer_records": TaxpayerRecords,
@@ -730,8 +730,9 @@ class WkflFixUnitsInitial(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
-        # detect missing unit numbers in validated addresses via regex analysis
         df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        # run validator
+        self.run_validator("gcd_validated", df_unit, Geocodio)
         # subset to exclude pobox addresses
         df_unit = df_unit[df_unit["is_pobox"] == "False"]
         # subset validated addresses for only ones which do not have a secondary number
@@ -791,22 +792,24 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
-        t.print_equals("Adding missing unit numbers to validated addresses")
         df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         df_fix: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
+        # run validator
+        self.run_validator("gcd_validated", df_valid, Geocodio)
+        t.print_equals("Adding missing unit numbers to validated addresses")
         total_addresses = len(df_fix["clean_address"])
         # Set up Rich progress display
         with Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]{task.description}"),
-                BarColumn(bar_width=None),
-                "[progress.percentage]{task.percentage:>3.0f}%",
-                "•",
-                TimeElapsedColumn(),
-                "•",
-                TimeRemainingColumn(),
-                "•",
-                TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            "•",
+            TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
         ) as progress:
             task = progress.add_task(
                 "[yellow]Fixing validated addresses...",

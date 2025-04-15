@@ -47,6 +47,66 @@ class Properties(OPNDFModel):
         description="Number of rental apartment units in the property."
     )
 
+
+class Corps(OPNDFModel):
+    file_number: str = pa.Field()
+    status: str = pa.Field()
+    raw_name: str = pa.Field()
+    raw_president_name: str = pa.Field()
+    raw_president_address: str = pa.Field()
+    raw_secretary_name: str = pa.Field()
+    raw_secretary_address: str = pa.Field()
+    clean_name: str = pa.Field()
+    clean_president_name: str = pa.Field()
+    clean_president_address: str = pa.Field()
+    clean_secretary_name: str = pa.Field()
+    clean_secretary_address: str = pa.Field()
+
+
+class CorpsMerged(Corps):
+    raw_president_address_v: str = pa.Field()  # todo: these will need to be clean_addresses in the future
+    raw_secretary_address_v: str = pa.Field()  # these are only raw addresses because of Chicago's data
+
+
+class LLCs(OPNDFModel):
+    file_number: str = pa.Field()
+    status: str = pa.Field()
+    raw_name: str = pa.Field()
+    raw_manager_member_name: str = pa.Field()
+    raw_manager_member_street: str = pa.Field()
+    raw_manager_member_city: str = pa.Field()
+    raw_manager_member_zip: str = pa.Field()
+    raw_manager_member_address: str = pa.Field()
+    raw_agent_name: str = pa.Field()
+    raw_agent_street: str = pa.Field()
+    raw_agent_zip: str = pa.Field()
+    raw_agent_address: str = pa.Field()
+    raw_office_street: str = pa.Field()
+    raw_office_city: str = pa.Field()
+    raw_office_zip: str = pa.Field()
+    raw_office_address: str = pa.Field()
+    clean_name: str = pa.Field()
+    clean_manager_member_name: str = pa.Field()
+    clean_manager_member_street: str = pa.Field()
+    clean_manager_member_city: str = pa.Field()
+    clean_manager_member_zip: str = pa.Field()
+    clean_manager_member_address: str = pa.Field()
+    clean_agent_name: str = pa.Field()
+    clean_agent_street: str = pa.Field()
+    clean_agent_zip: str = pa.Field()
+    clean_agent_address: str = pa.Field()
+    clean_office_street: str = pa.Field()
+    clean_office_city: str = pa.Field()
+    clean_office_zip: str = pa.Field()
+    clean_office_address: str = pa.Field()
+
+
+class LLCsMerged(LLCs):
+    raw_office_address_v: str = pa.Field()  # todo: these will need to be clean_addresses in the future
+    raw_agent_address_v: str = pa.Field()
+    raw_manager_member_address_v: str = pa.Field()
+
+
 class TaxpayerRecords(OPNDFModel):
     # ---------------------------
     # ----COLUMN NAME OBJECTS----
@@ -162,6 +222,7 @@ class TaxpayerRecords(OPNDFModel):
         description="Concatenation of clean taxpayer address components."
     )
 
+
 class TaxpayerRecordsMerged(TaxpayerRecords):
     """
     Outputted taxpayer record dataset resulting from the AddressMerge workflow
@@ -174,6 +235,7 @@ class TaxpayerRecordsMerged(TaxpayerRecords):
         title="Validated Taxpayer Address",
         description="Validated clean taxpayer mailing address."
     )
+
 
 class TaxpayersFixed(TaxpayerRecordsMerged):
     # --------------------
@@ -190,6 +252,7 @@ class TaxpayersFixed(TaxpayerRecordsMerged):
         description="Boolean column indicating whether or not the validated taxpayer address is associated with a 'landlord organization' (property management company, wealth management company, realtor, etc.)."
     )
 
+
 class TaxpayersSubsetted(TaxpayersFixed):
     # --------------------
     # ----MODEL FIELDS----
@@ -199,6 +262,7 @@ class TaxpayersSubsetted(TaxpayersFixed):
         title="Is Rental?",
         description="Boolean column indicating whether or not the taxpayer record is associated with a rental property."
     )
+
 
 class TaxpayersPrepped(TaxpayersSubsetted):
     # --------------------
@@ -218,6 +282,7 @@ class TaxpayersPrepped(TaxpayersSubsetted):
     is_core_match: bool = pa.Field()
     is_string_match: bool = pa.Field()
 
+
 class TaxpayersStringMatched(TaxpayersPrepped):
     # --------------------
     # ----MODEL FIELDS----
@@ -229,6 +294,7 @@ class TaxpayersStringMatched(TaxpayersPrepped):
     string_matched_name_1: str = pa.Field()
     string_matched_name_2: str = pa.Field()
     string_matched_name_3: str = pa.Field()
+
 
 class TaxpayersNetworked(TaxpayersStringMatched):
     # --------------------
@@ -246,6 +312,7 @@ class TaxpayersNetworked(TaxpayersStringMatched):
     network_5_short: str = pa.Field()
     network_6: str = pa.Field()
     network_6_short: str = pa.Field()
+
 
 class UnvalidatedAddrs(OPNDFModel):
     # --------------------
@@ -322,6 +389,7 @@ class UnvalidatedAddrs(OPNDFModel):
         description="Boolean column representing whether or not the corporate or LLC record from which the address originates is active or inactive."
     )
 
+
 class UnvalidatedAddrsClean(UnvalidatedAddrs):
     # ---------------------------
     # ----COLUMN NAME OBJECTS----
@@ -346,6 +414,7 @@ class UnvalidatedAddrsClean(UnvalidatedAddrs):
         title="Is PO Box?",
         description="Boolean indicating whether the street address has been identified as a PO Box."
     )
+
 
 class Geocodio(OPNDFModel):
     # ---------------------------

@@ -154,7 +154,7 @@ class PropsTaxpayers(OPNDFModel):
         description="Number of rental apartment units in the property."
     )
 
-class Corps(OPNDFModel):
+class CorpsRaw(OPNDFModel):
     """
     Raw dataset for state-level corporate records. Note that the availability of address-related columns is subject to
     the quality of the original data and the ability to parse complete address strings.
@@ -376,7 +376,7 @@ class Corps(OPNDFModel):
         description="Secretary zip code",
     )
 
-class LLCs(OPNDFModel):
+class LLCsRaw(OPNDFModel):
     """
     Raw dataset for state-level LLC records. Note that the availability of address-related columns is subject to
     the quality of the original data and the ability to parse complete address strings.
