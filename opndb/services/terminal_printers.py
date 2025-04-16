@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from typing import Tuple
+
 import pandas as pd
 import click
 from rich.prompt import IntPrompt
@@ -39,14 +41,30 @@ class TerminalBase:
     # todo: make color scheme of terminal printers like the pycharm color scheme
 
     @classmethod
+    def validator_failed(cls) -> Tuple[bool, bool]:
+        how_to_proceed = questionary.select(
+            "How would you like to proceed?",
+            choices=[
+                "Continue executing workflow",
+                "Exit program",
+            ]
+        ).ask()
+        save_errors = questionary.select(
+            "Do you want to save the dataframe of validation errors for further inspection?",
+            choices=["Yes", "No"]
+        ).ask()
+        proceed: bool = how_to_proceed == "Continue executing workflow"
+        save_error_df: bool = save_errors == "Yes"
+        return proceed, save_error_df
+
+
+    @classmethod
     # Alternative implementation using the questionary library which has better support for arrow key navigation
     def select_workflow(cls) -> str:
         """
         Prompts the user to select a workflow using questionary for better arrow key navigation.
         Returns the identifier string of the selected workflow.
         """
-        console = Console()
-
         # Display selection prompt inside a panel
         panel = Panel("Select a workflow to execute.", title="[bold cyan]Workflow Selection[/bold cyan]",
                       border_style="cyan")

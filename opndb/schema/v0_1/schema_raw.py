@@ -225,10 +225,6 @@ class CorpsRaw(OPNDFModel):
             "status": "status",
         }
     ]
-    _VALIDATED_ADDRESS_MERGE: list[str] = [
-        "raw_president_address",
-        "raw_secretary_address",
-    ]
 
     @classmethod
     def raw(cls) -> list[str]:
@@ -265,10 +261,6 @@ class CorpsRaw(OPNDFModel):
     @classmethod
     def unvalidated_col_objs(cls) -> list[dict[str, str]]:
         return cls._UNVALIDATED_COL_OBJS
-
-    @classmethod
-    def validated_address_merge(cls) -> list[str]:
-        return cls._VALIDATED_ADDRESS_MERGE
 
     # --------------------
     # ----MODEL FIELDS----
@@ -307,13 +299,12 @@ class CorpsRaw(OPNDFModel):
         nullable=True,
         unique=False,
         title="President Name",
-        description="President name",
     )
     president_address: str = pa.Field(
         nullable=True,
         unique=False,
         title="President Address",
-        description="President address",
+        description="Complete concatenated mailing address for corporation president",
     )
     president_street: str | None = pa.Field(
         nullable=True,
@@ -557,11 +548,6 @@ class LLCsRaw(OPNDFModel):
             "status": "status",
         },
     ]
-    _VALIDATED_ADDRESS_MERGE: list[str] = [
-        "raw_office_address",
-        "raw_agent_address",
-        "raw_manager_member_address",
-    ]
 
     @classmethod
     def raw(cls) -> list[str]:
@@ -598,10 +584,6 @@ class LLCsRaw(OPNDFModel):
     @classmethod
     def unvalidated_col_objs(cls) -> list[dict[str, str]]:
         return cls._UNVALIDATED_COL_OBJS
-
-    @classmethod
-    def validated_address_merge(cls) -> list[str]:
-        return cls._VALIDATED_ADDRESS_MERGE
 
     # --------------------
     # ----MODEL FIELDS----

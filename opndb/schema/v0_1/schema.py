@@ -49,62 +49,307 @@ class Properties(OPNDFModel):
 
 
 class Corps(OPNDFModel):
-    file_number: str = pa.Field()
-    status: str = pa.Field()
-    raw_name: str = pa.Field()
-    raw_president_name: str = pa.Field()
-    raw_president_address: str = pa.Field()
-    raw_secretary_name: str = pa.Field()
-    raw_secretary_address: str = pa.Field()
-    clean_name: str = pa.Field()
-    clean_president_name: str = pa.Field()
-    clean_president_address: str = pa.Field()
-    clean_secretary_name: str = pa.Field()
-    clean_secretary_address: str = pa.Field()
+    """
+    Cleaned dataset for state-level registered corporations.
+    """
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    _VALIDATED_ADDRESS_MERGE: list[str] = [
+        "raw_president_address",
+        "raw_secretary_address",
+    ]
+
+    @classmethod
+    def validated_address_merge(cls) -> list[str]:
+        return cls._VALIDATED_ADDRESS_MERGE
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
+    file_number: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="Corporation File Number",
+        description="Unique identifier number assigned to corporation by secretary of state upon incorporation.",
+    )
+    status: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Status",
+        description="Organization's status (active, inactive, involuntarily dissolved, etc.)",
+    )
+    raw_name: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="Raw Raw Name",
+        description="Corporation name exactly how it appears in the raw data"
+    )
+    raw_president_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw President Name",
+        description="Corporation president name exactly how it appears in the raw data"
+    )
+    raw_president_address: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw President Address",
+        description="Concatenated president address exactly how it appears in the raw data"
+    )
+    raw_secretary_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Secretary Name",
+        description="Secretary name exactly how it appears in the raw data"
+    )
+    raw_secretary_address: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Secretary Address",
+        description="Concatenated secretary address exactly how it appears in the raw data"
+    )
+    clean_name: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Name",
+        description="Corporation name after strings cleaners have been applied"
+    )
+    clean_president_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean President Name",
+        description="Corporation president name after strings cleaners have been applied"
+    )
+    clean_president_address: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean President Address",
+        description="Concatenated president address after strings cleaners have been applied"
+    )
+    clean_secretary_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Secretary Name",
+        description="Secretary name after strings cleaners have been applied"
+    )
+    clean_secretary_address: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Secretary Address",
+        description="Concatenated secretary address after strings cleaners have been applied"
+    )
 
 
 class CorpsMerged(Corps):
-    raw_president_address_v: str = pa.Field()  # todo: these will need to be clean_addresses in the future
-    raw_secretary_address_v: str = pa.Field()  # these are only raw addresses because of Chicago's data
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
+    raw_president_address_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw President Address Validated",
+        description="Complete validated mailing address for corporation president. Merged into dataset from validated address dataset."
+    )  # todo: these will need to be clean_addresses in the future
+    raw_secretary_address_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Secretary Address Validated",
+        description="Complete validated mailing address for corporation secretary. Merged into dataset from validated address dataset."
+    )  # these are only raw addresses because of Chicago's data
 
 
 class LLCs(OPNDFModel):
-    file_number: str = pa.Field()
-    status: str = pa.Field()
-    raw_name: str = pa.Field()
-    raw_manager_member_name: str = pa.Field()
-    raw_manager_member_street: str = pa.Field()
-    raw_manager_member_city: str = pa.Field()
-    raw_manager_member_zip: str = pa.Field()
-    raw_manager_member_address: str = pa.Field()
-    raw_agent_name: str = pa.Field()
-    raw_agent_street: str = pa.Field()
-    raw_agent_zip: str = pa.Field()
-    raw_agent_address: str = pa.Field()
-    raw_office_street: str = pa.Field()
-    raw_office_city: str = pa.Field()
-    raw_office_zip: str = pa.Field()
-    raw_office_address: str = pa.Field()
-    clean_name: str = pa.Field()
-    clean_manager_member_name: str = pa.Field()
-    clean_manager_member_street: str = pa.Field()
-    clean_manager_member_city: str = pa.Field()
-    clean_manager_member_zip: str = pa.Field()
-    clean_manager_member_address: str = pa.Field()
-    clean_agent_name: str = pa.Field()
-    clean_agent_street: str = pa.Field()
-    clean_agent_zip: str = pa.Field()
-    clean_agent_address: str = pa.Field()
-    clean_office_street: str = pa.Field()
-    clean_office_city: str = pa.Field()
-    clean_office_zip: str = pa.Field()
-    clean_office_address: str = pa.Field()
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    _VALIDATED_ADDRESS_MERGE: list[str] = [
+        "raw_office_address",
+        "raw_agent_address",
+        "raw_manager_member_address",
+    ]
+
+    @classmethod
+    def validated_address_merge(cls) -> list[str]:
+        return cls._VALIDATED_ADDRESS_MERGE
+
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
+    file_number: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="LLC File Number",
+        description="Unique identifier number assigned to an LLC by secretary of state.",
+    )
+    status: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Status",
+        description="Organization's status (active, inactive, involuntarily dissolved, etc.)",
+    )
+    raw_name: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="LLC Raw Name",
+        description="LLC name exactly how it appears in the raw data",
+    )
+    raw_manager_member_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Manager Member Name",
+    )
+    raw_manager_member_street: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Manager Member Street",
+    )
+    raw_manager_member_city: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Manager Member City",
+    )
+    raw_manager_member_zip: str = pa.Field(
+        nullable=True,  # todo: thous should be False, only set it like this because of the Chicago raw data
+        unique=False,
+        title="Raw Manager Member Zip",
+    )
+    raw_manager_member_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Manager Member Address",
+    )
+    raw_agent_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Agent Name",
+    )
+    raw_agent_street: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Agent Street",
+    )
+    raw_agent_zip: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Agent Zip",
+    )
+    raw_agent_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Agent Address",
+    )
+    raw_office_street: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Office Street",
+    )
+    raw_office_city: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Office City",
+    )
+    raw_office_zip: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Office Zip",
+    )
+    raw_office_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Office Address",
+    )
+    clean_name: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="LLC Clean Name",
+    )
+    clean_manager_member_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Manager Member Name",
+    )
+    clean_manager_member_street: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Manager Member Street",
+    )
+    clean_manager_member_city: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Manager Member City",
+    )
+    clean_manager_member_zip: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Manager Member Zip",
+    )
+    clean_manager_member_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Manager Member Address",
+    )
+    clean_agent_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Agent Name",
+    )
+    clean_agent_street: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Agent Street",
+    )
+    clean_agent_zip: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Agent Zip",
+    )
+    clean_agent_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Agent Address",
+    )
+    clean_office_street: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Office Street",
+    )
+    clean_office_city: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Office City",
+    )
+    clean_office_zip: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Clean Office Zip",
+    )
+    clean_office_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Office Address",
+    )
 
 
 class LLCsMerged(LLCs):
-    raw_office_address_v: str = pa.Field()  # todo: these will need to be clean_addresses in the future
-    raw_agent_address_v: str = pa.Field()
-    raw_manager_member_address_v: str = pa.Field()
+    raw_office_address_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Office Address Validated",
+        description="Complete validated mailing address for LLC office. Merged into dataset from validated address dataset."
+    )  # todo: these will need to be clean_addresses in the future
+    raw_agent_address_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Agent Address Validated",
+        description="Complete validated mailing address for LLC agent. Merged into dataset from validated address dataset."
+    )
+    raw_manager_member_address_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Manager Member Address Validated",
+        description="Complete validated mailing address for LLC manager/member. Merged into dataset from validated address dataset."
+    )
 
 
 class TaxpayerRecords(OPNDFModel):
@@ -538,7 +783,7 @@ class Geocodio(OPNDFModel):
         title="Longitude",
     )
     lat: str = pa.Field(
-        nullable=False,
+        nullable=True,
         unique=False,
         title="Latitude",
     )

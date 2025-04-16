@@ -10,6 +10,7 @@ class Dirs:
     PROCESSED: str = "processed"
     SUMMARY_STATS: str = "summary_stats"
     OUTPUT: str = "output"
+    VALIDATION_ERRORS: str = "validation_errors"
 
 class FileNames:
     """Centralized file naming constants organized by directory structure."""

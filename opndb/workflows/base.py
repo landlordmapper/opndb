@@ -1,6 +1,7 @@
 # 1. Standard library imports
 import gc
 import shutil
+import sys
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
@@ -8,6 +9,7 @@ from pprint import pprint
 from typing import Any, ClassVar, Optional, Tuple, List, Type
 import networkx as nx
 import nmslib
+import numpy as np
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 import pandera as pa
 
@@ -25,7 +27,8 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt, ValidatedAddrs
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean
+from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
+    Corps, LLCs
 from opndb.schema.v0_1.schema_raw import PropsTaxpayers, CorpsRaw, LLCsRaw, ClassCodes
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
@@ -101,26 +104,40 @@ class WorkflowBase(ABC):
         ss.display_load_table(self.dfs_in)
         ss.display_load_stats_table(self.dfs_in)
 
-    def run_validator(self, id: str, df: pd.DataFrame, schema) -> None:
-        """Executes panderas validator"""
+    def run_validator(self, id: str, df: pd.DataFrame, configs: WorkflowConfigs, wkfl_name: str, schema) -> None:
+        """
+        Executes pandera validator
+        """
+        console.print("\n")
         t.print_with_dots(f"Executing validator for {id} dataset")
         try:
-            # Validate the dataframe against its corresponding schema
             schema.validate(df, lazy=True)
+            console.print("\n")
             console.print("✅ Validation successful ✅")
+            console.print("\n")
         except pa.errors.SchemaErrors as err:
-            # Log validation errors
-            console.print("❌ Validation failed  ❌")
+            console.print("\n")
+            console.print("❌ Validation failed ❌")
             console.print(f"Number of validation errors: {len(err.failure_cases)}")
-            # Optional: Print detailed error information
+            console.print("\n")
             if hasattr(err, "failure_cases"):
-                error_df = err.failure_cases
-                console.print(f"First few validation errors:\n{error_df.head()}")
-            # Optional: You can decide to raise the exception to stop processing
-            # or continue with a warning
-            console.print(f"Proceeding with {id} despite validation errors")
-            # Uncomment to stop processing on validation failure:
-            # raise err
+                error_df: pd.DataFrame = err.failure_cases
+                console.print(f"{error_df.head()}")
+                error_indices: np.ndarray = error_df["index"].dropna().unique()
+                error_rows_df: pd.DataFrame = df.loc[error_indices]
+                proceed, save_error_df = t.validator_failed()
+                if save_error_df:
+                    ops_df.save_df(
+                        error_df,
+                        path_gen.validation_errors(configs, wkfl_name, "summary")
+                    )
+                    ops_df.save_df(
+                        error_rows_df,
+                        path_gen.validation_errors(configs, wkfl_name, "error_rows")
+                    )
+                if not proceed:
+                    sys.exit()
+                console.print("\n")
 
     def save_dfs(self, save_map: dict[str, Path]) -> None:
         """Saves dataframes to their specified paths."""
@@ -364,7 +381,7 @@ class WkflDataClean(WorkflowStandardBase):
                 schema_map["properties"].out(),
                 schema_map["taxpayer_records"].out()
             )
-            df_taxpayers.dropna(subset=["raw_name"], inplace=True)
+            df_taxpayers.dropna(subset=["raw_name", "clean_zip"], inplace=True)
             self.dfs_out["properties"] = df_props
             self.dfs_out["taxpayer_records"] = df_taxpayers
             console.print(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\" ✅")
@@ -423,7 +440,7 @@ class WkflDataClean(WorkflowStandardBase):
             df: pd.DataFrame = df_in.copy()  # make copy to preserve the loaded dataframes
 
             # run validator
-            self.run_validator(id, df, schema_map[id])
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
 
             # specific logic for class_codes
             if id == "class_codes":
@@ -513,7 +530,7 @@ class WkflAddressClean(WorkflowStandardBase):
     def process(self) -> None:
         t.print_dataset_name("unvalidated_addrs")
         df: pd.DataFrame = self.dfs_in["unvalidated_addrs"].copy()
-        self.run_validator("unvalidated_addrs", df, UnvalidatedAddrs)
+        self.run_validator("unvalidated_addrs", df, self.config_manager.configs, self.WKFL_NAME, UnvalidatedAddrs)
         t.print_equals("Executing initial address operations")
         t.print_with_dots("Setting is_pobox column")
         df = cols_df.set_is_pobox(df, "clean_address")
@@ -660,7 +677,13 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         dfs = {id: df.copy() for id, df in self.dfs_in.items() if df is not None}
 
         # run validator for unvalidated addresses
-        self.run_validator("unvalidated_addrs", dfs["unvalidated_addrs"], UnvalidatedAddrsClean)
+        self.run_validator(
+            "unvalidated_addrs",
+            dfs["unvalidated_addrs"],
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            UnvalidatedAddrsClean
+        )
 
         # fetch addresses to be geocoded
         df_addrs: pd.DataFrame = self.execute_gcd_address_subset(dfs["unvalidated_addrs"], UnvalidatedAddrsClean)
@@ -732,7 +755,7 @@ class WkflFixUnitsInitial(WorkflowStandardBase):
     def process(self) -> None:
         df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         # run validator
-        self.run_validator("gcd_validated", df_unit, Geocodio)
+        self.run_validator("gcd_validated", df_unit, self.config_manager.configs, self.WKFL_NAME, Geocodio)
         # subset to exclude pobox addresses
         df_unit = df_unit[df_unit["is_pobox"] == "False"]
         # subset validated addresses for only ones which do not have a secondary number
@@ -795,7 +818,7 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
         df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         df_fix: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
         # run validator
-        self.run_validator("gcd_validated", df_valid, Geocodio)
+        self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
         t.print_equals("Adding missing unit numbers to validated addresses")
         total_addresses = len(df_fix["clean_address"])
         # Set up Rich progress display
@@ -900,24 +923,32 @@ class WkflAddressMerge(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
-
-        column_manager = {
-            "gcd_validated": ColumnValidatedAddrs(),
-            "taxpayer_records": ColumnTaxpayerRecords(),
-            "corps": ColumnCorps(),
-            "llcs": ColumnLLCs(),
+        schema_map = {
+            "gcd_validated": Geocodio,
+            "taxpayer_records": TaxpayerRecords,
+            "corps": Corps,
+            "llcs": LLCs,
         }
         df_valid = self.dfs_in["gcd_validated"].copy()
-
+        # run validator on validated address dataset
+        self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
         for id, df_in in self.dfs_in.items():
             if id == "gcd_validated":
                 continue
             t.print_dataset_name(id)
+            # create copy of dataframe to avoid modifying original
             df: pd.DataFrame = df_in.copy()
-            for addr_col in column_manager[id].validated_address_merge:
+            # run validator
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+            # loop through raw address columns to merge validated addresses
+            for addr_col in schema_map[id].validated_address_merge():
                 t.print_with_dots(f"Merging validated address into {addr_col} for \"{id}\"")
                 df = merge_df.merge_validated_address(df, df_valid, addr_col)
+            # remove redundant columns
             df = clean_df_base.combine_columns_parallel(df)
+            # drop duplicates resulting from merge
+            if id == "llcs":
+                df.drop_duplicates(subset=["file_number"], inplace=True)
             self.dfs_out[id] = df
             console.print("Validated addresses merged ✅ 🗺️ 📍")
 

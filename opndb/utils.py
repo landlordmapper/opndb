@@ -69,8 +69,9 @@ class UtilsBase(object):
             Dirs.ANALYSIS,
             Dirs.GEOCODIO,
             Path(Dirs.GEOCODIO) / "partials",
-            Dirs.FINAL_OUTPUTS,
-            Dirs.SUMMARY_STATS
+            Dirs.OUTPUT,
+            Dirs.SUMMARY_STATS,
+            Dirs.VALIDATION_ERRORS
         ]
         # create directories if they don't exist
 
@@ -508,5 +509,17 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.OUTPUT,
             Output.TAXPAYER_RECORDS,
+            configs["load_ext"]
+        )
+    # -------------------------
+    # ----VALIDATION ERRORS----
+    # -------------------------
+    @classmethod
+    def validation_errors(cls, configs: WorkflowConfigs, wkfl_name: str, dataset_type: str) -> Path:
+        filename: str = f"{wkfl_name.replace(" ", "_")}__{cls.get_timestamp()}__{dataset_type}"
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.VALIDATION_ERRORS,
+            filename,
             configs["load_ext"]
         )

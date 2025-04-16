@@ -1,2 +1,2 @@
 # noqa
-from .schema_raw import PropsTaxpayers, Corps, LLCs, ClassCodes
+from .schema_raw import PropsTaxpayers, CorpsRaw, LLCsRaw, ClassCodes
