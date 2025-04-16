@@ -3,6 +3,8 @@ from typing import Final
 import pandera as pa
 from opndb.validator.df_model import OPNDFModel
 
+# todo: add pandas dtype objects & handle boolean columns properly
+
 VALID_ZIP_CODE_REGEX: Final[re] = r"^\d{5}(-\d{4})?$"
 
 class Properties(OPNDFModel):
@@ -468,7 +470,7 @@ class TaxpayerRecords(OPNDFModel):
     )
 
 
-class TaxpayerRecordsMerged(TaxpayerRecords):
+class TaxpayersMerged(TaxpayerRecords):
     """
     Outputted taxpayer record dataset resulting from the AddressMerge workflow
     """
@@ -482,7 +484,7 @@ class TaxpayerRecordsMerged(TaxpayerRecords):
     )
 
 
-class TaxpayersFixed(TaxpayerRecordsMerged):
+class TaxpayersFixed(TaxpayersMerged):
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
@@ -513,51 +515,246 @@ class TaxpayersPrepped(TaxpayersSubsetted):
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
-    core_name: str = pa.Field()
-    is_trust: bool = pa.Field()
-    is_person: bool = pa.Field()
-    is_org: bool = pa.Field()
-    is_llc: bool = pa.Field()
-    entity_clean_name: str = pa.Field()
-    entity_core_name: str = pa.Field()
-    merge_address_1: str = pa.Field()
-    merge_address_2: str = pa.Field()
-    merge_address_3: str = pa.Field()
-    is_clean_match: bool = pa.Field()
-    is_core_match: bool = pa.Field()
-    is_string_match: bool = pa.Field()
+    core_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Core Name",
+        description="Clean taxpayer name after removing commonly appearing keywords to increase matches"
+    )
+    is_trust: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Trust?",
+        description="Boolean representing whether or not a trust string pattern is identified in the cleaned taxpayer name"
+    )
+    is_person: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Person?",
+        description="Boolean representing whether or not a person string pattern is identified in the cleaned taxpayer name"
+    )
+    is_org: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Org?",
+        description="Boolean representing whether or not an organization name string pattern is identified in the cleaned taxpayer name"
+    )
+    is_llc: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is LLC?",
+        description="Boolean representing whether or not an LLC string pattern is identified in the cleaned taxpayer name"
+    )
+    entity_clean_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Entity Clean Name",
+        description="Clean name of corporation or LLC that was matched with the taxpayer record. Will be null if no match was found."
+    )
+    entity_core_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Entity Core Name",
+        description="Core name of corporation or LLC that was matched with the taxpayer record. Will be null if no match was found."
+    )
+    merge_address_1: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 1",
+        description="President address (corps) or office address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
+    )
+    merge_address_2: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 2",
+        description="Secretary address (corps) or manager/member address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
+    )
+    merge_address_3: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 3",
+        description="Agent address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
+    )
+    is_clean_match: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Clean Match?",
+        description="Boolean representing whether or not the match was made on based on the clean taxpayer name"
+    )
+    is_core_match: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Core Match?",
+        description="Boolean representing whether or not the match was made on based on the core taxpayer name"
+    )
+    is_string_match: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is String Match?",
+        description="Boolean representing whether or not the match was made as a result of string matching workflow"
+    )
 
 
 class TaxpayersStringMatched(TaxpayersPrepped):
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
-    match_address: str = pa.Field()
-    clean_name_address: str = pa.Field()
-    core_name_address: str = pa.Field()
-    include_address: bool = pa.Field()
-    string_matched_name_1: str = pa.Field()
-    string_matched_name_2: str = pa.Field()
-    string_matched_name_3: str = pa.Field()
+    match_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Match Address",
+        description="Taxpayer address to be used for string matching. Either the validated address (if successfully validated) or unvalidated cleaned address (if unsuccessfully validated)."
+    )
+    clean_name_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Name Address",
+        description="Concatenation of cleaned taxpayer name and address"
+    )
+    core_name_address: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Core Name Address",
+        description="Concatenation of core taxpayer name and cleaned address"
+    )
+    include_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Include Address?",
+        description="Boolean representing whether or not the address should be included in the matching process. Determined based on manual address research."
+    )
+    string_matched_name_1: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="String Matched Name 1",
+        description="Unique identifier for string match 1 results"
+    )
+    string_matched_name_2: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="String Matched Name 2",
+        description="Unique identifier for string match 2 results"
+    )
+    string_matched_name_3: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="String Matched Name 3",
+        description="Unique identifier for string match 3 results"
+    )
 
 
 class TaxpayersNetworked(TaxpayersStringMatched):
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
-    network_1: str = pa.Field()
-    network_1_short: str = pa.Field()
-    network_2: str = pa.Field()
-    network_2_short: str = pa.Field()
-    network_3: str = pa.Field()
-    network_3_short: str = pa.Field()
-    network_4: str = pa.Field()
-    network_4_short: str = pa.Field()
-    network_5: str = pa.Field()
-    network_5_short: str = pa.Field()
-    network_6: str = pa.Field()
-    network_6_short: str = pa.Field()
-
+    network_1: str = pa.Field(
+        nullable=True,
+        unique=True,
+        title="Network 1",
+        description="Unique identifier for network 1 results. Concatenation of 3 most commonly appearing taxpayer names in network, followed by the value of the connected component originating from the NetworkX graph object and the network match parameter combination in parenthesis."
+    )
+    network_1_short: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 1 Short Name",
+        description="Short name for the network 1 results. Most commonly appearing taxpayer name followed by 'Etc.'"
+    )
+    network_1_text: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 1 Text",
+        description="Nodes and edges data in text format for connected component calculated from network 1 results."
+    )
+    network_2: str = pa.Field(
+        nullable=True,
+        unique=True,
+        title="Network 2",
+        description="Unique identifier for network 2 results. Concatenation of 3 most commonly appearing taxpayer names in network, followed by the value of the connected component originating from the NetworkX graph object and the network match parameter combination in parenthesis."
+    )
+    network_2_short: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 2 Short Name",
+        description="Short name for the network 2 results. Most commonly appearing taxpayer name followed by 'Etc.'"
+    )
+    network_2_text: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 2 Text",
+        description="Nodes and edges data in text format for connected component calculated from network 2 results."
+    )
+    network_3: str = pa.Field(
+        nullable=True,
+        unique=True,
+        title="Network 3",
+        description="Unique identifier for network 3 results. Concatenation of 3 most commonly appearing taxpayer names in network, followed by the value of the connected component originating from the NetworkX graph object and the network match parameter combination in parenthesis."
+    )
+    network_3_short: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 3 Short Name",
+        description="Short name for the network 3 results. Most commonly appearing taxpayer name followed by 'Etc.'"
+    )
+    network_3_text: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 3 Text",
+        description="Nodes and edges data in text format for connected component calculated from network 3 results."
+    )
+    network_4: str = pa.Field(
+        nullable=True,
+        unique=True,
+        title="Network 4",
+        description="Unique identifier for network 4 results. Concatenation of 3 most commonly appearing taxpayer names in network, followed by the value of the connected component originating from the NetworkX graph object and the network match parameter combination in parenthesis."
+    )
+    network_4_short: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 4 Short Name",
+        description="Short name for the network 4 results. Most commonly appearing taxpayer name followed by 'Etc.'"
+    )
+    network_4_text: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 4 Text",
+        description="Nodes and edges data in text format for connected component calculated from network 4 results."
+    )
+    network_5: str = pa.Field(
+        nullable=True,
+        unique=True,
+        title="Network 5",
+        description="Unique identifier for network 5 results. Concatenation of 3 most commonly appearing taxpayer names in network, followed by the value of the connected component originating from the NetworkX graph object and the network match parameter combination in parenthesis."
+    )
+    network_5_short: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 5 Short Name",
+        description="Short name for the network 5 results. Most commonly appearing taxpayer name followed by 'Etc.'"
+    )
+    network_5_text: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 5 Text",
+        description="Nodes and edges data in text format for connected component calculated from network 5 results."
+    )
+    network_6: str = pa.Field(
+        nullable=True,
+        unique=True,
+        title="Network 6",
+        description="Unique identifier for network 6 results. Concatenation of 3 most commonly appearing taxpayer names in network, followed by the value of the connected component originating from the NetworkX graph object and the network match parameter combination in parenthesis."
+    )
+    network_6_short: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 6 Short Name",
+        description="Short name for the network 6 results. Most commonly appearing taxpayer name followed by 'Etc.'"
+    )
+    network_6_text: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Network 6 Text",
+        description="Nodes and edges data in text format for connected component calculated from network 6 results."
+    )
 
 class UnvalidatedAddrs(OPNDFModel):
     # --------------------
@@ -806,6 +1003,170 @@ class Geocodio(OPNDFModel):
         description="Boolean indicating whether the street address has been identified as a PO Box."
     )
 
+
+class FixingAddrs(Geocodio):
+    check_sec_num: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Check Secondary Number",
+        description="Contains secondary number value detected by regex run on street address for rows whose validated address does NOT contain a secondary number. Used to manually fix validated addresses that incorrectly excluded secondary address information."
+    )
+
+
+class FixingTaxNames(OPNDFModel):
+    raw_value: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="Raw Value",
+        description="Value of taxpayer name to be changed"
+    )
+    standardized_value: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Standardized Value",
+        description="New value of taxpayer name to be changed"
+    )
+
+
+class AddressAnalysis(OPNDFModel):
+    address: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="Address",
+        description="Validated address to be analyzed"
+    )
+    frequency: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Frequency",
+        description="Number of times the validated address appears in either the taxpayer, corporate or LLC datasets"
+    )
+    value: str | None = pa.Field(
+        title="Value",
+        description="Column used to match researched addresses for Chicago. Should NOT be present in future iterations"
+    )
+    name: str = pa.Field(
+        nullable=True,\
+        unique=False,
+        title="Name",
+        description="Name of organization/entity associated with the address"
+    )
+    urls: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="URLs",
+        description="URLs associated with organization/entity associated with the address"
+    )
+    notes: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Notes",
+        description="Any notes or additional considerations observed from researching address"
+    )
+    is_landlord_org: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Landlord Organization?",
+        description="Boolean representing whether or not the entity/organization associated with the address is a property management company, real estate developer, real estate agency, investment or wealth management firm, or any other organization that can be held accountable for the conditions of a rental property. "
+    )
+    is_govt_agency: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Government Agency?",
+        description="Boolean representing whether or not the address is associated with a government office"
+    )
+    is_lawfirm: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Lawfirm?",
+        description="Boolean representing whether or not the entity/organization associated with the address is a lawfirm"
+    )
+    is_missing_suite: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Missing Suite?",
+        description="Boolean representing whether or not the address is missing a suite number. Applies to addresses that point to office buildings, UPS stores, lock box services or other virtual mail services but that do NOT include a secondary address identifier."
+    )
+    is_financial_services: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Financial Services?",
+        description="Boolean representing whether or not the entity/organization associated with the address is a financial services company (tax services, mortgage services, etc.)"
+    )
+    is_assoc_bus: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Associated Business?",
+        description="Boolean representing whether or not the entity/organization associated with the address is a business that is unrelated to property management. This could either be the business of the property's 'true owner', or the owner of the property containing the business."
+    )
+    fix_address: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Fix Address?",
+        description="Indicates whether or not the address needs to be fixed"
+    )
+    is_virtual_office_agent: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Virtual Office / Agent?",
+        description="Boolean representing whether or not the entity/organization associated with the address is a virtual office or registered agent service."
+    )
+    yelp_urls: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Yelp URLs",
+        description="Yelp URLs associated with organization/entity associated with the address"
+    )
+    is_nonprofit: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Boolean representing whether or not the entity/organization associated with the address is a nonprofit organization",
+        description=""
+    )
+    google_urls: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Google URLs",
+        description="Google URLs associated with organization/entity associated with the address"
+    )
+    is_ignore_misc: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Ignore Misc?",
+        description=""
+    )
+    google_place_id: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Google Place ID",
+    )
+    is_researched: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Researched?",
+        description="Boolean representing whether or not the address has been manually researched"
+    )
+
+
+class FrequentTaxNames(OPNDFModel):
+    value: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="Value",
+        description="Value of taxpayer name to be analyzed"
+    )
+    frequency: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Frequency",
+        description="Number of times the name appears in the taxpayer dataset"
+    )
+    is_common_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Common Name?",
+        description="Boolean indicating whether or not the name is a common name and should therefore be excluded from the network graph generation."
+    )
 
 # --------------------------
 # ----OUTPUTTED DATASETS----

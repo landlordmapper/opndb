@@ -28,11 +28,10 @@ from opndb.constants.columns import (
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
 from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
-    Corps, LLCs
+    Corps, LLCs, FixingAddrs, FixingTaxNames, AddressAnalysis, FrequentTaxNames, TaxpayersFixed, \
+    TaxpayersStringMatched, TaxpayersMerged, TaxpayersSubsetted, CorpsMerged, LLCsMerged, TaxpayersPrepped
 from opndb.schema.v0_1.schema_raw import PropsTaxpayers, CorpsRaw, LLCsRaw, ClassCodes
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
-from opndb.services.column import ColumnPropsTaxpayers, ColumnCorps, ColumnLLCs, ColumnProperties, \
-    ColumnTaxpayerRecords, ColumnClassCodes, ColumnUnvalidatedAddrs, ColumnValidatedAddrs
 from opndb.services.config import ConfigManager
 
 # 4. Types (these should only depend on constants)
@@ -819,6 +818,7 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
         df_fix: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
         # run validator
         self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
+        self.run_validator("fixing_addrs", df_fix, self.config_manager.configs, self.WKFL_NAME, FixingAddrs)
         t.print_equals("Adding missing unit numbers to validated addresses")
         total_addresses = len(df_fix["clean_address"])
         # Set up Rich progress display
@@ -894,7 +894,7 @@ class WkflAddressMerge(WorkflowStandardBase):
             - 'ROOT/processed/llcs[FileExt]'
     OUTPUTS:
         - Taxpayer, corporate and LLC records with validated addresses
-            - 'ROOT/processed/taxpayer_records_merged[FileExt]'
+            - 'ROOT/processed/taxpayers_merged[FileExt]'
             - 'ROOT/processed/corps_merged[FileExt]'
             - 'ROOT/processed/llcs_merged[FileExt]'
     """
@@ -964,7 +964,7 @@ class WkflAddressMerge(WorkflowStandardBase):
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
-            "taxpayer_records": path_gen.processed_taxpayer_records_merged(configs),
+            "taxpayer_records": path_gen.processed_taxpayers_merged(configs),
             "corps": path_gen.processed_corps_merged(configs),
             "llcs": path_gen.processed_llcs_merged(configs),
         }
@@ -1001,6 +1001,8 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
 
     def process(self) -> None:
         df = self.dfs_in["taxpayer_records"].copy()
+        # run validator
+        self.run_validator("taxpayer_records", df, self.config_manager.configs, self.WKFL_NAME, TaxpayerRecords)
         df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
         # frequent_tax_names
         self.dfs_out["frequent_tax_names"] = df_freq
@@ -1082,24 +1084,25 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
         configs = self.config_manager.configs
         load_map: dict[str, Path] = {
             "gcd_validated": path_gen.geocodio_gcd_validated(configs),
-            "taxpayer_records": path_gen.processed_taxpayer_records_merged(configs),
+            "taxpayers_merged": path_gen.processed_taxpayers_merged(configs),
             "corps": path_gen.processed_corps_merged(configs),
             "llcs": path_gen.processed_llcs_merged(configs),
         }
         self.load_dfs(load_map)
 
     def process(self) -> None:
-        column_manager = {
-            "gcd_validated": ColumnValidatedAddrs(),
-            "taxpayer_records": ColumnTaxpayerRecords(),
-            "corps": ColumnCorps(),
-            "llcs": ColumnLLCs(),
+        schema_map = {
+            "gcd_validated": Geocodio,
+            "taxpayers_merged": TaxpayersMerged,
+            "corps": Corps,
+            "llcs": LLCs,
         }
         addrs = []
         for id, df_in in self.dfs_in.items():
+            self.run_validator(id, df_in, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
             if id == "gcd_validated":
                 continue
-            for addr_col in column_manager[id].validated_address_merge:
+            for addr_col in schema_map[id].validated_address_merge():
                 addrs.extend(
                     [
                         addr
@@ -1158,16 +1161,25 @@ class WkflAnalysisFinal(WorkflowStandardBase):
             "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
             "address_analysis": path_gen.analysis_address_analysis(configs),
             "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
-            "taxpayer_records_merged": path_gen.processed_taxpayer_records_merged(configs),
+            "taxpayers_merged": path_gen.processed_taxpayers_merged(configs),
         }
         self.load_dfs(load_map)
 
     def process(self) -> None:
+        schema_map = {
+            "fixing_tax_names": FixingTaxNames,
+            "address_analysis": AddressAnalysis,
+            "frequent_tax_names": FrequentTaxNames,
+            "taxpayers_merged": TaxpayerRecordsMerged,
+        }
+        # run validators
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
         # copy dfs
         df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
         df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayer_records_merged"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_merged"].copy()
 
         df_taxpayers.dropna(subset=["raw_name"], inplace=True)
         # create banks dict
@@ -1226,6 +1238,16 @@ class WkflRentalSubset(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     def process(self) -> None:
+
+        schema_map = {
+            "properties": Properties,
+            "taxpayers_fixed": TaxpayersFixed,
+            "class_codes": ClassCodes
+        }
+
+        # run validators
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
 
         # copy dfs
         df_props: pd.DataFrame = self.dfs_in["properties"].copy()
@@ -1451,8 +1473,17 @@ class WkflCleanMerge(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     def process(self) -> None:
-        # todo: add workflow for fixing taxpayer addresses based on manual research - services/address.py
-        # todo: add workflow for fixing taxpayer names based on manual research - services/base.py
+
+        schema_map = {
+            "taxpayers_subsetted": TaxpayersSubsetted,
+            "corps_merged": CorpsMerged,
+            "llcs_merged": LLCsMerged,
+        }
+
+        # run validators
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
         # copy dfs
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_subsetted"].copy()
         df_corps: pd.DataFrame = self.dfs_in["corps_merged"].copy()
@@ -1633,7 +1664,13 @@ class WkflStringMatch(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     def process(self) -> None:
-        # todo: add log/printout of the parameter matrix combinations and how they correspond to the string match columns generated
+        schema_map = {
+            "taxpayers_prepped": TaxpayersPrepped,
+            "address_analysis": AddressAnalysis,
+        }
+        # run validators
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
         # copy dfs
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_prepped"].copy()
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
@@ -1769,6 +1806,13 @@ class WkflNetworkGraph(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     def process(self) -> None:
+        schema_map = {
+            "taxpayers_string_matched": TaxpayersStringMatched,
+            "address_analysis": AddressAnalysis,
+        }
+        # run validators
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
         # copy dfs
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_string_matched"].copy()
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()

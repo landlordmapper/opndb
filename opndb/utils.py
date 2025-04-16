@@ -258,12 +258,12 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
-    def processed_taxpayer_records_merged(cls, configs: WorkflowConfigs) -> Path:
-        """:returns: ROOT/processed/taxpayer_records_merged[ext]"""
+    def processed_taxpayers_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/taxpayers_merged[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.PROCESSED,
-            Processed.TAXPAYER_RECORDS_MERGED,
+            Processed.TAXPAYERS_MERGED,
             configs["load_ext"]
         )
     @classmethod
