@@ -285,6 +285,15 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
+    def processed_taxpayers_names_fixed(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/taxpayers_names_fixed[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.TAXPAYERS_NAMES_FIXED,
+            configs["load_ext"]
+        )
+    @classmethod
     def processed_taxpayers_fixed(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/props_subsetted[ext]"""
         return cls.generate_path(
@@ -387,12 +396,21 @@ class PathGenerators(UtilsBase):
     # ----ANALYSIS----
     # ----------------
     @classmethod
-    def analysis_frequent_tax_names(cls, configs: WorkflowConfigs) -> Path:
+    def analysis_frequent_tax_names_initial(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/analysis/frequent_tax_names[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.ANALYSIS,
-            Analysis.FREQUENT_TAX_NAMES,
+            Analysis.FREQUENT_TAX_NAMES_INITIAL,
+            configs["load_ext"]
+        )
+    @classmethod
+    def analysis_frequent_tax_names_final(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/analysis/frequent_tax_names[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.ANALYSIS,
+            Analysis.FREQUENT_TAX_NAMES_FINAL,
             configs["load_ext"]
         )
     @classmethod

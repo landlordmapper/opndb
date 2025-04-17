@@ -27,10 +27,10 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt, ValidatedAddrs
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
+from opndb.schema.v0_1.process import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
     Corps, LLCs, FixingAddrs, FixingTaxNames, AddressAnalysis, FrequentTaxNames, TaxpayersFixed, \
     TaxpayersStringMatched, TaxpayersMerged, TaxpayersSubsetted, CorpsMerged, LLCsMerged, TaxpayersPrepped
-from opndb.schema.v0_1.schema_raw import PropsTaxpayers, CorpsRaw, LLCsRaw, ClassCodes
+from opndb.schema.v0_1.raw import PropsTaxpayers, CorpsRaw, LLCsRaw, ClassCodes
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.config import ConfigManager
 
@@ -124,18 +124,18 @@ class WorkflowBase(ABC):
                 console.print(f"{error_df.head()}")
                 error_indices: np.ndarray = error_df["index"].dropna().unique()
                 error_rows_df: pd.DataFrame = df.loc[error_indices]
-                proceed, save_error_df = t.validator_failed()
-                if save_error_df:
-                    ops_df.save_df(
-                        error_df,
-                        path_gen.validation_errors(configs, wkfl_name, "summary")
-                    )
-                    ops_df.save_df(
-                        error_rows_df,
-                        path_gen.validation_errors(configs, wkfl_name, "error_rows")
-                    )
-                if not proceed:
-                    sys.exit()
+                # proceed, save_error_df = t.validator_failed()
+                # if save_error_df:
+                ops_df.save_df(
+                    error_df,
+                    path_gen.validation_errors(configs, wkfl_name, "summary")
+                )
+                ops_df.save_df(
+                    error_rows_df,
+                    path_gen.validation_errors(configs, wkfl_name, "error_rows")
+                )
+                # if not proceed:
+                #     sys.exit()
                 console.print("\n")
 
     def save_dfs(self, save_map: dict[str, Path]) -> None:
@@ -162,6 +162,8 @@ class WorkflowBase(ABC):
             return WkflAddressMerge(config_manager)
         elif wkfl_id == "name_analysis_initial":
             return WkflNameAnalysisInitial(config_manager)
+        elif wkfl_id == "name_analysis_fix":
+            return WkflNameAnalysisFix(config_manager)
         elif wkfl_id == "address_analysis_initial":
             return WkflAddressAnalysisInitial(config_manager)
         elif wkfl_id == "analysis_final":
@@ -174,8 +176,8 @@ class WorkflowBase(ABC):
             return WkflStringMatch(config_manager)
         elif wkfl_id == "network_graph":
             return WkflNetworkGraph(config_manager)
-        # elif configs["wkfl_type"] == "final_output":
-        #     return WkflFinalOutput(config_manager)
+        elif wkfl_id == "final_output":
+            return WkflFinalOutput(config_manager)
         return None
 
     @abstractmethod
@@ -1005,8 +1007,7 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
         self.run_validator("taxpayer_records", df, self.config_manager.configs, self.WKFL_NAME, TaxpayerRecords)
         df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
         # frequent_tax_names
-        self.dfs_out["frequent_tax_names"] = df_freq
-        self.dfs_out["frequent_tax_names"]["is_common_name"] = ""
+        self.dfs_out["frequent_tax_names_initial"] = df_freq
         # fixing_tax_names
         self.dfs_out["fixing_tax_names"] = pd.DataFrame(
             columns=["raw_value", "standardized_value"],
@@ -1032,10 +1033,75 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
-            "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
+            "frequent_tax_names_initial": path_gen.analysis_frequent_tax_names_initial(configs),
             "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
         }
         self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflNameAnalysisFix(WorkflowStandardBase):
+
+    WKFL_NAME: str = "NAME ANALYSIS FIX WORKFLOW"
+    WKFL_DESC: str = "Changes taxpayer names based on fixing_tax_names analysis dataset. Required for generating frequent_tax_names."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def get_banks_dict(self, df: pd.DataFrame) -> dict:
+        banks = {}
+        for standard_name in list(df["standardized_value"].unique()):
+            df_name: pd.DataFrame = df[df["standardized_value"] == standard_name]
+            for raw_name in list(df_name["raw_value"].unique()):
+                banks[raw_name] = standard_name
+        return banks
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, Path] = {
+            "taxpayers_merged": path_gen.processed_taxpayers_merged(configs),
+            "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        schema_map = {
+            "fixing_tax_names": FixingTaxNames,
+            "taxpayers_merged": TaxpayersMerged,
+        }
+        # run validators
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+        # copy dfs
+        df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_merged"].copy()
+        # create banks dict
+        t.print_with_dots("Setting standardized name dictionary")
+        banks: dict[str, str] = self.get_banks_dict(df_fix_names)
+        # fix taxpayer names
+        t.print_with_dots("Fixing taxpayer names")
+        df_taxpayers = colm_df.fix_tax_names(df_taxpayers, banks)
+        # generate names frequency dataset
+        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df_taxpayers, "clean_name")
+        df_freq["is_common_name"] = ""
+        # frequent_tax_names
+        # set out dfs
+        self.dfs_out["taxpayers_names_fixed"] = df_taxpayers
+        self.dfs_out["frequent_tax_names_final"] = df_freq
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_names_fixed": path_gen.processed_taxpayers_names_fixed(configs),
+            "frequent_tax_names_final": path_gen.analysis_frequent_tax_names_final(configs),
+        }
+        self.save_dfs(save_map)
+
+    def summary_stats(self) -> None:
+        pass
 
     def update_configs(self) -> None:
         pass
@@ -1158,10 +1224,9 @@ class WkflAnalysisFinal(WorkflowStandardBase):
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, Path] = {
-            "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
             "address_analysis": path_gen.analysis_address_analysis(configs),
-            "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
-            "taxpayers_merged": path_gen.processed_taxpayers_merged(configs),
+            "frequent_tax_names_final": path_gen.analysis_frequent_tax_names_final(configs),
+            "taxpayers_names_fixed": path_gen.processed_taxpayers_names_fixed(configs),
         }
         self.load_dfs(load_map)
 
@@ -1170,23 +1235,16 @@ class WkflAnalysisFinal(WorkflowStandardBase):
             "fixing_tax_names": FixingTaxNames,
             "address_analysis": AddressAnalysis,
             "frequent_tax_names": FrequentTaxNames,
-            "taxpayers_merged": TaxpayerRecordsMerged,
+            "taxpayers_merged": TaxpayersMerged,
         }
         # run validators
         for id, df in self.dfs_in.items():
             self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
         # copy dfs
-        df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
         df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_merged"].copy()
-
-        df_taxpayers.dropna(subset=["raw_name"], inplace=True)
-        # create banks dict
-        t.print_with_dots("Setting standardized name dictionary")
-        banks: dict[str, str] = self.get_banks_dict(df_fix_names)
-        t.print_with_dots("Fixing taxpayer names")
-        df_taxpayers = colm_df.fix_tax_names(df_taxpayers, banks)
+        # set columns
         t.print_with_dots("Setting is_common_name boolean column")
         df_taxpayers = cols_df.set_is_common_name(df_taxpayers, df_freq_names)
         t.print_with_dots("Setting is_landlord_org boolean column")
@@ -1781,20 +1839,9 @@ class WkflNetworkGraph(WorkflowStandardBase):
                 df_researched,
                 params
             )
-            df_taxpayers = NetworkMatchBase.set_taxpayer_component(
-                i+1,
-                df_taxpayers,
-                gMatches,
-                params
-            )
+            df_taxpayers = NetworkMatchBase.set_taxpayer_component(i+1, df_taxpayers, gMatches, params)
             df_taxpayers = NetworkMatchBase.set_network_name(i+1, df_taxpayers)
-            # # set text for node/edge data - should this be a separate dataset? probably
-            # df_process: pd.DataFrame = NetworkMatchBase.set_network_text(
-            #     gMatches,
-            #     df_process,
-            #     f"final_component_{i+1}",
-            #     f"network_{i+1}"
-            # )
+            # df_taxpayers = NetworkMatchBase.set_network_text(i+1, gMatches, df_taxpayers)
         return df_taxpayers
 
     def load(self):
@@ -1838,7 +1885,7 @@ class WkflNetworkGraph(WorkflowStandardBase):
         pass
 
 
-class WkflFinalOutput(WorkflowBase):
+class WkflFinalOutput(WorkflowStandardBase):
     """
     Produces final datasets to be converted into standardized format
 
@@ -1856,6 +1903,7 @@ class WkflFinalOutput(WorkflowBase):
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def execute_network_calcs(self) -> pd.DataFrame:
+        t.print_with_dots("Generating NetworkCalcs dataset")
         rows_network_calcs: list[dict[str, Any]] = [
             {
                 "network_id": "network_1",
@@ -1918,9 +1966,11 @@ class WkflFinalOutput(WorkflowBase):
                 "include_unresearched_string": "t"
             },
         ]
+        console.print("✅ NetworkCalcs generated ✅")
         return pd.DataFrame(rows_network_calcs)
 
     def execute_entity_types(self) -> pd.DataFrame:
+        t.print_with_dots("Generating EntityTypes dataset")
         rows_entity_types: list[dict[str, Any]] = [
             {
                 "name": "Landlord Organization",
@@ -1955,9 +2005,11 @@ class WkflFinalOutput(WorkflowBase):
                 "description": ""
             }
         ]
+        console.print("✅ EntityTypes generated ✅")
         return pd.DataFrame(rows_entity_types)
 
     def execute_entities(self, df_researched: pd.DataFrame) -> pd.DataFrame:
+        t.print_with_dots("Generating Entities dataset")
         rows_entities: list[dict[str, Any]] = []
         for _, row in df_researched.iterrows():
             row = {
@@ -1984,9 +2036,11 @@ class WkflFinalOutput(WorkflowBase):
             else:
                 row["entity_type"] = "Other / Unknown"
             rows_entities.append(row)
+        console.print("✅ Entities generated ✅")
         return pd.DataFrame(rows_entities)
 
     def execute_validated_addresses(self, df_researched: pd.DataFrame) -> pd.DataFrame:
+        t.print_with_dots("Generating ValidatedAddresses dataset")
         df_validated_addresses: pd.DataFrame = self.dfs_in["validated_addresses"][[
             "number",
             "predirectional",
@@ -2012,9 +2066,11 @@ class WkflFinalOutput(WorkflowBase):
         for _, row in df_researched.iterrows():
             mask = df_validated_addresses["formatted_address"] == row["address"]  # todo: fix this so that it uses "formatted_address_v"
             df_validated_addresses.loc[mask, "landlord_entity"] = row["name"]
+        console.print("✅ ValidatedAddresses generated ✅")
         return df_validated_addresses
 
     def execute_corps(self) -> pd.DataFrame:
+        t.print_with_dots("Generating Corps dataset")
         df_corps: pd.DataFrame = self.dfs_in["corps_subsetted"][[
             "file_number",
             "status",
@@ -2035,9 +2091,11 @@ class WkflFinalOutput(WorkflowBase):
             "raw_president_address_v": "president_address_v",
             "raw_secretary_address_v": "secretary_address_v",
         }, inplace=True)
+        console.print("✅ Corps generated ✅")
         return df_corps
 
     def execute_llcs(self) -> pd.DataFrame:
+        t.print_with_dots("Generating LLCs dataset")
         df_llcs: pd.DataFrame = self.dfs_in["llcs_subsetted"][[
             "file_number",
             "status",
@@ -2062,9 +2120,11 @@ class WkflFinalOutput(WorkflowBase):
             "raw_agent_address_v": "agent_address_v",
             "raw_manager_member_address_v": "manager_member_address_v",
         })
+        console.print("✅ LLCs generated ✅")
         return df_llcs
 
     def execute_networks(self) -> pd.DataFrame:
+        t.print_with_dots("Generating Networks dataset")
         df_networks_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
             "network_1",
             "network_1_short",
@@ -2099,10 +2159,11 @@ class WkflFinalOutput(WorkflowBase):
                     "nodes_edges": row[f"{ntwk}_text"]
                 }
                 rows_networks.append(row)
+        console.print("✅ Networks generated ✅")
         return pd.DataFrame(rows_networks)
 
     def execute_taxpayer_records(self) -> pd.DataFrame:
-        # taxpayer_records
+        t.print_with_dots("Generating TaxpayerRecords dataset")
         df_taxpayer_records: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
             "raw_name",
             "raw_address",
@@ -2121,6 +2182,7 @@ class WkflFinalOutput(WorkflowBase):
             "raw_address_v": "address_v",
             "entity_clean_name": "corp_llc_name",
         })
+        console.print("✅ TaxpayerRecords generated ✅")
         return df_taxpayer_records
 
     def load(self):

@@ -90,12 +90,14 @@ class TerminalBase:
             {"name": "Fix Units Final", "value": "fix_units_final"},
             {"name": "Address Merge", "value": "address_merge"},
             {"name": "Name Analysis Initial", "value": "name_analysis_initial"},
+            {"name": "Name Analysis Fix", "value": "name_analysis_fix"},
             {"name": "Address Analysis Initial", "value": "address_analysis_initial"},
             {"name": "Analysis Final", "value": "analysis_final"},
             {"name": "Subset Rentals", "value": "rental_subset"},
             {"name": "Pre-Match Cleaning", "value": "clean_merge"},
             {"name": "Taxpayer Record String Matching", "value": "string_match"},
             {"name": "Taxpayer Record Network Graph Generator", "value": "network_graph"},
+            {"name": "Final Datasets Generator", "value": "final_output"},
         ]
 
         # Let user select a workflow
