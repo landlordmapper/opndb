@@ -1167,3 +1167,8 @@ class FrequentTaxNames(OPNDFModel):
         title="Is Common Name?",
         description="Boolean indicating whether or not the name is a common name and should therefore be excluded from the network graph generation."
     )
+
+# --------------------------
+# ----OUTPUTTED DATASETS----
+# --------------------------
+# these will be the final outputted datasets to be stored in the s3 bucket and available to be pulled down and used

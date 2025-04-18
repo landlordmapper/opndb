@@ -461,11 +461,12 @@ class NetworkMatchBase(MatchBase):
         return df_taxpayers
 
     @classmethod
-    def set_network_text(cls, network_id: int, gMatches: nx.Graph, df_taxpayers: pd.DataFrame) -> pd.DataFrame:
+    def set_network_text(cls, network_id: int, gMatches: nx.Graph, df_taxpayers: pd.DataFrame):
         df_taxpayers[f"network_{network_id}_text"] = np.nan
-        unique_networks = df_taxpayers[f"final_component_{network_id}"].dropna().unique()
+        unique_networks = df_taxpayers[f"final_component_{network_id}"].unique()
         components = list(nx.connected_components(gMatches))
         for ntwk in unique_networks:
+            if ntwk == None or np.isnan(ntwk): continue
             nodes = list(gMatches.subgraph(components[int(ntwk)]).nodes())
             edges = list(gMatches.subgraph(components[int(ntwk)]).edges())
             if len(edges) == 0:
