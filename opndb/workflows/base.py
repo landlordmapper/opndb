@@ -27,10 +27,16 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt, ValidatedAddrs
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.schema.v0_1.schema import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
+from opndb.schema.v0_1.process import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
     Corps, LLCs, FixingAddrs, FixingTaxNames, AddressAnalysis, FrequentTaxNames, TaxpayersFixed, \
-    TaxpayersStringMatched, TaxpayersMerged, TaxpayersSubsetted, CorpsMerged, LLCsMerged, TaxpayersPrepped
-from opndb.schema.v0_1.schema_raw import PropsTaxpayers, CorpsRaw, LLCsRaw, ClassCodes
+    TaxpayersStringMatched, TaxpayersMerged, TaxpayersSubsetted, CorpsMerged, LLCsMerged, TaxpayersPrepped, \
+    TaxpayersNetworked
+from opndb.schema.v0_1.raw import (
+    PropsTaxpayers,
+    Corps as CorpsRaw,
+    LLCs as LLCsRaw,
+    ClassCodes
+)
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
 from opndb.services.config import ConfigManager
 
@@ -81,24 +87,30 @@ class WorkflowBase(ABC):
     CHILD WORKFLOW REQUIREMENTS:
         - Required dataframes object: instance variable containing all required dataframes and their file paths
         - Execute method: executes data load, required logic and transformations, and saves outputs
-        - Load
     """
     def __init__(self, config_manager: ConfigManager):
         self.config_manager: ConfigManager = config_manager
         self.dfs_in: dict[str, pd.DataFrame | None] = {}
         self.dfs_out: dict[str, pd.DataFrame | None] = {}
 
-    def load_dfs(self, load_map: dict[str, Path]) -> None:
+    def load_dfs(self, load_map: dict[str, dict[str, Any]]) -> None:
         """
         Sets the self.dfs_in object. Sets keys as dataframe ID values. Sets values to dataframes, or None if the file
-        path specified is not found.
+        path specified is not found. Sets schema_map instance variable to associated ID values with pandera schemas.
         """
-        for id, path in load_map.items():
-            self.dfs_in[id] = ops_df.load_df(path, str)
+        for id, params in load_map.items():
+            # unpack params object
+            path: Path = params["path"]
+            schema: Type[OPNDFModel] = params["schema"]
+            recursive_bools: bool = params["recursive_bools"] if "recursive_bools" in params.keys() else False
+            # load df and add to self.dfs_in
+            self.dfs_in[id] = ops_df.load_df(path, schema, recursive_bools)
+            # print success message
             if self.dfs_in[id] is not None:
             # self.dfs_out[id] = ops_df.load_df(path, str)
             # if self.dfs_out[id] is not None:
                 console.print(f"\"{id}\" successfully loaded from: \n{path}")
+        # print summary stats for loaded dfs
         console.print("\n")
         ss.display_load_table(self.dfs_in)
         ss.display_load_stats_table(self.dfs_in)
@@ -405,11 +417,23 @@ class WkflDataClean(WorkflowStandardBase):
     # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {  # todo: change these back
-            "props_taxpayers": path_gen.raw_props_taxpayers(configs),
-            "corps": path_gen.raw_corps(configs),
-            "llcs": path_gen.raw_llcs(configs),
-            "class_codes": path_gen.raw_class_codes(configs)
+        load_map: dict[str, dict[str, Any]] = {  # todo: change these back
+            "props_taxpayers": {
+                "path": path_gen.raw_props_taxpayers(configs),
+                "schema": PropsTaxpayers
+            },
+            "corps": {
+                "path": path_gen.raw_corps(configs),
+                "schema": CorpsRaw
+            },
+            "llcs": {
+                "path": path_gen.raw_llcs(configs),
+                "schema": LLCsRaw
+            },
+            "class_codes": {
+                "path": path_gen.raw_class_codes(configs),
+                "schema": ClassCodes
+            }
         }
         # load_map: dict[str, Path] = {  # todo: change these back
         #     "properties": path_gen.processed_properties(configs),
@@ -521,8 +545,11 @@ class WkflAddressClean(WorkflowStandardBase):
 
     def load(self):
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "unvalidated_addrs": {
+                "path": path_gen.processed_unvalidated_addrs(configs),
+                "schema": UnvalidatedAddrs,
+            },
         }
         self.load_dfs(load_map)
 
@@ -662,11 +689,23 @@ class WkflAddressGeocodio(WorkflowStandardBase):
 
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
-            "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs),
-            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
-            "gcd_failed": path_gen.geocodio_gcd_failed(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "unvalidated_addrs": {
+                "path": path_gen.processed_unvalidated_addrs(configs),
+                "schema": UnvalidatedAddrs,
+            },
+            "gcd_unvalidated": {
+                "path": path_gen.geocodio_gcd_unvalidated(configs),
+                "schema": Geocodio,
+            },
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "gcd_failed": {
+                "path": path_gen.geocodio_gcd_failed(configs),
+                "schema": Geocodio,
+            },
         }
         self.load_dfs(load_map)
 
@@ -743,8 +782,11 @@ class WkflFixUnitsInitial(WorkflowStandardBase):
     # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {  # todo: change these back
-            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
         }
         self.load_dfs(load_map)
 
@@ -756,7 +798,7 @@ class WkflFixUnitsInitial(WorkflowStandardBase):
         # run validator
         self.run_validator("gcd_validated", df_unit, self.config_manager.configs, self.WKFL_NAME, Geocodio)
         # subset to exclude pobox addresses
-        df_unit = df_unit[df_unit["is_pobox"] == "False"]
+        df_unit = df_unit[df_unit["is_pobox"] == False]
         # subset validated addresses for only ones which do not have a secondary number
         df_unit = df_unit[df_unit["secondarynumber"].isnull()]
         # check street addresses for digits at the end
@@ -804,10 +846,17 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
     # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {  # todo: change these back
-            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
-            "fixing_addrs": path_gen.analysis_fixing_addrs(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "fixing_addrs": {
+                "path": path_gen.analysis_fixing_addrs(configs),
+                "schema": FixingAddrs,
+            },
         }
+
         self.load_dfs(load_map)
 
     # -----------------
@@ -911,11 +960,23 @@ class WkflAddressMerge(WorkflowStandardBase):
     # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {  # todo: change these back
-            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
-            "taxpayer_records": path_gen.processed_taxpayer_records(configs),
-            "corps": path_gen.processed_corps(configs),
-            "llcs": path_gen.processed_llcs(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "taxpayer_records": {
+                "path": path_gen.processed_taxpayer_records(configs),
+                "schema": TaxpayerRecords,
+            },
+            "corps": {
+                "path": path_gen.processed_corps(configs),
+                "schema": Corps,
+            },
+            "llcs": {
+                "path": path_gen.processed_llcs(configs),
+                "schema": LLCs,
+            },
         }
         self.load_dfs(load_map)
 
@@ -994,8 +1055,12 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
 
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "taxpayer_records": path_gen.processed_taxpayer_records(configs)
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_merged": {
+                "path": path_gen.processed_taxpayers_merged(configs),
+                "schema": TaxpayersMerged,
+                "recursive_bools": True
+            },
         }
         self.load_dfs(load_map)
 
@@ -1082,12 +1147,26 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
 
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
-            "taxpayers_merged": path_gen.processed_taxpayers_merged(configs),
-            "corps": path_gen.processed_corps_merged(configs),
-            "llcs": path_gen.processed_llcs_merged(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "taxpayers_merged": {
+                "path": path_gen.processed_taxpayers_merged(configs),
+                "schema": TaxpayersMerged,
+                "recursive_bools": True
+            },
+            "corps": {
+                "path": path_gen.processed_corps_merged(configs),
+                "schema": Corps,
+            },
+            "llcs": {
+                "path": path_gen.processed_llcs_merged(configs),
+                "schema": LLCs,
+            },
         }
+
         self.load_dfs(load_map)
 
     def process(self) -> None:
@@ -1157,11 +1236,24 @@ class WkflAnalysisFinal(WorkflowStandardBase):
 
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
-            "address_analysis": path_gen.analysis_address_analysis(configs),
-            "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
-            "taxpayers_merged": path_gen.processed_taxpayers_merged(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "fixing_tax_names": {
+                "path": path_gen.analysis_fixing_tax_names(configs),
+                "schema": FixingTaxNames,  # <- swap with actual schema if needed
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+            },
+            "frequent_tax_names": {
+                "path": path_gen.analysis_frequent_tax_names(configs),
+                "schema": FrequentTaxNames,
+            },
+            "taxpayers_merged": {
+                "path": path_gen.processed_taxpayers_merged(configs),
+                "schema": TaxpayersMerged,
+                "recursive_bools": True
+            },
         }
         self.load_dfs(load_map)
 
@@ -1170,7 +1262,7 @@ class WkflAnalysisFinal(WorkflowStandardBase):
             "fixing_tax_names": FixingTaxNames,
             "address_analysis": AddressAnalysis,
             "frequent_tax_names": FrequentTaxNames,
-            "taxpayers_merged": TaxpayerRecordsMerged,
+            "taxpayers_merged": TaxpayersMerged,
         }
         # run validators
         for id, df in self.dfs_in.items():
@@ -1230,10 +1322,20 @@ class WkflRentalSubset(WorkflowStandardBase):
 
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "properties": path_gen.processed_properties(configs),
-            "taxpayers_fixed": path_gen.processed_taxpayers_fixed(configs),
-            "class_codes": path_gen.processed_class_codes(configs)
+        load_map: dict[str, dict[str, Any]] = {
+            "properties": {
+                "path": path_gen.processed_properties(configs),
+                "schema": Properties,
+            },
+            "taxpayers_fixed": {
+                "path": path_gen.processed_taxpayers_fixed(configs),
+                "schema": TaxpayersFixed,
+                "recursive_bools": True
+            },
+            "class_codes": {
+                "path": path_gen.processed_class_codes(configs),
+                "schema": ClassCodes,
+            },
         }
         self.load_dfs(load_map)
 
@@ -1465,10 +1567,20 @@ class WkflCleanMerge(WorkflowStandardBase):
 
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "taxpayers_subsetted": path_gen.processed_taxpayers_subsetted(configs),
-            "corps_merged": path_gen.processed_corps_merged(configs),
-            "llcs_merged": path_gen.processed_llcs_merged(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_subsetted": {
+                "path": path_gen.processed_taxpayers_subsetted(configs),
+                "schema": TaxpayersSubsetted,
+                "recursive_bools": True
+            },
+            "corps_merged": {
+                "path": path_gen.processed_corps_merged(configs),
+                "schema": CorpsMerged,
+            },
+            "llcs_merged": {
+                "path": path_gen.processed_llcs_merged(configs),
+                "schema": LLCsMerged,
+            },
         }
         self.load_dfs(load_map)
 
@@ -1605,7 +1717,7 @@ class WkflStringMatch(WorkflowStandardBase):
     ):
         """Returns final dataset to be outputted"""
         t.print_with_dots("Executing string matching")
-        df_researched: pd.DataFrame = df_analysis[df_analysis["is_researched"] == "t"]
+        df_researched: pd.DataFrame = df_analysis[df_analysis["is_researched"] == True]
         for i, params in enumerate(params_matrix):
             t.print_equals(f"Matching strings for STRING_MATCHED_NAME_{i+1}")
             console.print("NAME COLUMN:", params["name_col"])
@@ -1657,9 +1769,16 @@ class WkflStringMatch(WorkflowStandardBase):
 
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "taxpayers_prepped": path_gen.processed_taxpayers_prepped(configs),
-            "address_analysis": path_gen.analysis_address_analysis(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_prepped": {
+                "path": path_gen.processed_taxpayers_prepped(configs),
+                "schema": TaxpayersPrepped,
+                "recursive_bools": True
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+            },
         }
         self.load_dfs(load_map)
 
@@ -1769,39 +1888,34 @@ class WkflNetworkGraph(WorkflowStandardBase):
         df_taxpayers: pd.DataFrame,
         df_analysis: pd.DataFrame
     ) -> pd.DataFrame:
-        df_researched: pd.DataFrame = df_analysis[df_analysis["is_researched"] == "t"]
+        df_researched: pd.DataFrame = df_analysis[df_analysis["is_researched"] == True]
         for i, params in enumerate(params_matrix):
             console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
             console.print("ENTITY NAME COLUMN:", params["entity_name_col"])
             console.print("INCLUDE ORGS:", params["include_orgs"])
             console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
             console.print("STRING MATCH NAME:", params["string_match_name"])
-            gMatches = NetworkMatchBase.taxpayers_network(
-                df_taxpayers,
-                df_researched,
-                params
-            )
-            df_taxpayers = NetworkMatchBase.set_taxpayer_component(
-                i+1,
-                df_taxpayers,
-                gMatches,
-                params
-            )
+            # build network graph object
+            gMatches = NetworkMatchBase.taxpayers_network(df_taxpayers, df_researched, params)
+            # assign IDs to taxpayer records based on name/address presence in graph object
+            df_taxpayers = NetworkMatchBase.set_taxpayer_component(i+1, df_taxpayers, gMatches, params)
+            # set network names for each taxpayer record (long AND short)
             df_taxpayers = NetworkMatchBase.set_network_name(i+1, df_taxpayers)
-            # # set text for node/edge data - should this be a separate dataset? probably
-            # df_process: pd.DataFrame = NetworkMatchBase.set_network_text(
-            #     gMatches,
-            #     df_process,
-            #     f"final_component_{i+1}",
-            #     f"network_{i+1}"
-            # )
+            # set text for node/edge data
+            df_taxpayers = NetworkMatchBase.set_network_text(i+1, gMatches, df_taxpayers)
         return df_taxpayers
 
     def load(self):
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "taxpayers_string_matched": path_gen.processed_taxpayers_string_matched(configs),
-            "address_analysis": path_gen.analysis_address_analysis(configs),
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_string_matched": {
+                "path": path_gen.processed_taxpayers_string_matched(configs),
+                "schema": TaxpayersStringMatched,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+            },
         }
         self.load_dfs(load_map)
 
@@ -1862,60 +1976,60 @@ class WkflFinalOutput(WorkflowBase):
                 "taxpayer_name": "clean",
                 "entity_name": "clean",
                 "string_match": "string_matched_name_1",
-                "include_orgs": "f",
-                "include_orgs_string": "f",
-                "include_unresearched": "f",
-                "include_unresearched_string": "f"
+                "include_orgs": False,
+                "include_orgs_string": False,
+                "include_unresearched": False,
+                "include_unresearched_string": False
             },
             {
                 "network_id": "network_2",
                 "taxpayer_name": "clean",
                 "entity_name": "core",
                 "string_match": "string_matched_name_3",
-                "include_orgs": "f",
-                "include_orgs_string": "f",
-                "include_unresearched": "f",
-                "include_unresearched_string": "t"
+                "include_orgs": False,
+                "include_orgs_string": False,
+                "include_unresearched": False,
+                "include_unresearched_string": True
             },
             {
                 "network_id": "network_3",
                 "taxpayer_name": "core",
                 "entity_name": "clean",
                 "string_match": "string_matched_name_3",
-                "include_orgs": "f",
-                "include_orgs_string": "f",
-                "include_unresearched": "t",
-                "include_unresearched_string": "t"
+                "include_orgs": False,
+                "include_orgs_string": False,
+                "include_unresearched": True,
+                "include_unresearched_string": True
             },
             {
                 "network_id": "network_4",
                 "taxpayer_name": "clean",
                 "entity_name": "clean",
                 "string_match": "string_matched_name_2",
-                "include_orgs": "t",
-                "include_orgs_string": "f",
-                "include_unresearched": "f",
-                "include_unresearched_string": "t"
+                "include_orgs": True,
+                "include_orgs_string": False,
+                "include_unresearched": False,
+                "include_unresearched_string": True
             },
             {
                 "network_id": "network_5",
                 "taxpayer_name": "clean",
                 "entity_name": "clean",
                 "string_match": "string_matched_name_3",
-                "include_orgs": "t",
-                "include_orgs_string": "f",
-                "include_unresearched": "t",
-                "include_unresearched_string": "t"
+                "include_orgs": True,
+                "include_orgs_string": False,
+                "include_unresearched": True,
+                "include_unresearched_string": True
             },
             {
                 "network_id": "network_6",
                 "taxpayer_name": "core",
                 "entity_name": "clean",
                 "string_match": "string_matched_name_3",
-                "include_orgs": "t",
-                "include_orgs_string": "f",
-                "include_unresearched": "t",
-                "include_unresearched_string": "t"
+                "include_orgs": True,
+                "include_orgs_string": False,
+                "include_unresearched": True,
+                "include_unresearched_string": True
             },
         ]
         return pd.DataFrame(rows_network_calcs)
@@ -1967,19 +2081,19 @@ class WkflFinalOutput(WorkflowBase):
                 "google_urls": row["google_urls"],
                 "google_place_id": row["google_place_id"],
             }
-            if row["is_landlord_org"] == "t":
+            if row["is_landlord_org"] == True:
                 row["entity_type"] = "Landlord Organization"
-            elif row["is_govt_agency"] == "t":
+            elif row["is_govt_agency"] == True:
                 row["entity_type"] = "Government Agency"
-            elif row["is_lawfirm"] == "t":
+            elif row["is_lawfirm"] == True:
                 row["entity_type"] = "Law Firm"
-            elif row["is_financial_services"] == "t":
+            elif row["is_financial_services"] == True:
                 row["entity_type"] = "Financial Services Company"
-            elif row["is_assoc_bus"] == "t":
+            elif row["is_assoc_bus"] == True:
                 row["entity_type"] = "Associated Business"
-            elif row["is_office_virtual_agent"] == "t":
+            elif row["is_office_virtual_agent"] == True:
                 row["entity_type"] = "Virtual Office / Registered Agent"
-            elif row["is_nonprofit"] == "t":
+            elif row["is_nonprofit"] == True:
                 row["entity_type"] = "Nonprofit Organization"
             else:
                 row["entity_type"] = "Other / Unknown"
@@ -2125,20 +2239,38 @@ class WkflFinalOutput(WorkflowBase):
 
     def load(self):
         configs = self.config_manager.configs
-        load_map: dict[str, Path] = {
-            "taxpayers_networked": path_gen.processed_taxpayers_networked(configs),
-            "corps_subsetted": path_gen.processed_corps_subsetted(configs),
-            "llcs_subsetted": path_gen.processed_llcs_subsetted(configs),
-            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
-            "address_analysis": path_gen.analysis_address_analysis(configs),
-            "validated_addresses": path_gen.geocodio_gcd_validated(configs)
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_networked": {
+                "path": path_gen.processed_taxpayers_networked(configs),
+                "schema": TaxpayersNetworked,
+            },
+            "corps_subsetted": {
+                "path": path_gen.processed_corps_subsetted(configs),
+                "schema": CorpsMerged,
+            },
+            "llcs_subsetted": {
+                "path": path_gen.processed_llcs_subsetted(configs),
+                "schema": LLCsMerged,
+            },
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+            },
+            "validated_addresses": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
         }
         self.load_dfs(load_map)
 
     def process(self) -> None:
 
         df_researched: pd.DataFrame = self.dfs_in["address_analysis"][
-            self.dfs_in["address_analysis"]["is_researched"] == "t"
+            self.dfs_in["address_analysis"]["is_researched"] == True
         ]
 
         self.dfs_out["network_calcs"] = self.execute_network_calcs()

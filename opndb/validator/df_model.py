@@ -8,26 +8,27 @@ from pandas import CategoricalDtype
 
 
 class OPNDFModel(pa.DataFrameModel):
-    pass
-    # class Config:
-    #     # Allow dataframes with additional columns
-    #     strict = False
-    #     # Use pandas' dtype_backend
-    #     dtype_backend = "pandas"
-    #     # Enable coercion for all child models
-    #     coerce = True
-    #
-    #     @classmethod
-    #     def coerce_dtype(cls, data: Any, dtype: Any) -> Any:
-    #         if dtype == pd.Int64Dtype:
-    #             # Handle conversion to Pandas nullable integer type
-    #             if isinstance(data, pd.Series):
-    #                 # First convert to numeric with coerce to handle strings
-    #                 numeric_data = pd.to_numeric(data, errors='coerce')
-    #                 # Then convert to Int64
-    #                 return numeric_data.astype('Int64')
-    #         # Fall back to default behavior for other types
-    #         return pa.DataFrameModel.Config.coerce_dtype(data, dtype)
+
+    @classmethod
+    def boolean_fields(cls, recursive: bool = False) -> list[str]:
+        """
+        Returns list of strings representing boolean column names for the dataset associated with the pandera model
+        class
+        """
+        bool_fields = []
+        if recursive:
+            # Walk MRO (method resolution order) to include parent classes
+            for base in cls.__mro__:
+                if not hasattr(base, "__annotations__"):
+                    continue
+                for field_name, annotation in base.__annotations__.items():
+                    if annotation is bool or annotation == "bool":
+                        bool_fields.append(field_name)
+        else:
+            for field_name, annotation in cls.__annotations__.items():
+                if annotation is bool or annotation == "bool":
+                    bool_fields.append(field_name)
+        return list(set(bool_fields))  # remove duplicates in case of overrides
 
 
 class OPNDFStrEnum(StrEnum):

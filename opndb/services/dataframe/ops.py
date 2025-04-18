@@ -97,7 +97,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         :param df_class_codes: Dataframe containing building class code descriptions
         :return: D
         """
-        df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes["is_rental"] == "t"]
+        df_rental_codes: pd.DataFrame = df_class_codes[df_class_codes["is_rental"] == True]
         rental_codes: list[str] = list(df_rental_codes["code"])
         df_props["is_rental"] = df_props["class_code"].apply(lambda code: code in rental_codes)
         return df_props
@@ -170,7 +170,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         :param df_taxpayers: Dataframe containing taxpayer record data
         :param df_addr_analysis: Dataframe containing address analysis spreadsheet
         """
-        df_orgs: pd.DataFrame = df_addr_analysis[df_addr_analysis["is_landlord_org"] == "t"]
+        df_orgs: pd.DataFrame = df_addr_analysis[df_addr_analysis["is_landlord_org"] == True]
         org_addrs: list[str] = list(df_orgs["value"])
         df_taxpayers["is_landlord_org"] = df_taxpayers["raw_address_v"].apply(
             lambda addr: clean_base.get_is_landlord_org(addr, org_addrs)
@@ -186,7 +186,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         :param df_taxpayers: Dataframe containing taxpayer record data
         :param df_freq_names: Dataframe containing name analysis spreadsheet
         """
-        df_common: pd.DataFrame = df_freq_names[df_freq_names["is_common_name"] == "t"]
+        df_common: pd.DataFrame = df_freq_names[df_freq_names["is_common_name"] == True]
         common_names: list[str] = list(df_common["value"])
         df_taxpayers["is_common_name"] = df_taxpayers["clean_name"].apply(
             lambda name: clean_base.get_is_common_name(name, common_names)
@@ -276,7 +276,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         component of clean addresses. Returns dataframe subset that excludes PO box addresses.
         """
         df["check_sec_num"] = df[addr_col].apply(lambda address: clean_addr.check_sec_num(address))
-        return df[df["is_pobox"] == "False"]
+        return df[df["is_pobox"] == False]
 
     @classmethod
     def set_formatted_address_v(cls, df: pd.DataFrame) -> pd.DataFrame:

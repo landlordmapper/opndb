@@ -521,25 +521,25 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         title="Core Name",
         description="Clean taxpayer name after removing commonly appearing keywords to increase matches"
     )
-    is_trust: str = pa.Field(
+    is_trust: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is Trust?",
         description="Boolean representing whether or not a trust string pattern is identified in the cleaned taxpayer name"
     )
-    is_person: str = pa.Field(
+    is_person: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is Person?",
         description="Boolean representing whether or not a person string pattern is identified in the cleaned taxpayer name"
     )
-    is_org: str = pa.Field(
+    is_org: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is Org?",
         description="Boolean representing whether or not an organization name string pattern is identified in the cleaned taxpayer name"
     )
-    is_llc: str = pa.Field(
+    is_llc: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is LLC?",
@@ -575,19 +575,19 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         title="Merge Address 3",
         description="Agent address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
     )
-    is_clean_match: str = pa.Field(
+    is_clean_match: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Clean Match?",
         description="Boolean representing whether or not the match was made on based on the clean taxpayer name"
     )
-    is_core_match: str = pa.Field(
+    is_core_match: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Core Match?",
         description="Boolean representing whether or not the match was made on based on the core taxpayer name"
     )
-    is_string_match: str = pa.Field(
+    is_string_match: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is String Match?",
@@ -617,7 +617,7 @@ class TaxpayersStringMatched(TaxpayersPrepped):
         title="Core Name Address",
         description="Concatenation of core taxpayer name and cleaned address"
     )
-    include_address: str = pa.Field(
+    include_address: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Include Address?",
@@ -850,7 +850,7 @@ class UnvalidatedAddrsClean(UnvalidatedAddrs):
     def geocodio_columns(cls) -> list[str]:
         return cls._GEOCODIO_COLUMNS
 
-    is_pobox: str = pa.Field(
+    is_pobox: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is PO Box?",
@@ -996,7 +996,7 @@ class Geocodio(OPNDFModel):
         title="Formatted Address",
         description="Concatenation of all address components into a single string."
     )
-    is_pobox: str = pa.Field(
+    is_pobox: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is PO Box?",
@@ -1006,7 +1006,7 @@ class Geocodio(OPNDFModel):
 
 class FixingAddrs(Geocodio):
     check_sec_num: str = pa.Field(
-        nullable=False,
+        nullable=True,
         unique=False,
         title="Check Secondary Number",
         description="Contains secondary number value detected by regex run on street address for rows whose validated address does NOT contain a secondary number. Used to manually fix validated addresses that incorrectly excluded secondary address information."
@@ -1063,49 +1063,49 @@ class AddressAnalysis(OPNDFModel):
         title="Notes",
         description="Any notes or additional considerations observed from researching address"
     )
-    is_landlord_org: str = pa.Field(
+    is_landlord_org: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Landlord Organization?",
         description="Boolean representing whether or not the entity/organization associated with the address is a property management company, real estate developer, real estate agency, investment or wealth management firm, or any other organization that can be held accountable for the conditions of a rental property. "
     )
-    is_govt_agency: str = pa.Field(
+    is_govt_agency: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Government Agency?",
         description="Boolean representing whether or not the address is associated with a government office"
     )
-    is_lawfirm: str = pa.Field(
+    is_lawfirm: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Lawfirm?",
         description="Boolean representing whether or not the entity/organization associated with the address is a lawfirm"
     )
-    is_missing_suite: str = pa.Field(
+    is_missing_suite: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Missing Suite?",
         description="Boolean representing whether or not the address is missing a suite number. Applies to addresses that point to office buildings, UPS stores, lock box services or other virtual mail services but that do NOT include a secondary address identifier."
     )
-    is_financial_services: str = pa.Field(
+    is_financial_services: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Financial Services?",
         description="Boolean representing whether or not the entity/organization associated with the address is a financial services company (tax services, mortgage services, etc.)"
     )
-    is_assoc_bus: str = pa.Field(
+    is_assoc_bus: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Associated Business?",
         description="Boolean representing whether or not the entity/organization associated with the address is a business that is unrelated to property management. This could either be the business of the property's 'true owner', or the owner of the property containing the business."
     )
-    fix_address: str = pa.Field(
+    fix_address: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Fix Address?",
         description="Indicates whether or not the address needs to be fixed"
     )
-    is_virtual_office_agent: str = pa.Field(
+    is_virtual_office_agent: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Virtual Office / Agent?",
@@ -1117,7 +1117,7 @@ class AddressAnalysis(OPNDFModel):
         title="Yelp URLs",
         description="Yelp URLs associated with organization/entity associated with the address"
     )
-    is_nonprofit: str = pa.Field(
+    is_nonprofit: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Boolean representing whether or not the entity/organization associated with the address is a nonprofit organization",
@@ -1129,7 +1129,7 @@ class AddressAnalysis(OPNDFModel):
         title="Google URLs",
         description="Google URLs associated with organization/entity associated with the address"
     )
-    is_ignore_misc: str = pa.Field(
+    is_ignore_misc: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Ignore Misc?",
@@ -1140,7 +1140,7 @@ class AddressAnalysis(OPNDFModel):
         unique=False,
         title="Google Place ID",
     )
-    is_researched: str = pa.Field(
+    is_researched: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Researched?",
@@ -1161,14 +1161,9 @@ class FrequentTaxNames(OPNDFModel):
         title="Frequency",
         description="Number of times the name appears in the taxpayer dataset"
     )
-    is_common_name: str = pa.Field(
+    is_common_name: bool = pa.Field(
         nullable=True,
         unique=False,
         title="Is Common Name?",
         description="Boolean indicating whether or not the name is a common name and should therefore be excluded from the network graph generation."
     )
-
-# --------------------------
-# ----OUTPUTTED DATASETS----
-# --------------------------
-# these will be the final outputted datasets to be stored in the s3 bucket and available to be pulled down and used

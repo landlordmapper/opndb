@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Callable, Type
 import pandas as pd
+import pandera as pa
 from opndb.services.string_clean import (
     CleanStringBase as clean_base,
     CleanStringName as clean_name,
@@ -16,6 +17,7 @@ from rich.progress import (
 )
 from rich.console import Console
 
+from opndb.validator.df_model import OPNDFModel
 
 console = Console()
 
@@ -28,7 +30,12 @@ class DataFrameOpsBase(object):
     """
 
     @classmethod
-    def load_df(cls, path: Path, dtype: Type | dict[str, Any]) -> pd.DataFrame | None:
+    def load_df(
+        cls,
+        path: Path,
+        schema: Type[OPNDFModel] = None,
+        recursive_bools: bool = False,
+    ) -> pd.DataFrame | None:
         """
         Loads dataframes based on file format. Reads extension and loads dataframe using corresponding pd.read method.
         Returns None if the path doesn't exist.'
@@ -38,11 +45,21 @@ class DataFrameOpsBase(object):
         :return: Dataframe containing data from specified file
         """
 
+        # Set boolean columns
+        def coerce_booleans(df: pd.DataFrame, bool_cols: list[str]) -> pd.DataFrame:
+            for col in bool_cols:
+                df[col] = df[col].map(
+                    lambda x: str(x).strip().lower() in {"true", "1", "t", "yes"}
+                    if pd.notnull(x) else False
+                )
+            return df
+
+        # no file found, return None
         if not path.exists():
             console.print(f"[yellow]File not found: {path}[/yellow]")
             return None
 
-        # Check if file is empty
+        # File is empty, return None
         if path.stat().st_size == 0:
             console.print(f"[yellow]File is empty: {path}[/yellow]")
             return None
@@ -53,7 +70,6 @@ class DataFrameOpsBase(object):
                 with open(path, "r") as f:
                     # Read first few lines to see if there's anything parseable
                     sample = "".join([f.readline() for _ in range(5)])
-
                 if not sample.strip() or "," not in sample:
                     console.print(f"[yellow]File exists but doesn't contain valid CSV data: {path}[/yellow]")
                     return None
@@ -61,13 +77,14 @@ class DataFrameOpsBase(object):
                 console.print(f"[yellow]Error inspecting file content: {str(e)}[/yellow]")
                 # Continue trying to load anyway, pandas will handle the error
 
+        # Get file size, initiate progress bar & load dataframe
         file_size = path.stat().st_size
         format = path.suffix[1:].lower()
         with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TotalFileSizeColumn(),
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TotalFileSizeColumn(),
         ) as progress:
             task = progress.add_task(
                 f"Loading {path.name} into dataframe...",
@@ -76,16 +93,19 @@ class DataFrameOpsBase(object):
             )
             try:
                 if format == "csv":
-                    df: pd.DataFrame = pd.read_csv(str(path), dtype=dtype)
+                    df: pd.DataFrame = pd.read_csv(str(path), dtype=str)
                 elif format == "parquet":
-                    df: pd.DataFrame = pd.read_parquet(str(path), dtype=dtype)
+                    df: pd.DataFrame = pd.read_parquet(str(path), dtype=str)
                 elif format == "xlsx" or format == "xls":
-                    df: pd.DataFrame = pd.read_excel(str(path), dtype=dtype)
+                    df: pd.DataFrame = pd.read_excel(str(path), dtype=str)
                 elif format == "json":
-                    df: pd.DataFrame = pd.read_json(str(path), dtype=dtype)
+                    df: pd.DataFrame = pd.read_json(str(path), dtype=str)
                 else:
                     raise ValueError(f"Unsupported file format: {format}")
                 progress.update(task, completed=file_size)
+                # Convert boolean columns to pandas bool type
+                if schema:
+                    df = coerce_booleans(df, schema.boolean_fields(recursive=recursive_bools))
                 return df
             except Exception as e:
                 progress.stop()

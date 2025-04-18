@@ -154,7 +154,7 @@ class PropsTaxpayers(OPNDFModel):
         description="Number of rental apartment units in the property."
     )
 
-class CorpsRaw(OPNDFModel):
+class Corps(OPNDFModel):
     """
     Raw dataset for state-level corporate records. Note that the availability of address-related columns is subject to
     the quality of the original data and the ability to parse complete address strings.
@@ -367,7 +367,7 @@ class CorpsRaw(OPNDFModel):
         description="Secretary zip code",
     )
 
-class LLCsRaw(OPNDFModel):
+class LLCs(OPNDFModel):
     """
     Raw dataset for state-level LLC records. Note that the availability of address-related columns is subject to
     the quality of the original data and the ability to parse complete address strings.
@@ -760,7 +760,7 @@ class ClassCodes(OPNDFModel):
         title="Class Description",
         description="Detailed description defining land use for class code.",
     )
-    is_rental: str = pa.Field(  # todo: take care of t/True/TRUE problem
+    is_rental: bool = pa.Field(
         nullable=False,
         title="Is Rental?",
         description="Boolean column indicating whether or not the class code is associated with rental properties."
