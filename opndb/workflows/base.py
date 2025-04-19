@@ -1756,7 +1756,6 @@ class WkflStringMatch(WorkflowStandardBase):
     ):
         """Returns final dataset to be outputted"""
         t.print_with_dots("Executing string matching")
-        df_researched: pd.DataFrame = df_analysis[df_analysis["is_researched"] == True]
         for i, params in enumerate(params_matrix):
             t.print_equals(f"Matching strings for STRING_MATCHED_NAME_{i+1}")
             console.print("NAME COLUMN:", params["name_col"])
@@ -1766,13 +1765,15 @@ class WkflStringMatch(WorkflowStandardBase):
             console.print("NMSLIB OPTIONS:", params["nmslib_opts"])
             console.print("QUERY BATCH OPTIONS:", params["query_batch_opts"])
             t.print_with_dots("Setting include_address")
-            df_taxpayers["include_address"] = df_taxpayers["match_address"].apply(
-                lambda addr: MatchBase.check_address(
-                    addr,
-                    df_researched,
-                    params["include_orgs"],
+            df_taxpayers["include_address"] = df_taxpayers.apply(
+                lambda row: MatchBase.check_address(
+                    row["match_address"],
+                    row["exclude_address"],
                     params["include_unresearched"],
-                )
+                    row["is_researched_t"],
+                    params["include_orgs"],
+                    row["is_org_address_t"]
+                ), axis=1
             )
             # filter out addresses
             t.print_with_dots("Filtering out taxpayer records where include_address is False")
