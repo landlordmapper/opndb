@@ -354,11 +354,29 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         return df
 
     @classmethod
-    def set_corp_llc_names_taxpayers(cls, df_taxpayers: pd.DataFrame) -> pd.DataFrame:
-        mask = df_taxpayers["entity_clean_name"].notna()
-        df_taxpayers.loc[mask, "clean_name"] = df_taxpayers.loc[mask, "entity_clean_name"]
-        df_taxpayers.loc[mask, "core_name"] = df_taxpayers.loc[mask, "entity_core_name"]
-        return df_taxpayers
+    def set_corp_llc_names_taxpayers(cls, df: pd.DataFrame) -> pd.DataFrame:
+        mask = df["entity_clean_name"].notna()
+        df.loc[mask, "clean_name"] = df.loc[mask, "entity_clean_name"]
+        df.loc[mask, "core_name"] = df.loc[mask, "entity_core_name"]
+        return df
+
+    @classmethod
+    def fix_corp_llc_exclude_names(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Fixes rows whose taxpayer name should be excluded from matching in case they mistakenly got matched by corp/LLC
+        match workflows.
+        """
+        cols_to_set = [
+            "entity_clean_name",
+            "entity_core_name",
+            "entity_address_1",
+            "entity_address_2",
+            "entity_address_3"
+        ]
+        mask = df["exclude_name"] == True
+        for col in cols_to_set:
+            df.loc[mask, col] = np.nan
+        return df
 
 
 class DataFrameSubsetters(DataFrameOpsBase):

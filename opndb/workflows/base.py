@@ -1562,12 +1562,9 @@ class WkflCleanMerge(WorkflowStandardBase):
         whether each address has been researched, should be excluded, and whether it is associated with a landlord
         organization, to be used by the string matching and network graph workflows.
         """
+        # remove corp/LLC record data for rows where exclude_name == True
+        df_taxpayers = colm_df.fix_corp_llc_exclude_names(df_taxpayers)
         # set taxpayer clean and core name equal to corporate/llc records clean and core names
-        df_matches: pd.DataFrame = df_taxpayers[
-            (df_taxpayers["is_clean_match"] == True) |
-            (df_taxpayers["is_core_match"] == True) |
-            (df_taxpayers["is_string_match"] == True)
-        ][["clean_name", "core_name", "entity_clean_name", "entity_core_name"]]
         df_taxpayers = colm_df.set_corp_llc_names_taxpayers(df_taxpayers)
 
         # fetch addresses to exclude automatically from analysis
