@@ -32,54 +32,36 @@ console = Console()
 class MatchBase:
 
     @classmethod
-    def check_name(cls, row: pd.Series) -> bool:
-        """
-        Returns "True" if the row SHOULD be included in the network analysis, and False if it should be ignored.
-        """
-        return pd.isna(row["is_common_name"]) or row["is_common_name"] is False or row["is_common_name"] == "False"
-
-    @classmethod
-    def check_entity_name(cls, row: pd.Series) -> bool:
-        """
-        Returns "True" if the row SHOULD be included in the network analysis, and False if it should be ignored.
-        """
-        return pd.isna(row["is_common_name"]) or row["is_common_name"] is False
-
-    @classmethod
     def check_address(
         cls,
         address: str | None,
-        df_researched: pd.DataFrame,
+        exclude_address: bool,
+        include_unresearched: bool,
+        is_researched: bool,
         include_orgs: bool,
-        include_unresearched: bool
+        is_org_address: bool,
     ) -> bool:
         """
         Returns "True" if the address SHOULD be included in the network analysis, and False if it should be ignored.
         """
-        if not address:
+        if not address or pd.isna(address):
             return False
-        # the address has NOT already been analyzed
-        if address not in list(df_researched["value"].dropna().unique()):
-            return include_unresearched
-        # address has been analyzed - check if it should be ignored
+        if exclude_address:
+            return False
         else:
-            df_addr_analysis = df_researched[df_researched["value"] == address]
-            if df_addr_analysis["is_landlord_org"].eq("t").any():
-                return include_orgs
-            elif df_addr_analysis["is_lawfirm"].eq("t").any():
-                return False
-            elif df_addr_analysis["is_missing_suite"].eq("t").any():
-                return False
-            elif df_addr_analysis["is_financial_services"].eq("t").any():
-                return False
-            elif df_addr_analysis["is_virtual_office_agent"].eq("t").any():
-                return False
-            elif df_addr_analysis["fix_address"].eq("t").any():
-                return False
-            elif df_addr_analysis["is_ignore_misc"].eq("t").any():
-                return False
-            else:
+            if include_unresearched:
                 return True
+            else:
+                if not is_researched:
+                    return False
+                else:
+                    if not include_orgs:
+                        return True
+                    else:
+                        if is_org_address:
+                            return False
+                        else:
+                            return True
 
     @classmethod
     def set_matching_address(cls, row):
@@ -180,12 +162,6 @@ class NetworkMatchBase(MatchBase):
     Network matching service class. Contains all functions related to building network graph objects and connected
     component maps. Methods are defined roughly in their order of execution in generalized network graph workflows.
     """
-    # todo: standardize pattern of what these functions return (Ex: set of functions that return nx.Graph objects, dataframe objects, other network graph-related objects, etc.)
-    @classmethod
-    def build_edge(cls, g, node_a, node_b, common_names=None, common_addrs=None):
-        if (common_names is None or node_a not in common_names) and (common_addrs is None or node_b not in common_addrs):
-            g.add_edge(node_a, node_b)
-
     @classmethod
     def process_row_network(
         cls,
@@ -195,80 +171,96 @@ class NetworkMatchBase(MatchBase):
         params: NetworkMatchParams,
     ) -> None:
         """
-        Adds nodes and edges for taxpayer name and taxpayer address. Uses clean address to check for inclusion
-        detection and matching_address for the network graph
-
-        Names that are NOT indicated as being common names are included. Addresses that pass the check_address test are
-        included. If both the name and address pass the name and address checks, add them as nodes AND edges
-
-        If the name passes the check_name test but the address does not pass the check_address test, add ONLY the name
-        as a node.
+        Adds nodes and edges for taxpayer name and taxpayer address. If both add_name and add_address evaluate to true,
+        add them as an edge. If address
         """
-        name = row[params["taxpayer_name_col"]]
-        clean_address = row["raw_address_v"]
-        matching_address = row["match_address"]
 
-        if cls.check_address(clean_address, df_analysis, params["include_orgs"], params["include_unresearched"]) and cls.check_name(row):
-            if pd.notnull(name) and not utils.is_encoded_empty(name) and pd.notnull(
-                    clean_address) and not utils.is_encoded_empty(clean_address):
-                g.add_edge(name, matching_address)
-        elif cls.check_name(row) and pd.notnull(name) and not utils.is_encoded_empty(name):
+        name: str = row[params["taxpayer_name_col"]]
+        address: str = row["match_address"]
+
+        add_name: bool = not row["exclude_name"]
+        add_address: bool = cls.check_address(
+            address,
+            row["exclude_address"],
+            params["include_unresearched"],
+            row["is_researched_t"],
+            params["include_orgs"],
+            row["is_org_address_t"]
+        )
+
+        if add_name and add_address:
+            g.add_edge(name, address)
+        elif add_name:
             g.add_node(name)
+        elif add_address:
+            g.add_node(address)
+        else:
+            return
 
     @classmethod
     def process_row_network_string_match(
         cls,
         g: nx.Graph,
         row: pd.Series,
-        df_analysis: pd.DataFrame,
         params: NetworkMatchParams,
     ) -> None:
+        """
+        Addes nodes and edges for string match results. Adds string match name to name and address depending on whether
+        add_name and add_address evaluate to True.
+        """
 
-        # todo: fix these column names
-        fuzzy_match_combo = row[params["string_match_name"]]
-        clean_address = row["raw_address_v"]
-        name = row[params["taxpayer_name_col"]]
-        matching_address = row["match_address"]
+        name: str = row[params["taxpayer_name_col"]]
+        address: str = row["match_address"]
+        string_match: str = row[params["string_match_name"]]
 
-        if cls.check_address(clean_address, df_analysis, params["include_orgs"], params["include_unresearched"]) and cls.check_name(row):
-            if pd.notnull(name) and pd.notnull(clean_address):
-                g.add_edge(name, fuzzy_match_combo)
-                g.add_edge(matching_address, fuzzy_match_combo)
-        elif cls.check_name(row) and pd.notnull(name):
-            g.add_edge(name, fuzzy_match_combo)
-        else:
-            g.add_node(fuzzy_match_combo)
+        add_name: bool = not row["exclude_name"]
+        add_address: bool = cls.check_address(
+            address,
+            row["exclude_address"],  # this should ALWAYS be False, since string matching will never run on excluded addresses
+            params["include_unresearched"],
+            row["is_researched_t"],
+            params["include_orgs"],
+            row["is_org_address_t"]
+        )
+
+        if add_name:
+            g.add_edge(name, string_match)
+        if add_address:
+            g.add_edge(address, string_match)
 
     @classmethod
     def process_row_network_entity(
         cls,
         g: nx.Graph,
         row: pd.Series,
-        df_analysis: pd.DataFrame,
         params: NetworkMatchParams
     ) -> None:
-        """Processes nodes and edges related EXCLUSIVELY to entity_name and entity_address"""
+        """
+        Processes nodes and edges for entity addresses.
+        """
+
+        # todo: deal with this elsewhere
         entities_to_ignore: List[str] = ["CHICAGO TITLE LAND TRUST COMPANY", "CHICAGO TITLE LAND"]
-        taxpayer_name = row[params["taxpayer_name_col"]]
-        entity_name = row[params["entity_name_col"]]
-        fuzzy_match_combo = row[params["string_match_name"]]
+
+        # add_name boolean not necessary - entities will NEVER be exclude_name == True
+        entity_name: str = row[params["taxpayer_name_col"]]
         entity_addresses = [
-            row["merge_address_1"],
-            row["merge_address_2"],
-            row["merge_address_3"],
+            row["entity_address_1"],
+            row["entity_address_2"],
+            row["entity_address_3"],
         ]
+
         for i, address in enumerate(entity_addresses):
-            if cls.check_address(address, df_analysis, params["include_orgs"], params["include_unresearched"]):
-                if pd.notnull(address) and entity_name not in entities_to_ignore:
-                    g.add_edge(entity_name, entity_addresses[i])
-                    g.add_edge(taxpayer_name, entity_addresses[i])
-                    if pd.notnull(fuzzy_match_combo):
-                        g.add_edge(entity_name, fuzzy_match_combo)
-                        g.add_edge(entity_addresses[i], fuzzy_match_combo)
-                elif pd.notnull(address):
-                    g.add_edge(taxpayer_name, entity_addresses[i])
-                    if pd.notnull(fuzzy_match_combo):
-                        g.add_edge(entity_addresses[i], fuzzy_match_combo)
+            add_address: bool = cls.check_address(
+                address,
+                row[f"exclude_address_e{i+1}"],
+                params["include_unresearched"],
+                row[f"is_researched_e{i+1}"],
+                params["include_orgs"],
+                row[f"is_org_address_e{i+1}"],
+            )
+            if add_address and entity_name not in entities_to_ignore:
+                g.add_edge(entity_name, address)
 
     @classmethod
     def taxpayers_network(
@@ -281,7 +273,6 @@ class NetworkMatchBase(MatchBase):
         Generates and NetworkX graph object containing nodes and edges for rental dataset based on parameters. Returns
         graph object and dataframe with associated component IDs.
         """
-        # initialize graph object
         gMatches = nx.Graph()
 
         t.print_with_dots("Adding taxpayer names and addresses to network graph object")
@@ -308,7 +299,7 @@ class NetworkMatchBase(MatchBase):
             processed_count = 0
             for i, row in df_taxpayers.iterrows():
                 if pd.notnull(row[params["string_match_name"]]):
-                    cls.process_row_network_string_match(gMatches, row, df_analysis, params)
+                    cls.process_row_network_string_match(gMatches, row, params)
                 processed_count += 1
                 progress.update(
                     task.id,
@@ -325,7 +316,7 @@ class NetworkMatchBase(MatchBase):
             processed_count = 0
             for i, row in df_taxpayers.iterrows():
                 if pd.notnull(row[params["entity_name_col"]]):
-                    cls.process_row_network_entity(gMatches, row, df_analysis, params)
+                    cls.process_row_network_entity(gMatches, row, params)
                 processed_count += 1
                 progress.update(
                     task.id,
@@ -362,9 +353,7 @@ class NetworkMatchBase(MatchBase):
         fuzzy_matches_set = list(set(df_taxpayers[params["string_match_name"]].dropna().unique()))
         clean_addresses_set = list(set(
             list(set(df_taxpayers["raw_address_v"].dropna().unique())) +
-            list(set(df_taxpayers["merge_address_1"].dropna().unique()))  #+
-            # list(set(df_unique["GCD_FORMATTED_ADDRESS_ADDRESS_2_MATCH"].dropna().unique())) +
-            # list(set(df_unique["GCD_FORMATTED_ADDRESS_ADDRESS_3_MATCH"].dropna().unique()))
+            list(set(df_taxpayers["merge_address_1"].dropna().unique()))
         ))
         entity_names_set = list(set(df_taxpayers[params["entity_name_col"]].dropna().unique()))
         # loop through connected to components to associate component IDs
@@ -461,12 +450,11 @@ class NetworkMatchBase(MatchBase):
         return df_taxpayers
 
     @classmethod
-    def set_network_text(cls, network_id: int, gMatches: nx.Graph, df_taxpayers: pd.DataFrame):
+    def set_network_text(cls, network_id: int, gMatches: nx.Graph, df_taxpayers: pd.DataFrame) -> pd.DataFrame:
         df_taxpayers[f"network_{network_id}_text"] = np.nan
-        unique_networks = df_taxpayers[f"final_component_{network_id}"].unique()
+        unique_networks = df_taxpayers[f"final_component_{network_id}"].dropna().unique()
         components = list(nx.connected_components(gMatches))
         for ntwk in unique_networks:
-            if ntwk == None or np.isnan(ntwk): continue
             nodes = list(gMatches.subgraph(components[int(ntwk)]).nodes())
             edges = list(gMatches.subgraph(components[int(ntwk)]).edges())
             if len(edges) == 0:
@@ -519,7 +507,7 @@ class NetworkMatchBase(MatchBase):
         t.print_with_dots("Building network graph for string match results")
         gMatches = nx.Graph()
         for i, row in df_matches.iterrows():
-            cls.build_edge(gMatches, row["original_doc"], row["matched_doc"])
+            gMatches.add_edge(gMatches, row["original_doc"], row["matched_doc"])
 
         # loop through each connected component
         t.print_with_dots("Building dictionary to map taxpayer records to connected components")

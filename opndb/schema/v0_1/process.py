@@ -557,19 +557,19 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         title="Entity Core Name",
         description="Core name of corporation or LLC that was matched with the taxpayer record. Will be null if no match was found."
     )
-    merge_address_1: str = pa.Field(
+    entity_address_1: str = pa.Field(
         nullable=True,
         unique=False,
         title="Merge Address 1",
         description="President address (corps) or office address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
     )
-    merge_address_2: str = pa.Field(
+    entity_address_2: str = pa.Field(
         nullable=True,
         unique=False,
         title="Merge Address 2",
         description="Secretary address (corps) or manager/member address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
     )
-    merge_address_3: str = pa.Field(
+    entity_address_3: str = pa.Field(
         nullable=True,
         unique=False,
         title="Merge Address 3",
@@ -593,17 +593,71 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         title="Is String Match?",
         description="Boolean representing whether or not the match was made as a result of string matching workflow"
     )
-
-
-class TaxpayersStringMatched(TaxpayersPrepped):
-    # --------------------
-    # ----MODEL FIELDS----
-    # --------------------
     match_address: str = pa.Field(
         nullable=False,
         unique=False,
         title="Match Address",
         description="Taxpayer address to be used for string matching. Either the validated address (if successfully validated) or unvalidated cleaned address (if unsuccessfully validated)."
+    )
+    exclude_address_t: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Taxpayer Mailing)",
+    )
+    exclude_address_e1: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Entity 1)",
+    )
+    exclude_address_e2: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Entity 2)",
+    )
+    exclude_address_e3: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Entity 3)",
+    )
+    is_researched_t: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Taxpayer Mailing)",
+    )
+    is_researched_e1: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Entity 1)",
+    )
+    is_researched_e2: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Entity 2)",
+    )
+    is_researched_e3: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Entity 3)",
+    )
+    is_org_address_t: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Landlord Org Address? (Taxpayer Mailing)",
+    )
+    is_org_address_e1: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Landlord Org Address? (Entity 1)",
+    )
+    is_org_address_e2: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Landlord Org Address? (Entity 2)",
+    )
+    is_org_address_e3: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Landlord Org Address? (Entity 3)",
     )
     clean_name_address: str = pa.Field(
         nullable=False,
@@ -617,12 +671,12 @@ class TaxpayersStringMatched(TaxpayersPrepped):
         title="Core Name Address",
         description="Concatenation of core taxpayer name and cleaned address"
     )
-    include_address: bool = pa.Field(
-        nullable=False,
-        unique=False,
-        title="Include Address?",
-        description="Boolean representing whether or not the address should be included in the matching process. Determined based on manual address research."
-    )
+
+
+class TaxpayersStringMatched(TaxpayersPrepped):
+    # --------------------
+    # ----MODEL FIELDS----
+    # --------------------
     string_matched_name_1: str = pa.Field(
         nullable=True,
         unique=False,

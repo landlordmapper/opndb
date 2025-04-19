@@ -178,18 +178,18 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df_taxpayers
 
     @classmethod
-    def set_is_common_name(cls, df_taxpayers: pd.DataFrame, df_freq_names: pd.DataFrame) -> pd.DataFrame:
+    def set_exclude_name(cls, df_taxpayers: pd.DataFrame, df_freq_names: pd.DataFrame) -> pd.DataFrame:
         """
-        Adds is_common_name boolean column to dataframe. Common names are currently obtained from frequent_tax_names
+        Adds exclude_name boolean column to dataframe. Common names are currently obtained from frequent_tax_names
         dataset manually inputted.
 
         :param df_taxpayers: Dataframe containing taxpayer record data
         :param df_freq_names: Dataframe containing name analysis spreadsheet
         """
-        df_common: pd.DataFrame = df_freq_names[df_freq_names["is_common_name"] == True]
-        common_names: list[str] = list(df_common["value"])
-        df_taxpayers["is_common_name"] = df_taxpayers["clean_name"].apply(
-            lambda name: clean_base.get_is_common_name(name, common_names)
+        df_common: pd.DataFrame = df_freq_names[df_freq_names["exclude_name"] == True]
+        names_to_exclude: list[str] = list(df_common["value"])
+        df_taxpayers["exclude_name"] = df_taxpayers["clean_name"].apply(
+            lambda name: clean_base.get_exclude_name(name, names_to_exclude)
         )
         return df_taxpayers
 
@@ -296,6 +296,39 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         )
         return df
 
+    @classmethod
+    def set_exclude_address(
+        cls,
+        exclude_addrs: list[str],
+        df: pd.DataFrame,
+        address_col: str,
+        suffix: str
+    ) -> pd.DataFrame:
+        df[f"exclude_address_{suffix}"] = df[address_col].apply(lambda addr: addr in exclude_addrs)
+        return df
+
+    @classmethod
+    def set_is_researched(
+        cls,
+        researched_addrs: list[str],
+        df: pd.DataFrame,
+        address_col: str,
+        suffix: str
+    ) -> pd.DataFrame:
+        df[f"is_researched_{suffix}"] = df[address_col].apply(lambda addr: addr in researched_addrs)
+        return df
+
+    @classmethod
+    def set_is_org_address(
+        cls,
+        org_addrs: list[str],
+        df: pd.DataFrame,
+        address_col: str,
+        suffix: str
+    ) -> pd.DataFrame:
+        df[f"is_org_address_{suffix}"] = df[address_col].apply(lambda addr: addr in org_addrs)
+        return df
+
 
 class DataFrameColumnManipulators(DataFrameOpsBase):
     """Dataframe operations that manipulate or transform an existing dataframe column."""
@@ -319,6 +352,13 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         """
         df = df.apply(lambda row: clean_name.fix_banks(row, banks), axis=1)
         return df
+
+    @classmethod
+    def set_corp_llc_names_taxpayers(cls, df_taxpayers: pd.DataFrame) -> pd.DataFrame:
+        mask = df_taxpayers["entity_clean_name"].notna()
+        df_taxpayers.loc[mask, "clean_name"] = df_taxpayers.loc[mask, "entity_clean_name"]
+        df_taxpayers.loc[mask, "core_name"] = df_taxpayers.loc[mask, "entity_core_name"]
+        return df_taxpayers
 
 
 class DataFrameSubsetters(DataFrameOpsBase):
@@ -546,7 +586,7 @@ class DataFrameDeduplicators(DataFrameOpsBase):
 class DataFrameConcatenators(DataFrameOpsBase):
 
     @classmethod
-    def get_merge_address(cls, row: pd.Series, addr_col: str) -> pd.Series:
+    def get_entity_merge_address(cls, row: pd.Series, addr_col: str) -> pd.Series:
         """
         Checks whether a validated address exists for the specified address column passed as a parameter. If it DOES
         exist, it returns it. If it does NOT exist, it returns the raw address.
@@ -559,24 +599,24 @@ class DataFrameConcatenators(DataFrameOpsBase):
     @classmethod
     def combine_corps_llcs(cls, df_corps: pd.DataFrame, df_llcs: pd.DataFrame) -> pd.DataFrame:
         # rename address cols to address_1, address_2, address_3
-        df_corps["merge_address_1"] = df_corps.apply(
-            lambda row: cls.get_merge_address(row, "raw_president_address"), axis=1
+        df_corps["entity_address_1"] = df_corps.apply(
+            lambda row: cls.get_entity_merge_address(row, "raw_president_address"), axis=1
         )
-        df_corps["merge_address_2"] = df_corps.apply(
-            lambda row: cls.get_merge_address(row, "raw_secretary_address"), axis=1
+        df_corps["entity_address_2"] = df_corps.apply(
+            lambda row: cls.get_entity_merge_address(row, "raw_secretary_address"), axis=1
         )
-        df_llcs["merge_address_1"] = df_llcs.apply(
-            lambda row: cls.get_merge_address(row, "raw_office_address"), axis=1
+        df_llcs["entity_address_1"] = df_llcs.apply(
+            lambda row: cls.get_entity_merge_address(row, "raw_office_address"), axis=1
         )
-        df_llcs["merge_address_2"] = df_llcs.apply(
-            lambda row: cls.get_merge_address(row, "raw_manager_member_address"), axis=1
+        df_llcs["entity_address_2"] = df_llcs.apply(
+            lambda row: cls.get_entity_merge_address(row, "raw_manager_member_address"), axis=1
         )
-        df_llcs["merge_address_3"] = df_llcs.apply(
-            lambda row: cls.get_merge_address(row, "raw_agent_address"), axis=1
+        df_llcs["entity_address_3"] = df_llcs.apply(
+            lambda row: cls.get_entity_merge_address(row, "raw_agent_address"), axis=1
         )
         # concatenate, take slice of only necessary columns
-        df_corps = df_corps[["clean_name", "core_name", "merge_address_1", "merge_address_2"]]
-        df_llcs = df_llcs[["clean_name", "core_name", "merge_address_1", "merge_address_2", "merge_address_3"]]
+        df_corps = df_corps[["clean_name", "core_name", "entity_address_1", "entity_address_2"]]
+        df_llcs = df_llcs[["clean_name", "core_name", "entity_address_1", "entity_address_2", "entity_address_3"]]
         df_out: pd.DataFrame = pd.concat([df_corps, df_llcs], ignore_index=True)
         df_out.rename(columns={"clean_name": "entity_clean_name"}, inplace=True)
         df_out.rename(columns={"core_name": "entity_core_name"}, inplace=True)

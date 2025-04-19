@@ -1213,11 +1213,8 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
 class WkflAnalysisFinal(WorkflowStandardBase):
     """
     Fixes taxpayer names based on standardized spellings manually specified in the fixing_tax_names dataset. Adds
-    boolean columns to taxpayer records for is_common_name and is_landlord_org, based on manual input in
-    fixing_tax_names and address_analysis datasets.
-
-    INPUTS:
-    OUTPUTS:
+    boolean columns to taxpayer records for exclude_name, based on manual input in
+    fixing_tax_names dataset.
     """
     WKFL_NAME: str = "FIX NAMES ADDRESSES WORKFLOW"
     WKFL_DESC: str = "Changes taxpayer names and validated addresses based on manual input."
@@ -1279,10 +1276,10 @@ class WkflAnalysisFinal(WorkflowStandardBase):
         banks: dict[str, str] = self.get_banks_dict(df_fix_names)
         t.print_with_dots("Fixing taxpayer names")
         df_taxpayers = colm_df.fix_tax_names(df_taxpayers, banks)
-        t.print_with_dots("Setting is_common_name boolean column")
-        df_taxpayers = cols_df.set_is_common_name(df_taxpayers, df_freq_names)
-        t.print_with_dots("Setting is_landlord_org boolean column")
-        df_taxpayers = cols_df.set_is_landlord_org(df_taxpayers, df_analysis)
+        t.print_with_dots("Setting exclude_name boolean column")
+        df_taxpayers = cols_df.set_exclude_name(df_taxpayers, df_freq_names)
+        # t.print_with_dots("Setting is_landlord_org boolean column")
+        # df_taxpayers = cols_df.set_is_landlord_org(df_taxpayers, df_analysis)
         self.dfs_out["taxpayers_fixed"] = df_taxpayers
 
     def summary_stats(self) -> None:
@@ -1302,16 +1299,6 @@ class WkflAnalysisFinal(WorkflowStandardBase):
 class WkflRentalSubset(WorkflowStandardBase):
     """
     Subset rental properties based on class code descriptions.
-
-    INPUT:
-        - Building class codes dataset
-            - 'ROOT/processed/bldg_class_codes[FileExt]'
-        - Taxpayer record dataset
-            - 'ROOT/processed/taxpayer_records[FileExt]'
-        - Property dataset
-    OUTPUT:
-        - Rental-subsetted taxpayer dataset
-            - 'ROOT/processed/tax_records_subsetted[FileExt]'
     """
     WKFL_NAME: str = "RENTAL SUBSET WORKFLOW"
     WKFL_DESC: str = "Subsets property and taxpayer record datasets for rental properties only."
@@ -1565,6 +1552,59 @@ class WkflCleanMerge(WorkflowStandardBase):
         df_llcs_sub = df_llcs[df_llcs["clean_name"].isin(names)]
         return df_corps_sub, df_llcs_sub
 
+    def execute_post_merge_column_ops(
+        self,
+        df_taxpayers: pd.DataFrame,
+        df_analysis: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Sets taxpayer clean and core name to match exactly the entity clean/core name. Sets boolean columns indicating
+        whether each address has been researched, should be excluded, and whether it is associated with a landlord
+        organization, to be used by the string matching and network graph workflows.
+        """
+        # set taxpayer clean and core name equal to corporate/llc records clean and core names
+        df_matches: pd.DataFrame = df_taxpayers[
+            (df_taxpayers["is_clean_match"] == True) |
+            (df_taxpayers["is_core_match"] == True) |
+            (df_taxpayers["is_string_match"] == True)
+        ][["clean_name", "core_name", "entity_clean_name", "entity_core_name"]]
+        df_taxpayers = colm_df.set_corp_llc_names_taxpayers(df_taxpayers)
+
+        # fetch addresses to exclude automatically from analysis
+        df_exclude: pd.DataFrame = df_analysis[
+            (df_analysis["is_lawfirm"] == True) |
+            (df_analysis["is_missing_suite"] == True) |
+            (df_analysis["is_financial_services"] == True) |
+            (df_analysis["is_virtual_office_agent"] == True)
+        ]
+        exclude_addrs: list[str] = list(df_exclude["value"].unique())
+        # fetch researched addresses from analysis
+        df_researched: pd.DataFrame = df_analysis[df_analysis["is_researched"] == True]
+        researched_addrs: list[str] = list(df_researched["value"].unique())
+        # fetch landlord org addresses from analysis
+        df_orgs: pd.DataFrame = df_analysis[df_analysis["is_landlord_org"] == True]
+        org_addrs: list[str] = list(df_orgs["value"].unique())
+
+        t.print_with_dots("Adding match_address column to taxpayer records")
+        df_taxpayers = cols_df.set_match_address(df_taxpayers)
+        # address columns to be looped through for boolean generators
+        address_cols: list[str] = ["match_address", "entity_address_1", "entity_address_2", "entity_address_3"]
+
+        for address_col in address_cols:
+            suffix = "t" if address_col == "match_address" else f"e{address_col[-1]}"
+            t.print_with_dots(f"Adding exclude_address_{suffix} column to taxpayer records")
+            df_taxpayers = cols_df.set_exclude_address(exclude_addrs, df_taxpayers, address_col, suffix)
+            t.print_with_dots("Adding is_researched columns to taxpayer records")
+            df_taxpayers = cols_df.set_is_researched(researched_addrs, df_taxpayers, address_col, suffix)
+            t.print_with_dots("Adding is_org_address columns to taxpayer records")
+            df_taxpayers = cols_df.set_is_org_address(org_addrs, df_taxpayers, address_col, suffix)
+
+        # add name+address concatenated columns to use for matching
+        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "clean_name", "match_address")
+        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "core_name", "match_address")
+
+        return df_taxpayers
+
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
@@ -1581,6 +1621,10 @@ class WkflCleanMerge(WorkflowStandardBase):
                 "path": path_gen.processed_llcs_merged(configs),
                 "schema": LLCsMerged,
             },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+            }
         }
         self.load_dfs(load_map)
 
@@ -1590,6 +1634,7 @@ class WkflCleanMerge(WorkflowStandardBase):
             "taxpayers_subsetted": TaxpayersSubsetted,
             "corps_merged": CorpsMerged,
             "llcs_merged": LLCsMerged,
+            "address_analysis": AddressAnalysis,
         }
 
         # run validators
@@ -1600,6 +1645,7 @@ class WkflCleanMerge(WorkflowStandardBase):
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_subsetted"].copy()
         df_corps: pd.DataFrame = self.dfs_in["corps_merged"].copy()
         df_llcs: pd.DataFrame = self.dfs_in["llcs_merged"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
 
         # generate columns for data processing
         df_taxpayers, df_corps, df_llcs = self.execute_column_generators(df_taxpayers, df_corps, df_llcs)
@@ -1616,7 +1662,7 @@ class WkflCleanMerge(WorkflowStandardBase):
         # string matching
         df_string_merge: pd.DataFrame = self.execute_string_match_merge(df_taxpayers_remaining, df_combined)
 
-        # output dfs
+        # concatenate dfs
         df_taxpayers = pd.concat([
             df_clean_merge[df_clean_merge["entity_clean_name"].notnull()],
             df_core_merge[df_core_merge["entity_core_name"].notnull()],
@@ -1625,6 +1671,11 @@ class WkflCleanMerge(WorkflowStandardBase):
         df_corps_sub, df_llcs_sub = self.execute_corp_llc_subset(
             df_taxpayers, df_corps, df_llcs
         )
+
+        # add address boolean columns
+        df_taxpayers = self.execute_post_merge_column_ops(df_taxpayers, df_analysis)
+
+        # set output dfs
         self.dfs_out["taxpayers_prepped"] = df_taxpayers
         self.dfs_out["corps_subsetted"] = df_corps_sub
         self.dfs_out["llcs_subsetted"] = df_llcs_sub
@@ -1699,15 +1750,6 @@ class WkflStringMatch(WorkflowStandardBase):
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
             },
         ]
-
-    def execute_column_generators(self, df_taxpayers) -> pd.DataFrame:
-        t.print_with_dots("Generating columns for matching")
-        # set address column so that if there is no validated address for a property, the raw address is used instead
-        df_taxpayers = cols_df.set_match_address(df_taxpayers)
-        # add name+address concatenated columns to use for matching
-        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "clean_name", "match_address")
-        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "core_name", "match_address")
-        return df_taxpayers
 
     def execute_string_matching(
         self,
@@ -1795,8 +1837,6 @@ class WkflStringMatch(WorkflowStandardBase):
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
         # generate matrix parameters
         params_matrix: List[StringMatchParams] = self.execute_param_builder()
-        # generate columns
-        df_taxpayers = self.execute_column_generators(df_taxpayers)
         # run matching
         df_taxpayers_matched = self.execute_string_matching(params_matrix, df_taxpayers, df_analysis)
         # set out dfs

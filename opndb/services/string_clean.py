@@ -112,9 +112,9 @@ class CleanStringBase:
         return False
 
     @classmethod
-    def get_is_common_name(cls, text: str, common_names: list[str]) -> bool:
+    def get_exclude_name(cls, text: str, names_to_exclude: list[str]) -> bool:
         """Returns True if the string is found in common_names list."""
-        return text in common_names
+        return text in names_to_exclude
 
     @classmethod
     def get_is_landlord_org(cls, text: str, org_addrs: list[str]) -> bool:
