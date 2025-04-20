@@ -136,18 +136,18 @@ class WorkflowBase(ABC):
                 console.print(f"{error_df.head()}")
                 error_indices: np.ndarray = error_df["index"].dropna().unique()
                 error_rows_df: pd.DataFrame = df.loc[error_indices]
-                proceed, save_error_df = t.validator_failed()
-                if save_error_df:
-                    ops_df.save_df(
-                        error_df,
-                        path_gen.validation_errors(configs, wkfl_name, "summary")
-                    )
-                    ops_df.save_df(
-                        error_rows_df,
-                        path_gen.validation_errors(configs, wkfl_name, "error_rows")
-                    )
-                if not proceed:
-                    sys.exit()
+                # proceed, save_error_df = t.validator_failed()
+                # if save_error_df:
+                ops_df.save_df(
+                    error_df,
+                    path_gen.validation_errors(configs, wkfl_name, "summary")
+                )
+                ops_df.save_df(
+                    error_rows_df,
+                    path_gen.validation_errors(configs, wkfl_name, "error_rows")
+                )
+                # if not proceed:
+                #     sys.exit()
                 console.print("\n")
 
     def save_dfs(self, save_map: dict[str, Path]) -> None:
@@ -1071,7 +1071,7 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
         df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
         # frequent_tax_names
         self.dfs_out["frequent_tax_names"] = df_freq
-        self.dfs_out["frequent_tax_names"]["is_common_name"] = ""
+        self.dfs_out["frequent_tax_names"]["exclude_name"] = ""
         # fixing_tax_names
         self.dfs_out["fixing_tax_names"] = pd.DataFrame(
             columns=["raw_value", "standardized_value"],
@@ -1586,9 +1586,34 @@ class WkflCleanMerge(WorkflowStandardBase):
         df_taxpayers = cols_df.set_match_address(df_taxpayers)
         # address columns to be looped through for boolean generators
         address_cols: list[str] = ["match_address", "entity_address_1", "entity_address_2", "entity_address_3"]
+        # todo: add address_cols object
+        # address_cols_obj = [
+        #     {
+        #         "raw": "raw_address",
+        #         "validated": "raw_address_v",
+        #         "match": "match_address",
+        #     },
+        #     {
+        #         "raw": "entity_address_1",
+        #         "validated": "entity_address_1_v",
+        #         "match": "entity_match_address_1",
+        #     },
+        #     {
+        #         "raw": "entity_address_2",
+        #         "validated": "entity_address_2_v",
+        #         "match": "entity_match_address_2",
+        #     },
+        #     {
+        #         "raw": "entity_address_3",
+        #         "validated": "entity_address_3_v",
+        #         "match": "entity_match_address_3",
+        #     },
+        # ]
 
         for address_col in address_cols:
             suffix = "t" if address_col == "match_address" else f"e{address_col[-1]}"
+            # t.print_with_dots(f"Adding is_validated_{suffix} column to taxpayer records")
+            # df_taxpayers = cols_df.set_is_validated(df_taxpayers, address_col, suffix)
             t.print_with_dots(f"Adding exclude_address_{suffix} column to taxpayer records")
             df_taxpayers = cols_df.set_exclude_address(exclude_addrs, df_taxpayers, address_col, suffix)
             t.print_with_dots("Adding is_researched columns to taxpayer records")
@@ -1748,12 +1773,10 @@ class WkflStringMatch(WorkflowStandardBase):
             },
         ]
 
-    def execute_string_matching(
-        self,
+    def execute_string_matching(self,
         params_matrix: List[StringMatchParams],
         df_taxpayers: pd.DataFrame,
-        df_analysis: pd.DataFrame
-    ):
+    ) -> pd.DataFrame:
         """Returns final dataset to be outputted"""
         t.print_with_dots("Executing string matching")
         for i, params in enumerate(params_matrix):
@@ -1768,7 +1791,7 @@ class WkflStringMatch(WorkflowStandardBase):
             df_taxpayers["include_address"] = df_taxpayers.apply(
                 lambda row: MatchBase.check_address(
                     row["match_address"],
-                    row["exclude_address"],
+                    row["exclude_address_t"],
                     params["include_unresearched"],
                     row["is_researched_t"],
                     params["include_orgs"],
@@ -1815,28 +1838,24 @@ class WkflStringMatch(WorkflowStandardBase):
                 "schema": TaxpayersPrepped,
                 "recursive_bools": True
             },
-            "address_analysis": {
-                "path": path_gen.analysis_address_analysis(configs),
-                "schema": AddressAnalysis,
-            },
         }
         self.load_dfs(load_map)
 
     def process(self) -> None:
-        schema_map = {
-            "taxpayers_prepped": TaxpayersPrepped,
-            "address_analysis": AddressAnalysis,
-        }
-        # run validators
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-        # copy dfs
+        # copy df
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_prepped"].copy()
-        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        # validate
+        self.run_validator(
+            "taxpayers_prepped",
+            df_taxpayers,
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            TaxpayersPrepped
+        )
         # generate matrix parameters
         params_matrix: List[StringMatchParams] = self.execute_param_builder()
         # run matching
-        df_taxpayers_matched = self.execute_string_matching(params_matrix, df_taxpayers, df_analysis)
+        df_taxpayers_matched = self.execute_string_matching(params_matrix, df_taxpayers)
         # set out dfs
         self.dfs_out["taxpayers_string_matched"] = df_taxpayers_matched
 
@@ -1878,46 +1897,40 @@ class WkflNetworkGraph(WorkflowStandardBase):
         return [
             {
                 "taxpayer_name_col": "clean_name",
-                "entity_name_col": "entity_clean_name",
                 "include_orgs": False,
                 "include_unresearched": False,
                 "string_match_name": "string_matched_name_1",
             },
             {
                 "taxpayer_name_col": "clean_name",
-                "entity_name_col": "entity_core_name",
                 "include_orgs": False,
                 "include_unresearched": False,
                 "string_match_name": "string_matched_name_3",
             },
             {
                 "taxpayer_name_col": "core_name",
-                "entity_name_col": "entity_clean_name",
                 "include_orgs": False,
                 "include_unresearched": True,
                 "string_match_name": "string_matched_name_3",
             },
-            {
-                "taxpayer_name_col": "clean_name",
-                "entity_name_col": "entity_clean_name",
-                "include_orgs": True,
-                "include_unresearched": False,
-                "string_match_name": "string_matched_name_2",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "entity_name_col": "entity_clean_name",
-                "include_orgs": True,
-                "include_unresearched": True,
-                "string_match_name": "string_matched_name_3",
-            },
-            {
-                "taxpayer_name_col": "core_name",
-                "entity_name_col": "entity_clean_name",
-                "include_orgs": True,
-                "include_unresearched": True,
-                "string_match_name": "string_matched_name_3",
-            },
+            # {
+            #     "taxpayer_name_col": "clean_name",
+            #     "include_orgs": True,
+            #     "include_unresearched": False,
+            #     "string_match_name": "string_matched_name_2",
+            # },
+            # {
+            #     "taxpayer_name_col": "clean_name",
+            #     "include_orgs": True,
+            #     "include_unresearched": True,
+            #     "string_match_name": "string_matched_name_3",
+            # },
+            # {
+            #     "taxpayer_name_col": "core_name",
+            #     "include_orgs": True,
+            #     "include_unresearched": True,
+            #     "string_match_name": "string_matched_name_3",
+            # },
         ]
 
     def execute_network_graph_generator(
@@ -1929,12 +1942,11 @@ class WkflNetworkGraph(WorkflowStandardBase):
         df_researched: pd.DataFrame = df_analysis[df_analysis["is_researched"] == True]
         for i, params in enumerate(params_matrix):
             console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
-            console.print("ENTITY NAME COLUMN:", params["entity_name_col"])
             console.print("INCLUDE ORGS:", params["include_orgs"])
             console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
             console.print("STRING MATCH NAME:", params["string_match_name"])
             # build network graph object
-            gMatches = NetworkMatchBase.taxpayers_network(df_taxpayers, df_researched, params)
+            gMatches = NetworkMatchBase.taxpayers_network(df_taxpayers, params)
             # assign IDs to taxpayer records based on name/address presence in graph object
             df_taxpayers = NetworkMatchBase.set_taxpayer_component(i+1, df_taxpayers, gMatches, params)
             # set network names for each taxpayer record (long AND short)
@@ -1949,6 +1961,7 @@ class WkflNetworkGraph(WorkflowStandardBase):
             "taxpayers_string_matched": {
                 "path": path_gen.processed_taxpayers_string_matched(configs),
                 "schema": TaxpayersStringMatched,
+                "recursive_bools": True
             },
             "address_analysis": {
                 "path": path_gen.analysis_address_analysis(configs),

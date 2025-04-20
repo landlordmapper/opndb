@@ -167,7 +167,6 @@ class NetworkMatchBase(MatchBase):
         cls,
         g: nx.Graph,
         row: pd.Series,
-        df_analysis: pd.DataFrame,
         params: NetworkMatchParams,
     ) -> None:
         """
@@ -177,11 +176,10 @@ class NetworkMatchBase(MatchBase):
 
         name: str = row[params["taxpayer_name_col"]]
         address: str = row["match_address"]
-
         add_name: bool = not row["exclude_name"]
         add_address: bool = cls.check_address(
             address,
-            row["exclude_address"],
+            row["exclude_address_t"],
             params["include_unresearched"],
             row["is_researched_t"],
             params["include_orgs"],
@@ -216,7 +214,7 @@ class NetworkMatchBase(MatchBase):
         add_name: bool = not row["exclude_name"]
         add_address: bool = cls.check_address(
             address,
-            row["exclude_address"],  # this should ALWAYS be False, since string matching will never run on excluded addresses
+            row["exclude_address_t"],  # this should ALWAYS be False, since string matching will never run on excluded addresses
             params["include_unresearched"],
             row["is_researched_t"],
             params["include_orgs"],
@@ -266,7 +264,6 @@ class NetworkMatchBase(MatchBase):
     def taxpayers_network(
         cls,
         df_taxpayers: pd.DataFrame,
-        df_analysis: pd.DataFrame,
         params: NetworkMatchParams
     ) -> nx.Graph:
         """
@@ -282,7 +279,7 @@ class NetworkMatchBase(MatchBase):
             task = progress.tasks[0]
             processed_count = 0
             for i, row in df_taxpayers.iterrows():
-                cls.process_row_network(gMatches, row, df_analysis, params)
+                cls.process_row_network(gMatches, row, params)
                 processed_count += 1
                 progress.update(
                     task.id,
@@ -315,7 +312,7 @@ class NetworkMatchBase(MatchBase):
             task = progress.tasks[0]
             processed_count = 0
             for i, row in df_taxpayers.iterrows():
-                if pd.notnull(row[params["entity_name_col"]]):
+                if pd.notnull(row["entity_clean_name"]):
                     cls.process_row_network_entity(gMatches, row, params)
                 processed_count += 1
                 progress.update(
@@ -352,10 +349,11 @@ class NetworkMatchBase(MatchBase):
         taxpayer_names_set = list(set(df_taxpayers[params["taxpayer_name_col"]].dropna().unique()))
         fuzzy_matches_set = list(set(df_taxpayers[params["string_match_name"]].dropna().unique()))
         clean_addresses_set = list(set(
-            list(set(df_taxpayers["raw_address_v"].dropna().unique())) +
-            list(set(df_taxpayers["merge_address_1"].dropna().unique()))
+            list(df_taxpayers["match_address"].dropna()) +
+            list(df_taxpayers["entity_address_1"].dropna()) +
+            list(df_taxpayers["entity_address_2"].dropna()) +
+            list(df_taxpayers["entity_address_3"].dropna())
         ))
-        entity_names_set = list(set(df_taxpayers[params["entity_name_col"]].dropna().unique()))
         # loop through connected to components to associate component IDs
         # assign components to unique values from each column used to generate nodes and edges
         component_map: dict[str, int] = {}
@@ -367,9 +365,6 @@ class NetworkMatchBase(MatchBase):
                     component_map[component] = i
                 elif component in clean_addresses_set:
                     component_map[component] = i
-                elif component in entity_names_set:
-                    component_map[component] = i
-
         df_taxpayers[f"final_component_{network_id}"] = df_taxpayers.apply(
             lambda row: cls.set_component(row, component_map, params), axis=1
         )
@@ -389,12 +384,11 @@ class NetworkMatchBase(MatchBase):
         """
         keys_to_check = [
             row[params["taxpayer_name_col"]],
-            row["raw_address_v"],
+            row["match_address"],
             row[params["string_match_name"]],
-            row[params["entity_name_col"]],
-            row["merge_address_1"],
-            row["merge_address_2"],
-            row["merge_address_3"],
+            row["entity_address_1"],
+            row["entity_address_2"],
+            row["entity_address_3"],
         ]
         for key in keys_to_check:
             if key in component_map.keys():
@@ -507,7 +501,7 @@ class NetworkMatchBase(MatchBase):
         t.print_with_dots("Building network graph for string match results")
         gMatches = nx.Graph()
         for i, row in df_matches.iterrows():
-            gMatches.add_edge(gMatches, row["original_doc"], row["matched_doc"])
+            gMatches.add_edge(row["original_doc"], row["matched_doc"])
 
         # loop through each connected component
         t.print_with_dots("Building dictionary to map taxpayer records to connected components")

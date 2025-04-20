@@ -167,7 +167,6 @@ class StringMatchParams(TypedDict):
 
 class NetworkMatchParams(TypedDict):
     taxpayer_name_col: str
-    entity_name_col: str
     include_orgs: bool
     include_unresearched: bool
     string_match_name: str

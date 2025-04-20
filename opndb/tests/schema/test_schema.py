@@ -48,5 +48,3 @@ class TestSchema:
             with tempfile.TemporaryDirectory() as temp_dir:
                 path = report.to_pdf(temp_dir + "/foo.pdf")
                 assert Path(path).exists()
-
-

@@ -329,6 +329,30 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         df[f"is_org_address_{suffix}"] = df[address_col].apply(lambda addr: addr in org_addrs)
         return df
 
+    # @classmethod
+    # def set_is_validated(
+    #     cls,
+    #     df: pd.DataFrame,
+    #     address_col: str,
+    #     suffix: str
+    # ) -> pd.DataFrame:
+    #
+    #     def get_is_validated(row, addr_col: str):
+    #         if addr_col == "match_address":
+    #             if pd.notnull(row["raw_address_v"]):
+    #                 return True
+    #             else:
+    #                 return False
+    #         else:
+    #             if pd.notnull(row[f"{addr_col}_v"]):
+    #                 return True
+    #             else:
+    #                 return False
+    #
+    #     df[f"is_validated_{suffix}"] = df.apply(
+    #         lambda row:
+    #     )
+
 
 class DataFrameColumnManipulators(DataFrameOpsBase):
     """Dataframe operations that manipulate or transform an existing dataframe column."""
@@ -617,24 +641,60 @@ class DataFrameConcatenators(DataFrameOpsBase):
     @classmethod
     def combine_corps_llcs(cls, df_corps: pd.DataFrame, df_llcs: pd.DataFrame) -> pd.DataFrame:
         # rename address cols to address_1, address_2, address_3
-        df_corps["entity_address_1"] = df_corps.apply(
+        df_corps["entity_match_address_1"] = df_corps.apply(
             lambda row: cls.get_entity_merge_address(row, "raw_president_address"), axis=1
         )
-        df_corps["entity_address_2"] = df_corps.apply(
+        df_corps["entity_match_address_2"] = df_corps.apply(
             lambda row: cls.get_entity_merge_address(row, "raw_secretary_address"), axis=1
         )
-        df_llcs["entity_address_1"] = df_llcs.apply(
+        df_llcs["entity_match_address_1"] = df_llcs.apply(
             lambda row: cls.get_entity_merge_address(row, "raw_office_address"), axis=1
         )
-        df_llcs["entity_address_2"] = df_llcs.apply(
+        df_llcs["entity_match_address_2"] = df_llcs.apply(
             lambda row: cls.get_entity_merge_address(row, "raw_manager_member_address"), axis=1
         )
-        df_llcs["entity_address_3"] = df_llcs.apply(
+        df_llcs["entity_match_address_3"] = df_llcs.apply(
             lambda row: cls.get_entity_merge_address(row, "raw_agent_address"), axis=1
         )
+
+        df_corps.rename(columns={
+            "raw_president_address": "entity_address_1",
+            "raw_president_address_v": "entity_address_1_v",
+            "raw_secretary_address": "entity_address_2",
+            "raw_secretary_address_v": "entity_address_2_v",
+        }, inplace=True)
+        df_llcs.rename(columns={
+            "raw_office_address": "entity_address_1",
+            "raw_office_address_v": "entity_address_1_v",
+            "raw_manager_member_address": "entity_address_2",
+            "raw_manager_member_address_v": "entity_address_2_v",
+            "raw_agent_address": "entity_address_3",
+            "raw_agent_address_v": "entity_address_3_v",
+        }, inplace=True)
         # concatenate, take slice of only necessary columns
-        df_corps = df_corps[["clean_name", "core_name", "entity_address_1", "entity_address_2"]]
-        df_llcs = df_llcs[["clean_name", "core_name", "entity_address_1", "entity_address_2", "entity_address_3"]]
+        df_corps = df_corps[[
+            "clean_name",
+            "core_name",
+            "entity_address_1",
+            "entity_address_1_v",
+            "entity_match_address_1",
+            "entity_address_2",
+            "entity_address_2_v",
+            "entity_match_address_2",
+        ]]
+        df_llcs = df_llcs[[
+            "clean_name",
+            "core_name",
+            "entity_address_1",
+            "entity_address_1_v",
+            "entity_match_address_1",
+            "entity_address_2",
+            "entity_address_2_v",
+            "entity_match_address_2",
+            "entity_address_3",
+            "entity_address_3_v",
+            "entity_match_address_3",
+        ]]
         df_out: pd.DataFrame = pd.concat([df_corps, df_llcs], ignore_index=True)
         df_out.rename(columns={"clean_name": "entity_clean_name"}, inplace=True)
         df_out.rename(columns={"core_name": "entity_core_name"}, inplace=True)

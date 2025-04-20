@@ -488,15 +488,10 @@ class TaxpayersFixed(TaxpayersMerged):
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
-    is_common_name: bool = pa.Field(
+    exclude_name: bool = pa.Field(
         nullable=False,
-        title="Is Common Name?",
+        title="Exclude Name?",
         description="Boolean column indicating whether or not the taxpayer name is identified as a 'common name' (ex: John Smith, Juan Garcia, etc.)."
-    )
-    is_landlord_org: bool = pa.Field(
-        nullable=False,
-        title="Is Landlord Org?",
-        description="Boolean column indicating whether or not the validated taxpayer address is associated with a 'landlord organization' (property management company, wealth management company, realtor, etc.)."
     )
 
 
@@ -563,17 +558,33 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         title="Merge Address 1",
         description="President address (corps) or office address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
     )
+    entity_address_1_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 1 (Validated)",
+    )
+
     entity_address_2: str = pa.Field(
         nullable=True,
         unique=False,
         title="Merge Address 2",
         description="Secretary address (corps) or manager/member address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
     )
+    entity_address_2_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 2 (Validated)",
+    )
     entity_address_3: str = pa.Field(
         nullable=True,
         unique=False,
         title="Merge Address 3",
         description="Agent address (LLCs) to be used in matching. Either validated or unvalidated address depending on whether or not the raw address was successfully validated."
+    )
+    entity_address_3_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 3 (Validated)",
     )
     is_clean_match: bool = pa.Field(
         nullable=True,
@@ -599,60 +610,95 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         title="Match Address",
         description="Taxpayer address to be used for string matching. Either the validated address (if successfully validated) or unvalidated cleaned address (if unsuccessfully validated)."
     )
+    is_validated_t: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Validated Address? (Taxpayer)",
+    )
     exclude_address_t: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Exclude Address (Taxpayer Mailing)",
-    )
-    exclude_address_e1: bool = pa.Field(
-        nullable=False,
-        unique=False,
-        title="Exclude Address (Entity 1)",
-    )
-    exclude_address_e2: bool = pa.Field(
-        nullable=False,
-        unique=False,
-        title="Exclude Address (Entity 2)",
-    )
-    exclude_address_e3: bool = pa.Field(
-        nullable=False,
-        unique=False,
-        title="Exclude Address (Entity 3)",
     )
     is_researched_t: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is Researched? (Taxpayer Mailing)",
     )
-    is_researched_e1: bool = pa.Field(
-        nullable=False,
-        unique=False,
-        title="Is Researched? (Entity 1)",
-    )
-    is_researched_e2: bool = pa.Field(
-        nullable=False,
-        unique=False,
-        title="Is Researched? (Entity 2)",
-    )
-    is_researched_e3: bool = pa.Field(
-        nullable=False,
-        unique=False,
-        title="Is Researched? (Entity 3)",
-    )
     is_org_address_t: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is Landlord Org Address? (Taxpayer Mailing)",
+    )
+    entity_match_address_1: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 1 (Match)",
+    )
+    is_validated_e1: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Validated Address? (Entity 1)",
+    )
+    exclude_address_e1: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Entity 1)",
+    )
+    is_researched_e1: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Entity 1)",
     )
     is_org_address_e1: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is Landlord Org Address? (Entity 1)",
     )
+    entity_match_address_2: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 2 (Match)",
+    )
+    is_validated_e2: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Validated Address? (Entity 2)",
+    )
+    exclude_address_e2: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Entity 2)",
+    )
+    is_researched_e2: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Entity 2)",
+    )
     is_org_address_e2: bool = pa.Field(
         nullable=False,
         unique=False,
         title="Is Landlord Org Address? (Entity 2)",
+    )
+    entity_match_address_3: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Merge Address 3 (Match)",
+    )
+    is_validated_e3: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Validated Address? (Entity 2)",
+    )
+    exclude_address_e3: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Entity 3)",
+    )
+    is_researched_e3: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Entity 3)",
     )
     is_org_address_e3: bool = pa.Field(
         nullable=False,
@@ -1215,9 +1261,9 @@ class FrequentTaxNames(OPNDFModel):
         title="Frequency",
         description="Number of times the name appears in the taxpayer dataset"
     )
-    is_common_name: bool = pa.Field(
+    exclude_name: bool = pa.Field(
         nullable=True,
         unique=False,
-        title="Is Common Name?",
+        title="Exclude Name?",
         description="Boolean indicating whether or not the name is a common name and should therefore be excluded from the network graph generation."
     )

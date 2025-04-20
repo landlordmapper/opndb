@@ -732,8 +732,7 @@ class ClassCodes(OPNDFModel):
     _BASIC_CLEAN: list[str] = [
         "code",
         "category",
-        "description",
-        "is_rental"
+        "description"
     ]
 
     @classmethod
