@@ -507,6 +507,39 @@ class TaxpayersSubsetted(TaxpayersFixed):
 
 
 class TaxpayersPrepped(TaxpayersSubsetted):
+    # ---------------------------
+    # ----COLUMN NAME OBJECTS----
+    # ---------------------------
+    _MATCH_ADDRESS_COL_MAP_T: dict[str, str] = {
+        "raw": "raw_address",
+        "validated": "raw_address_v",
+        "match": "match_address_t",
+    }
+    _MATCH_ADDRESS_COL_MAP_E1: dict[str, str] = {
+        "raw": "entity_address_1",
+        "validated": "entity_address_1_v",
+        "match": "match_address_e1",
+    }
+    _MATCH_ADDRESS_COL_MAP_E2: dict[str, str] = {
+        "raw": "entity_address_2",
+        "validated": "entity_address_2_v",
+        "match": "match_address_e2",
+    }
+    _MATCH_ADDRESS_COL_MAP_E3: dict[str, str] = {
+        "raw": "entity_address_3",
+        "validated": "entity_address_3_v",
+        "match": "match_address_e3",
+    }
+
+    @classmethod
+    def match_address_col_map(cls) -> list[dict[str, str]]:
+        return [
+            cls._MATCH_ADDRESS_COL_MAP_T,
+            cls._MATCH_ADDRESS_COL_MAP_E1,
+            cls._MATCH_ADDRESS_COL_MAP_E2,
+            cls._MATCH_ADDRESS_COL_MAP_E3
+        ]
+
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
@@ -604,7 +637,7 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         title="Is String Match?",
         description="Boolean representing whether or not the match was made as a result of string matching workflow"
     )
-    match_address: str = pa.Field(
+    match_address_t: str = pa.Field(
         nullable=False,
         unique=False,
         title="Match Address",
@@ -630,7 +663,7 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         unique=False,
         title="Is Landlord Org Address? (Taxpayer Mailing)",
     )
-    entity_match_address_1: str = pa.Field(
+    match_address_e1: str = pa.Field(
         nullable=True,
         unique=False,
         title="Merge Address 1 (Match)",
@@ -655,7 +688,7 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         unique=False,
         title="Is Landlord Org Address? (Entity 1)",
     )
-    entity_match_address_2: str = pa.Field(
+    match_address_e2: str = pa.Field(
         nullable=True,
         unique=False,
         title="Merge Address 2 (Match)",
@@ -680,7 +713,7 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         unique=False,
         title="Is Landlord Org Address? (Entity 2)",
     )
-    entity_match_address_3: str = pa.Field(
+    match_address_e3: str = pa.Field(
         nullable=True,
         unique=False,
         title="Merge Address 3 (Match)",

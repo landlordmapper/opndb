@@ -290,8 +290,8 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df
 
     @classmethod
-    def set_match_address(cls, df: pd.DataFrame) -> pd.DataFrame:
-        df["match_address"] = df.apply(
+    def set_match_address_t(cls, df: pd.DataFrame) -> pd.DataFrame:
+        df["match_address_t"] = df.apply(
             lambda row: MatchBase.set_matching_address(row), axis=1
         )
         return df
@@ -301,10 +301,10 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         cls,
         exclude_addrs: list[str],
         df: pd.DataFrame,
-        address_col: str,
+        match_col: str,
         suffix: str
     ) -> pd.DataFrame:
-        df[f"exclude_address_{suffix}"] = df[address_col].apply(lambda addr: addr in exclude_addrs)
+        df[f"exclude_address_{suffix}"] = df[match_col].apply(lambda addr: addr in exclude_addrs)
         return df
 
     @classmethod
@@ -312,10 +312,10 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         cls,
         researched_addrs: list[str],
         df: pd.DataFrame,
-        address_col: str,
+        match_col: str,
         suffix: str
     ) -> pd.DataFrame:
-        df[f"is_researched_{suffix}"] = df[address_col].apply(lambda addr: addr in researched_addrs)
+        df[f"is_researched_{suffix}"] = df[match_col].apply(lambda addr: addr in researched_addrs)
         return df
 
     @classmethod
@@ -323,35 +323,23 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         cls,
         org_addrs: list[str],
         df: pd.DataFrame,
-        address_col: str,
+        match_col: str,
         suffix: str
     ) -> pd.DataFrame:
-        df[f"is_org_address_{suffix}"] = df[address_col].apply(lambda addr: addr in org_addrs)
+        df[f"is_org_address_{suffix}"] = df[match_col].apply(lambda addr: addr in org_addrs)
         return df
 
-    # @classmethod
-    # def set_is_validated(
-    #     cls,
-    #     df: pd.DataFrame,
-    #     address_col: str,
-    #     suffix: str
-    # ) -> pd.DataFrame:
-    #
-    #     def get_is_validated(row, addr_col: str):
-    #         if addr_col == "match_address":
-    #             if pd.notnull(row["raw_address_v"]):
-    #                 return True
-    #             else:
-    #                 return False
-    #         else:
-    #             if pd.notnull(row[f"{addr_col}_v"]):
-    #                 return True
-    #             else:
-    #                 return False
-    #
-    #     df[f"is_validated_{suffix}"] = df.apply(
-    #         lambda row:
-    #     )
+    @classmethod
+    def set_is_validated(
+        cls,
+        df: pd.DataFrame,
+        valid_col: str,
+        suffix: str
+    ) -> pd.DataFrame:
+        df[f"is_validated_{suffix}"] = df[valid_col].apply(
+            lambda addr: pd.notnull(addr)
+        )
+        return df
 
 
 class DataFrameColumnManipulators(DataFrameOpsBase):
@@ -628,7 +616,7 @@ class DataFrameDeduplicators(DataFrameOpsBase):
 class DataFrameConcatenators(DataFrameOpsBase):
 
     @classmethod
-    def get_entity_merge_address(cls, row: pd.Series, addr_col: str) -> pd.Series:
+    def get_entity_match_address(cls, row: pd.Series, addr_col: str) -> pd.Series:
         """
         Checks whether a validated address exists for the specified address column passed as a parameter. If it DOES
         exist, it returns it. If it does NOT exist, it returns the raw address.
@@ -641,20 +629,20 @@ class DataFrameConcatenators(DataFrameOpsBase):
     @classmethod
     def combine_corps_llcs(cls, df_corps: pd.DataFrame, df_llcs: pd.DataFrame) -> pd.DataFrame:
         # rename address cols to address_1, address_2, address_3
-        df_corps["entity_match_address_1"] = df_corps.apply(
-            lambda row: cls.get_entity_merge_address(row, "raw_president_address"), axis=1
+        df_corps["match_address_e1"] = df_corps.apply(
+            lambda row: cls.get_entity_match_address(row, "raw_president_address"), axis=1
         )
-        df_corps["entity_match_address_2"] = df_corps.apply(
-            lambda row: cls.get_entity_merge_address(row, "raw_secretary_address"), axis=1
+        df_corps["match_address_e2"] = df_corps.apply(
+            lambda row: cls.get_entity_match_address(row, "raw_secretary_address"), axis=1
         )
-        df_llcs["entity_match_address_1"] = df_llcs.apply(
-            lambda row: cls.get_entity_merge_address(row, "raw_office_address"), axis=1
+        df_llcs["match_address_e1"] = df_llcs.apply(
+            lambda row: cls.get_entity_match_address(row, "raw_office_address"), axis=1
         )
-        df_llcs["entity_match_address_2"] = df_llcs.apply(
-            lambda row: cls.get_entity_merge_address(row, "raw_manager_member_address"), axis=1
+        df_llcs["match_address_e2"] = df_llcs.apply(
+            lambda row: cls.get_entity_match_address(row, "raw_manager_member_address"), axis=1
         )
-        df_llcs["entity_match_address_3"] = df_llcs.apply(
-            lambda row: cls.get_entity_merge_address(row, "raw_agent_address"), axis=1
+        df_llcs["match_address_e3"] = df_llcs.apply(
+            lambda row: cls.get_entity_match_address(row, "raw_agent_address"), axis=1
         )
 
         df_corps.rename(columns={
@@ -677,23 +665,23 @@ class DataFrameConcatenators(DataFrameOpsBase):
             "core_name",
             "entity_address_1",
             "entity_address_1_v",
-            "entity_match_address_1",
+            "match_address_e1",
             "entity_address_2",
             "entity_address_2_v",
-            "entity_match_address_2",
+            "match_address_e2",
         ]]
         df_llcs = df_llcs[[
             "clean_name",
             "core_name",
             "entity_address_1",
             "entity_address_1_v",
-            "entity_match_address_1",
+            "match_address_e1",
             "entity_address_2",
             "entity_address_2_v",
-            "entity_match_address_2",
+            "match_address_e2",
             "entity_address_3",
             "entity_address_3_v",
-            "entity_match_address_3",
+            "match_address_e3",
         ]]
         df_out: pd.DataFrame = pd.concat([df_corps, df_llcs], ignore_index=True)
         df_out.rename(columns={"clean_name": "entity_clean_name"}, inplace=True)

@@ -1496,8 +1496,9 @@ class WkflCleanMerge(WorkflowStandardBase):
             params={
                 "name_col": None,
                 "match_threshold": .89,
-                "include_orgs": False,
+                "include_unvalidated": True,
                 "include_unresearched": False,
+                "include_orgs": False,
                 "nmslib_opts": {
                     "method": "hnsw",
                     "space": "cosinesimil_sparse_fast",
@@ -1583,47 +1584,21 @@ class WkflCleanMerge(WorkflowStandardBase):
         org_addrs: list[str] = list(df_orgs["value"].unique())
 
         t.print_with_dots("Adding match_address column to taxpayer records")
-        df_taxpayers = cols_df.set_match_address(df_taxpayers)
-        # address columns to be looped through for boolean generators
-        address_cols: list[str] = ["match_address", "entity_address_1", "entity_address_2", "entity_address_3"]
-        # todo: add address_cols object
-        # address_cols_obj = [
-        #     {
-        #         "raw": "raw_address",
-        #         "validated": "raw_address_v",
-        #         "match": "match_address",
-        #     },
-        #     {
-        #         "raw": "entity_address_1",
-        #         "validated": "entity_address_1_v",
-        #         "match": "entity_match_address_1",
-        #     },
-        #     {
-        #         "raw": "entity_address_2",
-        #         "validated": "entity_address_2_v",
-        #         "match": "entity_match_address_2",
-        #     },
-        #     {
-        #         "raw": "entity_address_3",
-        #         "validated": "entity_address_3_v",
-        #         "match": "entity_match_address_3",
-        #     },
-        # ]
-
-        for address_col in address_cols:
-            suffix = "t" if address_col == "match_address" else f"e{address_col[-1]}"
-            # t.print_with_dots(f"Adding is_validated_{suffix} column to taxpayer records")
-            # df_taxpayers = cols_df.set_is_validated(df_taxpayers, address_col, suffix)
+        df_taxpayers = cols_df.set_match_address_t(df_taxpayers)
+        for col_map in TaxpayersPrepped.match_address_col_map():
+            suffix = col_map["match"].split("_")[-1]
+            t.print_with_dots(f"Adding is_validated_{suffix} column to taxpayer records")
+            df_taxpayers = cols_df.set_is_validated(df_taxpayers, col_map["validated"], suffix)
             t.print_with_dots(f"Adding exclude_address_{suffix} column to taxpayer records")
-            df_taxpayers = cols_df.set_exclude_address(exclude_addrs, df_taxpayers, address_col, suffix)
-            t.print_with_dots("Adding is_researched columns to taxpayer records")
-            df_taxpayers = cols_df.set_is_researched(researched_addrs, df_taxpayers, address_col, suffix)
+            df_taxpayers = cols_df.set_exclude_address(exclude_addrs, df_taxpayers, col_map["match"], suffix)
+            t.print_with_dots(f"Adding is_researched_{suffix} columns to taxpayer records")
+            df_taxpayers = cols_df.set_is_researched(researched_addrs, df_taxpayers, col_map["match"], suffix)
             t.print_with_dots("Adding is_org_address columns to taxpayer records")
-            df_taxpayers = cols_df.set_is_org_address(org_addrs, df_taxpayers, address_col, suffix)
+            df_taxpayers = cols_df.set_is_org_address(org_addrs, df_taxpayers, col_map["match"], suffix)
 
         # add name+address concatenated columns to use for matching
-        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "clean_name", "match_address")
-        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "core_name", "match_address")
+        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "clean_name", "match_address_t")
+        df_taxpayers = cols_df.concatenate_name_addr(df_taxpayers, "core_name", "match_address_t")
 
         return df_taxpayers
 
@@ -1750,24 +1725,27 @@ class WkflStringMatch(WorkflowStandardBase):
             {
                 "name_col": "clean_name",
                 "match_threshold": 0.85,
-                "include_orgs": False,
+                "include_unvalidated": True,
                 "include_unresearched": False,
+                "include_orgs": False,
                 "nmslib_opts": self.DEFAULT_NMSLIB,
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
             },
             {
                 "name_col": "clean_name",
-                "include_orgs": False,
                 "match_threshold": 0.85,
+                "include_unvalidated": True,
                 "include_unresearched": True,
+                "include_orgs": False,
                 "nmslib_opts": self.DEFAULT_NMSLIB,
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
             },
             {
                 "name_col": "clean_name",
                 "match_threshold": 0.8,
-                "include_orgs": False,
+                "include_unvalidated": True,
                 "include_unresearched": True,
+                "include_orgs": False,
                 "nmslib_opts": self.DEFAULT_NMSLIB,
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
             },
@@ -1790,12 +1768,14 @@ class WkflStringMatch(WorkflowStandardBase):
             t.print_with_dots("Setting include_address")
             df_taxpayers["include_address"] = df_taxpayers.apply(
                 lambda row: MatchBase.check_address(
-                    row["match_address"],
-                    row["exclude_address_t"],
-                    params["include_unresearched"],
+                    row["match_address_t"],
+                    row["is_validated_t"],
                     row["is_researched_t"],
+                    row["exclude_address_t"],
+                    row["is_org_address_t"],
+                    params["include_unvalidated"],
+                    params["include_unresearched"],
                     params["include_orgs"],
-                    row["is_org_address_t"]
                 ), axis=1
             )
             # filter out addresses
@@ -1897,40 +1877,46 @@ class WkflNetworkGraph(WorkflowStandardBase):
         return [
             {
                 "taxpayer_name_col": "clean_name",
-                "include_orgs": False,
+                "include_unvalidated": True,
                 "include_unresearched": False,
+                "include_orgs": False,
                 "string_match_name": "string_matched_name_1",
             },
             {
                 "taxpayer_name_col": "clean_name",
-                "include_orgs": False,
+                "include_unvalidated": True,
                 "include_unresearched": False,
+                "include_orgs": False,
                 "string_match_name": "string_matched_name_3",
             },
             {
                 "taxpayer_name_col": "core_name",
+                "include_unvalidated": True,
                 "include_orgs": False,
                 "include_unresearched": True,
                 "string_match_name": "string_matched_name_3",
             },
-            # {
-            #     "taxpayer_name_col": "clean_name",
-            #     "include_orgs": True,
-            #     "include_unresearched": False,
-            #     "string_match_name": "string_matched_name_2",
-            # },
-            # {
-            #     "taxpayer_name_col": "clean_name",
-            #     "include_orgs": True,
-            #     "include_unresearched": True,
-            #     "string_match_name": "string_matched_name_3",
-            # },
-            # {
-            #     "taxpayer_name_col": "core_name",
-            #     "include_orgs": True,
-            #     "include_unresearched": True,
-            #     "string_match_name": "string_matched_name_3",
-            # },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": True,
+                "include_unresearched": False,
+                "include_orgs": True,
+                "string_match_name": "string_matched_name_2",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": True,
+                "include_unresearched": True,
+                "include_orgs": True,
+                "string_match_name": "string_matched_name_3",
+            },
+            {
+                "taxpayer_name_col": "core_name",
+                "include_unvalidated": True,
+                "include_unresearched": True,
+                "include_orgs": True,
+                "string_match_name": "string_matched_name_3",
+            },
         ]
 
     def execute_network_graph_generator(

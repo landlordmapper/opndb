@@ -35,17 +35,23 @@ class MatchBase:
     def check_address(
         cls,
         address: str | None,
-        exclude_address: bool,
-        include_unresearched: bool,
-        is_researched: bool,
-        include_orgs: bool,
-        is_org_address: bool,
+        is_validated: bool,  # COLUMN
+        is_researched: bool,  # COLUMN
+        exclude_address: bool,  # COLUMN
+        is_org_address: bool,  # COLUMN
+        include_unvalidated: bool,  # PARAM
+        include_unresearched: bool,  # PARAM
+        include_orgs: bool,  # PARAM
     ) -> bool:
         """
         Returns "True" if the address SHOULD be included in the network analysis, and False if it should be ignored.
         """
         if not address or pd.isna(address):
             return False
+
+        if not include_unvalidated and not is_validated:
+            return False
+
         if exclude_address:
             return False
         else:
@@ -62,6 +68,25 @@ class MatchBase:
                             return False
                         else:
                             return True
+
+        # if not address or pd.isna(address):
+        #     return False
+        # if is_validated:
+        #     if is_researched:
+        #         if not exclude_address:
+        #             if not is_org_address:
+        #                 return True
+        #             else:
+        #                 return include_orgs
+        #         else:
+        #             return False  # exclude address from network graph by default
+        #     else:
+        #         return include_unresearched
+        # else:
+        #     if include_unvalidated:
+        #         return include_unresearched  # if it's not validated, is_researched will ALWAYS be false
+        #     else:
+        #         return False
 
     @classmethod
     def set_matching_address(cls, row):
@@ -175,7 +200,7 @@ class NetworkMatchBase(MatchBase):
         """
 
         name: str = row[params["taxpayer_name_col"]]
-        address: str = row["match_address"]
+        address: str = row["match_address_t"]
         add_name: bool = not row["exclude_name"]
         add_address: bool = cls.check_address(
             address,
@@ -208,7 +233,7 @@ class NetworkMatchBase(MatchBase):
         """
 
         name: str = row[params["taxpayer_name_col"]]
-        address: str = row["match_address"]
+        address: str = row["match_address_t"]
         string_match: str = row[params["string_match_name"]]
 
         add_name: bool = not row["exclude_name"]
@@ -349,10 +374,10 @@ class NetworkMatchBase(MatchBase):
         taxpayer_names_set = list(set(df_taxpayers[params["taxpayer_name_col"]].dropna().unique()))
         fuzzy_matches_set = list(set(df_taxpayers[params["string_match_name"]].dropna().unique()))
         clean_addresses_set = list(set(
-            list(df_taxpayers["match_address"].dropna()) +
-            list(df_taxpayers["entity_address_1"].dropna()) +
-            list(df_taxpayers["entity_address_2"].dropna()) +
-            list(df_taxpayers["entity_address_3"].dropna())
+            list(df_taxpayers["match_address_t"].dropna()) +
+            list(df_taxpayers["match_address_e1"].dropna()) +
+            list(df_taxpayers["match_address_e2"].dropna()) +
+            list(df_taxpayers["match_address_e3"].dropna())
         ))
         # loop through connected to components to associate component IDs
         # assign components to unique values from each column used to generate nodes and edges

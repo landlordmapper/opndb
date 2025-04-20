@@ -160,13 +160,15 @@ class QueryBatchOptions(TypedDict):
 class StringMatchParams(TypedDict):
     name_col: str | None
     match_threshold: int | float
-    include_orgs: bool
+    include_unvalidated: bool
     include_unresearched: bool
+    include_orgs: bool
     nmslib_opts: NmslibOptions
     query_batch_opts: QueryBatchOptions
 
 class NetworkMatchParams(TypedDict):
     taxpayer_name_col: str
-    include_orgs: bool
+    include_unvalidated: bool
     include_unresearched: bool
+    include_orgs: bool
     string_match_name: str
