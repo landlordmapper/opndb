@@ -204,11 +204,13 @@ class NetworkMatchBase(MatchBase):
         add_name: bool = not row["exclude_name"]
         add_address: bool = cls.check_address(
             address,
-            row["exclude_address_t"],
-            params["include_unresearched"],
+            row["is_validated_t"],
             row["is_researched_t"],
+            row["exclude_address_t"],
+            row["is_org_address_t"],
+            params["include_unvalidated"],
+            params["include_unresearched"],
             params["include_orgs"],
-            row["is_org_address_t"]
         )
 
         if add_name and add_address:
@@ -239,11 +241,13 @@ class NetworkMatchBase(MatchBase):
         add_name: bool = not row["exclude_name"]
         add_address: bool = cls.check_address(
             address,
-            row["exclude_address_t"],  # this should ALWAYS be False, since string matching will never run on excluded addresses
-            params["include_unresearched"],
+            row["is_validated_t"],
             row["is_researched_t"],
+            row["exclude_address_t"],
+            row["is_org_address_t"],
+            params["include_unvalidated"],
+            params["include_unresearched"],
             params["include_orgs"],
-            row["is_org_address_t"]
         )
 
         if add_name:
@@ -276,11 +280,13 @@ class NetworkMatchBase(MatchBase):
         for i, address in enumerate(entity_addresses):
             add_address: bool = cls.check_address(
                 address,
+                row[f"is_validated_e{i+1}"],
+                row[f"is_researched_e{i + 1}"],
                 row[f"exclude_address_e{i+1}"],
-                params["include_unresearched"],
-                row[f"is_researched_e{i+1}"],
-                params["include_orgs"],
                 row[f"is_org_address_e{i+1}"],
+                params["include_unvalidated"],
+                params["include_unresearched"],
+                params["include_orgs"],
             )
             if add_address and entity_name not in entities_to_ignore:
                 g.add_edge(entity_name, address)
@@ -409,11 +415,11 @@ class NetworkMatchBase(MatchBase):
         """
         keys_to_check = [
             row[params["taxpayer_name_col"]],
-            row["match_address"],
+            row["match_address_t"],
             row[params["string_match_name"]],
-            row["entity_address_1"],
-            row["entity_address_2"],
-            row["entity_address_3"],
+            row["match_address_e1"],
+            row["match_address_e2"],
+            row["match_address_e3"],
         ]
         for key in keys_to_check:
             if key in component_map.keys():

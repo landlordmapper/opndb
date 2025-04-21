@@ -659,8 +659,13 @@ class DataFrameConcatenators(DataFrameOpsBase):
             "raw_agent_address": "entity_address_3",
             "raw_agent_address_v": "entity_address_3_v",
         }, inplace=True)
+
+        # add column to ID origin
+        df_llcs["origin"] = "llc"
+        df_corps["origin"] = "corp"
         # concatenate, take slice of only necessary columns
         df_corps = df_corps[[
+            "origin",
             "clean_name",
             "core_name",
             "entity_address_1",
@@ -671,6 +676,7 @@ class DataFrameConcatenators(DataFrameOpsBase):
             "match_address_e2",
         ]]
         df_llcs = df_llcs[[
+            "origin",
             "clean_name",
             "core_name",
             "entity_address_1",

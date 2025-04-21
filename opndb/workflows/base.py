@@ -37,7 +37,9 @@ from opndb.schema.v0_1.raw import (
     LLCs as LLCsRaw,
     ClassCodes
 )
-from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio
+from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio, \
+    SSFixUnitsInitial, SSFixUnitsFinal, SSAddressMerge, SSNameAnalysisInitial, SSAddressAnalysisInitial, \
+    SSAnalysisFinal, SSRentalSubset, SSCleanMerge, SSStringMatch, SSNetworkGraph, SSFinalOutput
 from opndb.services.config import ConfigManager
 
 # 4. Types (these should only depend on constants)
@@ -811,7 +813,14 @@ class WkflFixUnitsInitial(WorkflowStandardBase):
     # ----SUMMARY STATS GENERATOR----
     # -------------------------------
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSFixUnitsInitial(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     # -------------
     # ----SAVER----
@@ -912,7 +921,14 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
     # ----SUMMARY STATS GENERATOR----
     # -------------------------------
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSFixUnitsFinal(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     # -------------
     # ----SAVER----
@@ -1017,7 +1033,14 @@ class WkflAddressMerge(WorkflowStandardBase):
     # ----SUMMARY STATS GENERATOR----
     # -------------------------------
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSAddressMerge(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     # -------------
     # ----SAVER----
@@ -1092,7 +1115,14 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
         )
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSNameAnalysisInitial(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
@@ -1197,7 +1227,14 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
         self.dfs_out["address_analysis"] = df_freq
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSAddressAnalysisInitial(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
@@ -1283,7 +1320,14 @@ class WkflAnalysisFinal(WorkflowStandardBase):
         self.dfs_out["taxpayers_fixed"] = df_taxpayers
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSAnalysisFinal(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
@@ -1378,7 +1422,14 @@ class WkflRentalSubset(WorkflowStandardBase):
     def summary_stats(self):
         # how many initially subsetted with class codes only
         # how many additional rentals obtained from validated addresses from initial subset
-        pass
+        ss_obj = SSRentalSubset(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
@@ -1678,7 +1729,14 @@ class WkflCleanMerge(WorkflowStandardBase):
         self.dfs_out["llcs_subsetted"] = df_llcs_sub
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSCleanMerge(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
@@ -1717,11 +1775,12 @@ class WkflStringMatch(WorkflowStandardBase):
     }
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+        self.params_matrix: list[StringMatchParams] | None = None
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
-    def execute_param_builder(self) -> List[StringMatchParams]:
+    def execute_param_builder(self) -> None:
         t.print_with_dots("Building string matching params object")
-        return [
+        self.params_matrix = [
             {
                 "name_col": "clean_name",
                 "match_threshold": 0.85,
@@ -1751,13 +1810,10 @@ class WkflStringMatch(WorkflowStandardBase):
             },
         ]
 
-    def execute_string_matching(self,
-        params_matrix: List[StringMatchParams],
-        df_taxpayers: pd.DataFrame,
-    ) -> pd.DataFrame:
+    def execute_string_matching(self,df_taxpayers: pd.DataFrame) -> pd.DataFrame:
         """Returns final dataset to be outputted"""
         t.print_with_dots("Executing string matching")
-        for i, params in enumerate(params_matrix):
+        for i, params in enumerate(self.params_matrix):
             t.print_equals(f"Matching strings for STRING_MATCHED_NAME_{i+1}")
             console.print("NAME COLUMN:", params["name_col"])
             console.print("MATCH THRESHOLD:", params["match_threshold"])
@@ -1781,7 +1837,7 @@ class WkflStringMatch(WorkflowStandardBase):
             # filter out addresses
             t.print_with_dots("Filtering out taxpayer records where include_address is False")
             df_filtered: pd.DataFrame = df_taxpayers[df_taxpayers["include_address"] == True][[
-                "clean_name", "core_name", "match_address", "clean_name_address", "core_name_address"
+                "clean_name", "core_name", "match_address_t", "clean_name_address", "core_name_address"
             ]]
             # set ref & query docs
             t.print_with_dots("Setting document objects for HNSW index")
@@ -1833,14 +1889,22 @@ class WkflStringMatch(WorkflowStandardBase):
             TaxpayersPrepped
         )
         # generate matrix parameters
-        params_matrix: List[StringMatchParams] = self.execute_param_builder()
+        self.execute_param_builder()
         # run matching
-        df_taxpayers_matched = self.execute_string_matching(params_matrix, df_taxpayers)
+        df_taxpayers_matched = self.execute_string_matching(df_taxpayers)
         # set out dfs
         self.dfs_out["taxpayers_string_matched"] = df_taxpayers_matched
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSStringMatch(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out,
+            self.params_matrix
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
@@ -1870,11 +1934,12 @@ class WkflNetworkGraph(WorkflowStandardBase):
 
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
+        self.params_matrix: list[NetworkMatchParams] | None = None
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
-    def execute_param_builder(self) -> List[NetworkMatchParams]:
+    def execute_param_builder(self) -> None:
         t.print_with_dots("Building network graph params object")
-        return [
+        self.params_matrix = [
             {
                 "taxpayer_name_col": "clean_name",
                 "include_unvalidated": True,
@@ -1919,14 +1984,8 @@ class WkflNetworkGraph(WorkflowStandardBase):
             },
         ]
 
-    def execute_network_graph_generator(
-        self,
-        params_matrix: List[NetworkMatchParams],
-        df_taxpayers: pd.DataFrame,
-        df_analysis: pd.DataFrame
-    ) -> pd.DataFrame:
-        df_researched: pd.DataFrame = df_analysis[df_analysis["is_researched"] == True]
-        for i, params in enumerate(params_matrix):
+    def execute_network_graph_generator(self, df_taxpayers: pd.DataFrame) -> pd.DataFrame:
+        for i, params in enumerate(self.params_matrix):
             console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
             console.print("INCLUDE ORGS:", params["include_orgs"])
             console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
@@ -1949,10 +2008,6 @@ class WkflNetworkGraph(WorkflowStandardBase):
                 "schema": TaxpayersStringMatched,
                 "recursive_bools": True
             },
-            "address_analysis": {
-                "path": path_gen.analysis_address_analysis(configs),
-                "schema": AddressAnalysis,
-            },
         }
         self.load_dfs(load_map)
 
@@ -1966,17 +2021,22 @@ class WkflNetworkGraph(WorkflowStandardBase):
             self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
         # copy dfs
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_string_matched"].copy()
-        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
         # generate matrix parameters
-        params_matrix: List[NetworkMatchParams] = self.execute_param_builder()
+        self.execute_param_builder()
         # run network graph
-        df_networked: pd.DataFrame = self.execute_network_graph_generator(
-            params_matrix, df_taxpayers, df_analysis
-        )
+        df_networked: pd.DataFrame = self.execute_network_graph_generator(df_taxpayers)
         self.dfs_out["taxpayers_networked"] = df_networked
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSNetworkGraph(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out,
+            self.params_matrix
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
@@ -2280,6 +2340,7 @@ class WkflFinalOutput(WorkflowBase):
             "taxpayers_networked": {
                 "path": path_gen.processed_taxpayers_networked(configs),
                 "schema": TaxpayersNetworked,
+                "recursive_bools": True
             },
             "corps_subsetted": {
                 "path": path_gen.processed_corps_subsetted(configs),
@@ -2320,7 +2381,14 @@ class WkflFinalOutput(WorkflowBase):
         self.dfs_out["taxpayer_records"] = self.execute_taxpayer_records()
 
     def summary_stats(self) -> None:
-        pass
+        ss_obj = SSFinalOutput(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
 
     def save(self) -> None:
         configs = self.config_manager.configs
