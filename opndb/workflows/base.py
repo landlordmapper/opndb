@@ -12,6 +12,7 @@ import nmslib
 import numpy as np
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 import pandera as pa
+from itertools import product
 
 # 2. Third-party imports
 import pandas as pd
@@ -188,8 +189,8 @@ class WorkflowBase(ABC):
             return WkflStringMatch(config_manager)
         elif wkfl_id == "network_graph":
             return WkflNetworkGraph(config_manager)
-        # elif configs["wkfl_type"] == "final_output":
-        #     return WkflFinalOutput(config_manager)
+        elif wkfl_id == "final_output":
+            return WkflFinalOutput(config_manager)
         return None
 
     @abstractmethod
@@ -1775,40 +1776,63 @@ class WkflStringMatch(WorkflowStandardBase):
     }
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
-        self.params_matrix: list[StringMatchParams] | None = None
+        self.params_matrix: list[StringMatchParams] = []
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def execute_param_builder(self) -> None:
         t.print_with_dots("Building string matching params object")
-        self.params_matrix = [
-            {
-                "name_col": "clean_name",
-                "match_threshold": 0.85,
-                "include_unvalidated": True,
-                "include_unresearched": False,
-                "include_orgs": False,
+        # set options for params matrix
+        taxpayer_name_col: list[str] = ["clean_name", "core_name"]
+        match_threshold_options: list[float] = [0.8, 0.85]
+        unvalidated_options: list[bool] = [False, True]
+        unresearched_options: list[bool] = [False, True]
+        org_options: list[bool] = [False, True]
+        # loop through unique combinations of param matrix options
+        for i, params in enumerate(product(
+            taxpayer_name_col,
+            match_threshold_options,
+            unvalidated_options,
+            unresearched_options,
+            org_options,
+        )):
+            self.params_matrix.append({
+                "name_col": params[0],
+                "match_threshold": params[1],
+                "include_unvalidated": params[2],
+                "include_unresearched": params[3],
+                "include_orgs": params[4],
                 "nmslib_opts": self.DEFAULT_NMSLIB,
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
-            },
-            {
-                "name_col": "clean_name",
-                "match_threshold": 0.85,
-                "include_unvalidated": True,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "nmslib_opts": self.DEFAULT_NMSLIB,
-                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
-            },
-            {
-                "name_col": "clean_name",
-                "match_threshold": 0.8,
-                "include_unvalidated": True,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "nmslib_opts": self.DEFAULT_NMSLIB,
-                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
-            },
-        ]
+            })
+        # self.params_matrix = [
+        #     {
+        #         "name_col": "clean_name",
+        #         "match_threshold": 0.85,
+        #         "include_unvalidated": True,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "nmslib_opts": self.DEFAULT_NMSLIB,
+        #         "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+        #     },
+        #     {
+        #         "name_col": "clean_name",
+        #         "match_threshold": 0.85,
+        #         "include_unvalidated": True,
+        #         "include_unresearched": True,
+        #         "include_orgs": False,
+        #         "nmslib_opts": self.DEFAULT_NMSLIB,
+        #         "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+        #     },
+        #     {
+        #         "name_col": "clean_name",
+        #         "match_threshold": 0.8,
+        #         "include_unvalidated": True,
+        #         "include_unresearched": True,
+        #         "include_orgs": False,
+        #         "nmslib_opts": self.DEFAULT_NMSLIB,
+        #         "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+        #     },
+        # ]
 
     def execute_string_matching(self,df_taxpayers: pd.DataFrame) -> pd.DataFrame:
         """Returns final dataset to be outputted"""
@@ -1934,61 +1958,83 @@ class WkflNetworkGraph(WorkflowStandardBase):
 
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
-        self.params_matrix: list[NetworkMatchParams] | None = None
+        self.params_matrix: list[NetworkMatchParams] = []
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
     def execute_param_builder(self) -> None:
         t.print_with_dots("Building network graph params object")
-        self.params_matrix = [
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": True,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "string_match_name": "string_matched_name_1",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": True,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "string_match_name": "string_matched_name_3",
-            },
-            {
-                "taxpayer_name_col": "core_name",
-                "include_unvalidated": True,
-                "include_orgs": False,
-                "include_unresearched": True,
-                "string_match_name": "string_matched_name_3",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": True,
-                "include_unresearched": False,
-                "include_orgs": True,
-                "string_match_name": "string_matched_name_2",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": True,
-                "include_unresearched": True,
-                "include_orgs": True,
-                "string_match_name": "string_matched_name_3",
-            },
-            {
-                "taxpayer_name_col": "core_name",
-                "include_unvalidated": True,
-                "include_unresearched": True,
-                "include_orgs": True,
-                "string_match_name": "string_matched_name_3",
-            },
-        ]
+        # set options for params matrix
+        taxpayer_name_col: list[str] = ["clean_name", "core_name"]
+        unvalidated_options: list[bool] = [False, True]
+        unresearched_options: list[bool] = [False, True]
+        org_options: list[bool] = [False, True]
+        string_match_names: list[str] = ["string_matched_name_1", "string_matched_name_2", "string_matched_name_3"]
+        # loop through unique combinations of param matrix options
+        for i, params in enumerate(product(
+            taxpayer_name_col,
+            unvalidated_options,
+            unresearched_options,
+            org_options,
+            string_match_names
+        )):
+            self.params_matrix.append({
+                "taxpayer_name_col": params[0],
+                "include_unvalidated": params[1],
+                "include_unresearched": params[2],
+                "include_orgs": params[3],
+                "string_match_name": params[4],
+            })
+        # self.params_matrix = [
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": True,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "string_match_name": "string_matched_name_1",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": True,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "string_match_name": "string_matched_name_3",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "core_name",
+        #         "include_unvalidated": True,
+        #         "include_orgs": False,
+        #         "include_unresearched": True,
+        #         "string_match_name": "string_matched_name_3",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": True,
+        #         "include_unresearched": False,
+        #         "include_orgs": True,
+        #         "string_match_name": "string_matched_name_2",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": True,
+        #         "include_unresearched": True,
+        #         "include_orgs": True,
+        #         "string_match_name": "string_matched_name_3",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "core_name",
+        #         "include_unvalidated": True,
+        #         "include_unresearched": True,
+        #         "include_orgs": True,
+        #         "string_match_name": "string_matched_name_3",
+        #     },
+        # ]
 
     def execute_network_graph_generator(self, df_taxpayers: pd.DataFrame) -> pd.DataFrame:
         for i, params in enumerate(self.params_matrix):
             console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
-            console.print("INCLUDE ORGS:", params["include_orgs"])
+            console.print("INCLUDE UNVALIDATED ADDRESSES:", params["include_unvalidated"])
             console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
+            console.print("INCLUDE ORGS:", params["include_orgs"])
             console.print("STRING MATCH NAME:", params["string_match_name"])
             # build network graph object
             gMatches = NetworkMatchBase.taxpayers_network(df_taxpayers, params)
@@ -2049,7 +2095,7 @@ class WkflNetworkGraph(WorkflowStandardBase):
         pass
 
 
-class WkflFinalOutput(WorkflowBase):
+class WkflFinalOutput(WorkflowStandardBase):
     """
     Produces final datasets to be converted into standardized format
 
@@ -2171,7 +2217,7 @@ class WkflFinalOutput(WorkflowBase):
     def execute_entities(self, df_researched: pd.DataFrame) -> pd.DataFrame:
         rows_entities: list[dict[str, Any]] = []
         for _, row in df_researched.iterrows():
-            row = {
+            out_row = {
                 "name": row["name"],
                 "urls": row["urls"],
                 "yelp_urls": row["yelp_urls"],
@@ -2179,26 +2225,26 @@ class WkflFinalOutput(WorkflowBase):
                 "google_place_id": row["google_place_id"],
             }
             if row["is_landlord_org"] == True:
-                row["entity_type"] = "Landlord Organization"
+                out_row["entity_type"] = "Landlord Organization"
             elif row["is_govt_agency"] == True:
-                row["entity_type"] = "Government Agency"
+                out_row["entity_type"] = "Government Agency"
             elif row["is_lawfirm"] == True:
-                row["entity_type"] = "Law Firm"
+                out_row["entity_type"] = "Law Firm"
             elif row["is_financial_services"] == True:
-                row["entity_type"] = "Financial Services Company"
+                out_row["entity_type"] = "Financial Services Company"
             elif row["is_assoc_bus"] == True:
-                row["entity_type"] = "Associated Business"
-            elif row["is_office_virtual_agent"] == True:
-                row["entity_type"] = "Virtual Office / Registered Agent"
+                out_row["entity_type"] = "Associated Business"
+            elif row["is_virtual_office_agent"] == True:
+                out_row["entity_type"] = "Virtual Office / Registered Agent"
             elif row["is_nonprofit"] == True:
-                row["entity_type"] = "Nonprofit Organization"
+                out_row["entity_type"] = "Nonprofit Organization"
             else:
-                row["entity_type"] = "Other / Unknown"
-            rows_entities.append(row)
+                out_row["entity_type"] = "Other / Unknown"
+            rows_entities.append(out_row)
         return pd.DataFrame(rows_entities)
 
     def execute_validated_addresses(self, df_researched: pd.DataFrame) -> pd.DataFrame:
-        df_validated_addresses: pd.DataFrame = self.dfs_in["validated_addresses"][[
+        df_validated_addresses: pd.DataFrame = self.dfs_in["gcd_validated"][[
             "number",
             "predirectional",
             "prefix",
@@ -2220,9 +2266,21 @@ class WkflFinalOutput(WorkflowBase):
         ]]
         df_validated_addresses.drop_duplicates(subset=["formatted_address"], inplace=True)
         df_validated_addresses["landlord_entity"] = None
-        for _, row in df_researched.iterrows():
-            mask = df_validated_addresses["formatted_address"] == row["address"]  # todo: fix this so that it uses "formatted_address_v"
-            df_validated_addresses.loc[mask, "landlord_entity"] = row["name"]
+        with t.create_progress_bar(
+            "[yellow]Setting landlord_entity names for validated addresses...", len(df_researched)
+        )[0] as progress:
+            task = progress.tasks[0]
+            processed_count = 0
+            for _, row in df_researched.iterrows():
+                mask = df_validated_addresses["formatted_address"] == row["address"]  # todo: fix this so that it uses "formatted_address_v"
+                df_validated_addresses.loc[mask, "landlord_entity"] = row["name"]
+                processed_count += 1
+                progress.update(
+                    task.id,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing entity {processed_count}/{len(df_researched)}",
+                )
         return df_validated_addresses
 
     def execute_corps(self) -> pd.DataFrame:
@@ -2350,15 +2408,11 @@ class WkflFinalOutput(WorkflowBase):
                 "path": path_gen.processed_llcs_subsetted(configs),
                 "schema": LLCsMerged,
             },
-            "gcd_validated": {
-                "path": path_gen.geocodio_gcd_validated(configs),
-                "schema": Geocodio,
-            },
             "address_analysis": {
                 "path": path_gen.analysis_address_analysis(configs),
                 "schema": AddressAnalysis,
             },
-            "validated_addresses": {
+            "gcd_validated": {
                 "path": path_gen.geocodio_gcd_validated(configs),
                 "schema": Geocodio,
             },
@@ -2370,6 +2424,7 @@ class WkflFinalOutput(WorkflowBase):
         df_researched: pd.DataFrame = self.dfs_in["address_analysis"][
             self.dfs_in["address_analysis"]["is_researched"] == True
         ]
+        df_researched.dropna(subset=["name"], inplace=True)
 
         self.dfs_out["network_calcs"] = self.execute_network_calcs()
         self.dfs_out["entity_types"] = self.execute_entity_types()

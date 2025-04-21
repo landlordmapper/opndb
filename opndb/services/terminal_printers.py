@@ -96,6 +96,7 @@ class TerminalBase:
             {"name": "Pre-Match Cleaning", "value": "clean_merge"},
             {"name": "Taxpayer Record String Matching", "value": "string_match"},
             {"name": "Taxpayer Record Network Graph Generator", "value": "network_graph"},
+            {"name": "Final Output Dataset Generator", "value": "final_output"},
         ]
 
         # Let user select a workflow
