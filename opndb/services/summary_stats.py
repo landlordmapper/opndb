@@ -531,7 +531,7 @@ class SSNetworkGraph(SummaryStatsBase):
         for col, val in self.data[0].items():
             table.add_column(col, justify="right", style="green")
         for row in self.data:
-            table.add_row(*row.values())
+            table.add_row(*[str(value) for value in row.values()])
         console.print("\n")
         console.print(table)
         console.print("\n")

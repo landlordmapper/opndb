@@ -2043,7 +2043,7 @@ class WkflNetworkGraph(WorkflowStandardBase):
             # set network names for each taxpayer record (long AND short)
             df_taxpayers = NetworkMatchBase.set_network_name(i+1, df_taxpayers)
             # set text for node/edge data
-            df_taxpayers = NetworkMatchBase.set_network_text(i+1, gMatches, df_taxpayers)
+            # df_taxpayers = NetworkMatchBase.set_network_text(i+1, gMatches, df_taxpayers)
         return df_taxpayers
 
     def load(self):
