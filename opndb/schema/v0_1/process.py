@@ -360,6 +360,7 @@ class TaxpayerRecords(OPNDFModel):
     # ---------------------------
     _OUT: list[str] = [
         "raw_name",
+        "raw_name_2",
         "raw_street",
         "raw_city",
         "raw_state",
@@ -367,6 +368,7 @@ class TaxpayerRecords(OPNDFModel):
         "raw_address",
         "raw_name_address",
         "clean_name",
+        "clean_name_2",
         "clean_street",
         "clean_city",
         "clean_state",
@@ -404,8 +406,13 @@ class TaxpayerRecords(OPNDFModel):
     # --------------------
     raw_name: str = pa.Field(
         nullable=False,
-        title="Raw Taxpayer Name",
-        description="Taxpayer name EXACTLY how it appears in the raw data.",
+        title="Raw Taxpayer Name (Primary)",
+        description="Primary taxpayer name EXACTLY how it appears in the raw data.",
+    )
+    raw_name_2: str = pa.Field(
+        nullable=True,
+        title="Raw Taxpayer Name (Secondary)",
+        description="Secondary taxpayer name EXACTLY how it appears in the raw data.",
     )
     raw_street: str = pa.Field(
         nullable=False,
@@ -440,8 +447,13 @@ class TaxpayerRecords(OPNDFModel):
     )
     clean_name: str = pa.Field(
         nullable=False,
-        title="Clean Taxpayer Name",
-        description="Taxpayer name AFTER running it through the string cleaners."
+        title="Clean Taxpayer Name (Primary)",
+        description="Primary taxpayer name AFTER running it through the string cleaners."
+    )
+    clean_name_2: str = pa.Field(
+        nullable=True,
+        title="Clean Taxpayer Name (Secondary)",
+        description="Secondary taxpayer name AFTER running it through the string cleaners."
     )
     clean_street: str = pa.Field(
         nullable=False,

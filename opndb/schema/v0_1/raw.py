@@ -16,6 +16,7 @@ class PropsTaxpayers(OPNDFModel):
     # ---------------------------
     _RAW: list[str] = [
         "tax_name",
+        "tax_name_2",
         "tax_street",
         "tax_city",
         "tax_state",
@@ -23,6 +24,7 @@ class PropsTaxpayers(OPNDFModel):
     ]
     _CLEAN_RENAME_MAP: dict[str, Any] = {
         "tax_name": "clean_name",
+        "tax_name_2": "clean_name_2",
         "tax_street": "clean_street",
         "tax_city": "clean_city",
         "tax_state": "clean_state",
@@ -43,11 +45,13 @@ class PropsTaxpayers(OPNDFModel):
         "raw": {
             "name_addr": "raw_name_address",
             "name": "raw_name",
+            "name_2": "raw_name_2",
             "addr": "raw_address"
         },
         "clean": {
             "name_addr": "clean_name_address",
             "name": "clean_name",
+            "name_2": "clean_name_2",
             "addr": "clean_address"
         }
     }
@@ -55,12 +59,13 @@ class PropsTaxpayers(OPNDFModel):
         "pin",
         "class_code",
         "clean_name",
+        "clean_name_2"
         "clean_street",
         "clean_city",
         "clean_state",
         "clean_zip",
     ]
-    _NAME_CLEAN: list[str] = ["clean_name"]
+    _NAME_CLEAN: list[str] = ["clean_name", "clean_name_2"]
     _ADDRESS_CLEAN: dict[str, Any] = {
         "street": ["clean_street"],
         "zip": ["clean_zip"],
@@ -120,8 +125,13 @@ class PropsTaxpayers(OPNDFModel):
     )
     tax_name: str = pa.Field(
         nullable=False,
-        title="Taxpayer Name",
-        description="Taxpayer name indicated for the property",
+        title="Taxpayer Name (Primary)",
+        description="Primary taxpayer name indicated for the property",
+    )
+    tax_name_2: str  = pa.Field(
+        nullable=True,
+        title="Taxpayer Name (Secondary)",
+        description="Secondary taxpayer name indicated for the property",
     )
     tax_street: str = pa.Field(
         nullable=False,
