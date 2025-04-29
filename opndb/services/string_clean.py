@@ -188,6 +188,13 @@ class CleanStringBase:
         return re.sub(r"\s+", " ", text)
 
     @classmethod
+    def fix_llcs(cls, text: str) -> str:
+        if "L L C" in text:
+            return text.replace("L L C", "LLC")
+        else:
+            return text
+
+    @classmethod
     def words_to_num(cls, text: str) -> str | int:
         """
         Converts numbers spelled out to integers, handling special case for "POINT" since it might be part of a decimal
@@ -216,7 +223,7 @@ class CleanStringBase:
             'FIRST FIRST SECOND SECOND TRUST' -> 'FIRST SECOND TRUST'
         """
         text_list = text.split()
-        return ' '.join(dict.fromkeys(text_list))
+        return " ".join(dict.fromkeys(text_list))
 
     @classmethod
     def convert_ordinals(cls, text: str) -> str:

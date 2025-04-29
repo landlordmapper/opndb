@@ -317,6 +317,9 @@ class WkflDataClean(WorkflowStandardBase):
         t.print_with_dots("Removing extra spaces")
         df = clean_df_base.remove_extra_spaces(df, cols)
 
+        t.print_with_dots("Handling LLCs")
+        df = clean_df_base.fix_llcs(df, cols)
+
         t.print_with_dots("Deduplicating repeated words")
         df = clean_df_base.deduplicate(df, cols)
 

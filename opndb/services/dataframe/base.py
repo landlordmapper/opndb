@@ -228,6 +228,10 @@ class DataFrameBaseCleaners(DataFrameCleaners):
         return cls.apply_string_cleaner(df, clean_base.remove_extra_spaces, cols)
 
     @classmethod
+    def fix_llcs(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.fix_llcs, cols)
+
+    @classmethod
     def deduplicate(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_base.deduplicate, cols)
 
