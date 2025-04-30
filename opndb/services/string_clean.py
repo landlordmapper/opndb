@@ -175,6 +175,12 @@ class CleanStringBase:
         return text.strip()
 
     @classmethod
+    def replace_with_nan(cls, text: str) -> str | float:
+        if text == "":
+            return np.nan
+        return text
+
+    @classmethod
     def remove_extra_spaces(cls, text: str) -> str:
         """
         Replaces multiple consecutive spaces with a single space.
@@ -186,6 +192,13 @@ class CleanStringBase:
             'TOO   MANY    SPACES' -> 'TOO MANY SPACES'
         """
         return re.sub(r"\s+", " ", text)
+
+    @classmethod
+    def fix_llcs(cls, text: str) -> str:
+        if "L L C" in text:
+            return text.replace("L L C", "LLC")
+        else:
+            return text
 
     @classmethod
     def words_to_num(cls, text: str) -> str | int:

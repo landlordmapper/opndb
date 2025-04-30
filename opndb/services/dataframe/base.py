@@ -224,6 +224,10 @@ class DataFrameBaseCleaners(DataFrameCleaners):
         return cls.apply_string_cleaner(df, clean_base.trim_whitespace, cols)
 
     @classmethod
+    def replace_with_nan(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.replace_with_nan, cols)
+
+    @classmethod
     def remove_extra_spaces(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_base.remove_extra_spaces, cols)
 
