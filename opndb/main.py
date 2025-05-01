@@ -10,7 +10,7 @@ from opndb.constants.files import Dirs
 from opndb.services.config import ConfigManager
 from opndb.services.terminal_printers import TerminalBase as t, TerminalInteract as ti
 from opndb.utils import UtilsBase as utils
-from opndb.workflows.base import WorkflowBase as w, WorkflowBase
+from opndb.workflows.mpls import WorkflowBase as w, WorkflowBase
 
 console = Console()
 REQUIRED_DATA_TYPES = [

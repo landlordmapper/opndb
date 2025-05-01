@@ -7,6 +7,36 @@ from opndb.validator.df_model import OPNDFModel
 
 VALID_ZIP_CODE_REGEX: Final[re] = r"^\d{5}(-\d{4})?$"
 
+class PropertiesMN(OPNDFModel):
+
+    _OUT: list[str] = ["pin", "raw_name_address", "clean_name_address"]
+
+    @classmethod
+    def out(cls) -> list[str]:
+        return cls._OUT
+
+class TaxpayerRecordsMN(OPNDFModel):
+
+    _OUT: list[str] = [
+        "raw_name",
+        "raw_name_2",
+        "raw_street",
+        "raw_city_state_zip",
+        "raw_address",
+        "raw_name_address",
+        "clean_name",
+        "clean_name_2",
+        "clean_street",
+        "clean_city_state_zip",
+        "clean_address",
+        "clean_name_address",
+    ]
+
+    @classmethod
+    def out(cls) -> list[str]:
+        return cls._OUT
+
+
 class Properties(OPNDFModel):
     # ---------------------------
     # ----COLUMN NAME OBJECTS----

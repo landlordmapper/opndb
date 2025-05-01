@@ -5,7 +5,73 @@ import pandera as pa
 from opndb.validator.df_model import OPNDFModel
 
 
-class BusinessRecords(OPNDFModel):
+class PropsTaxpayersMN(OPNDFModel):
+
+    _RAW: list[str] = [
+        "tax_name",
+        "tax_name_2",
+        "tax_street",
+        "tax_city_state_zip",
+        "tax_address",
+    ]
+    _CLEAN_RENAME_MAP: dict[str, Any] = {
+        "tax_name": "clean_name",
+        "tax_name_2": "clean_name_2",
+        "tax_street": "clean_street",
+        "tax_city_state_zip": "clean_city_state_zip",
+    }
+    _NAME_ADDRESS_CONCAT_MAP: dict[str, Any] = {  # same as base props taxpayers
+        "raw": {
+            "name_addr": "raw_name_address",
+            "name": "raw_name",
+            "name_2": "raw_name_2",
+            "addr": "raw_address"
+        },
+        "clean": {
+            "name_addr": "clean_name_address",
+            "name": "clean_name",
+            "name_2": "clean_name_2",
+            "addr": "clean_address"
+        }
+    }
+    _BASIC_CLEAN: list[str] = [
+        "clean_name",
+        "clean_name_2",
+        "clean_street",
+        "clean_city_state_zip",
+    ]
+    _NAME_CLEAN: list[str] = ["clean_name", "clean_name_2"]
+    _ADDRESS_CLEAN: dict[str, Any] = {
+        "street": ["clean_street"],
+        "zip": ["clean_zip"],
+    }
+
+    @classmethod
+    def raw(cls) -> list[str]:
+        return cls._RAW
+
+    @classmethod
+    def clean_rename_map(cls) -> dict[str, Any]:
+        return cls._CLEAN_RENAME_MAP
+
+    @classmethod
+    def name_address_concat_map(cls) -> dict[str, Any]:
+        return cls._NAME_ADDRESS_CONCAT_MAP
+
+    @classmethod
+    def basic_clean(cls) -> list[str]:
+        return cls._BASIC_CLEAN
+
+    @classmethod
+    def name_clean(cls) -> list[str]:
+        return cls._NAME_CLEAN
+
+    @classmethod
+    def address_clean(cls) -> dict[str, Any]:
+        return cls._ADDRESS_CLEAN
+
+
+class BusinessRecordsBase(OPNDFModel):
 
     _MN_STATE_FIXER: dict[str, str] = {
         "": np.nan,
@@ -624,6 +690,174 @@ class BusinessRecords(OPNDFModel):
         "Æ˜ŽÅ°¼È‹�È¾¾Å·Ž": np.nan,
         "–": np.nan
     }
+
+    @classmethod
+    def mn_state_fixer(cls) -> dict[str, str]:
+        return cls._MN_STATE_FIXER
+
+
+class BusinessFilings(BusinessRecordsBase):
+
+    _RAW: list[str] = ["name"]
+    _CLEAN_RENAME_MAP: dict[str, str] = {"name": "clean_name"}
+    _BASIC_CLEAN: list[str] = ["clean_name"]
+    _NAME_CLEAN: list[str] = ["clean_name"]
+    _ADDRESS_CLEAN: list[str] = []
+    _OUT: list[str] = [
+        "uid",
+        "status",
+        "raw_name",
+        "clean_name"
+    ]
+
+    @classmethod
+    def raw(cls) -> list[str]:
+        return cls._RAW
+
+    @classmethod
+    def clean_rename_map(cls) -> dict[str, str]:
+        return cls._CLEAN_RENAME_MAP
+
+    @classmethod
+    def basic_clean(cls) -> list[str]:
+        return cls._BASIC_CLEAN
+
+    @classmethod
+    def name_clean(cls) -> list[str]:
+        return cls._NAME_CLEAN
+
+    @classmethod
+    def out(cls) -> list[str]:
+        return cls._OUT
+
+    uid: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="UID",
+        description="Unique identifier for MNSOS business records.",
+    )
+    status: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Status",
+    )
+    name: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Name",
+        description="Name of business entity as registered with the state of Minnesota.",
+    )
+
+
+class BusinessNamesAddrs(BusinessRecordsBase):
+
+    _RAW: list[str] = [
+        "party_name",
+        "street_1",
+        "street_2",
+        "city",
+        "state",
+        "zip_code",
+        "zip_code_ext",
+        "country",
+        "address"
+    ]
+    _CLEAN_RENAME_MAP: dict[str, str] = {
+        "party_name": "clean_party_name",
+        "street_1": "clean_street_1",
+        "street_2": "clean_street_2",
+        "city": "clean_city",
+        "state": "clean_state",
+        "zip_code": "clean_zip_code",
+        "zip_code_ext": "clean_zip_code_ext",
+        "country": "clean_country",
+        "address": "clean_address"
+    }
+    _BASIC_CLEAN: list[str] = [
+        "clean_party_name",
+        "clean_street_1",
+        "clean_street_2",
+        "clean_city",
+        "clean_state",
+        "clean_zip_code",
+        "clean_zip_code_ext",
+        "clean_country",
+    ]
+    _NAME_CLEAN: list[str] = ["clean_party_name"]
+    _ADDRESS_CLEAN: dict[str, list[str]] = {
+        "street": [
+            "clean_street_1",
+            "clean_street_2"
+        ],
+        "zip": ["clean_zip_code"]
+    }
+    _OUT: list[str] = [
+        "uid",
+        "name_type",
+        "address_type",
+        "raw_party_name",
+        "raw_street_1",
+        "raw_street_2",
+        "raw_city",
+        "raw_state",
+        "raw_zip_code",
+        "raw_zip_code_ext",
+        "raw_country",
+        "raw_address",
+        "clean_party_name",
+        "clean_street_1",
+        "clean_street_2",
+        "clean_city",
+        "clean_state",
+        "clean_zip_code",
+        "clean_zip_code_ext",
+        "clean_country",
+        "clean_address",
+        "is_incomplete_address"
+    ]
+
+    @classmethod
+    def raw(cls) -> list[str]:
+        return cls._RAW
+
+    @classmethod
+    def clean_rename_map(cls) -> dict[str, str]:
+        return cls._CLEAN_RENAME_MAP
+
+    @classmethod
+    def basic_clean(cls) -> list[str]:
+        return cls._BASIC_CLEAN
+
+    @classmethod
+    def name_clean(cls) -> list[str]:
+        return cls._NAME_CLEAN
+
+    @classmethod
+    def address_clean(cls) -> dict[str, list[str]]:
+        return cls._ADDRESS_CLEAN
+
+    @classmethod
+    def out(cls) -> list[str]:
+        return cls._OUT
+
+    uid: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="UID",
+        description="Unique identifier for MNSOS business records.",
+    )
+    name_type: str = pa.Field()
+    address_type: str = pa.Field()
+    party_name: str = pa.Field()
+    street_1: str = pa.Field()
+    street_2: str = pa.Field()
+    city: str = pa.Field()
+    state: str = pa.Field()
+    zip_code: str = pa.Field()
+    zip_code_ext: str = pa.Field()
+    country: str = pa.Field()
+    raw_address: str = pa.Field()
+    is_incomplete_address: bool = pa.Field()
 
 
 class PropsTaxpayers(OPNDFModel):

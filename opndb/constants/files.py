@@ -35,8 +35,8 @@ class Raw(FileNames):
     CORPS: str = "corps"
     LLCS: str = "llcs"
     CLASS_CODES: str = "class_codes"
-    BUSINESS_FILINGS_1: str = "business_filings_1"
-    BUSINESS_FILINGS_3: str = "business_filings_3"
+    BUS_FILINGS: str = "bus_filings"
+    BUS_NAMES_ADDRS: str = "bus_names_addrs"
 
 class Geocodio(FileNames):
     GCD_VALIDATED: str = "gcd_validated"
@@ -55,6 +55,8 @@ class Processed(FileNames):
     TAXPAYER_RECORDS: str = "taxpayer_records"
     PROPERTIES: str = "properties"
     PROPERTIES_RENTALS: str = "properties_rentals"
+    BUS_FILINGS: str = "bus_filings"
+    BUS_NAMES_ADDRS: str = "bus_names_addrs"
     CORPS: str = "corps"
     LLCS: str = "llcs"
     CLASS_CODES: str = "class_codes"

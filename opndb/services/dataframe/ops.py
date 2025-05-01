@@ -5,6 +5,7 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 
+from opndb.constants.base import STATES_ABBREVS
 from opndb.constants.columns import (
     PropsTaxpayers as pt,
     TaxpayerRecords as tr,
@@ -20,7 +21,7 @@ from opndb.services.string_clean import (
     CleanStringBase as clean_base,
     CleanStringName as clean_name,
     CleanStringAddress as clean_addr,
-    CleanStringAccuracy as clean_acc
+    CleanStringAccuracy as clean_acc, safe_string_cleaner
 )
 from rich.progress import (
     Progress,
@@ -239,15 +240,20 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         :param df: Dataframe to add column to
         :param col_map: Map of name to address columns
         """
-        df[col_map["name_addr"]] = df[col_map["name"]] + " -- " + df[col_map["addr"]]
+        def get_name_address(row: pd.Series) -> str:
+            if col_map["name_2"] in row.keys() and pd.notnull(row[col_map["name_2"]]):
+                return row[col_map["name"]] + " -- " + row[col_map["name_2"]] + " -- " + row[col_map["addr"]]
+            else:
+                return row[col_map["name"]] + " -- " + row[col_map["addr"]]
+        df[col_map["name_addr"]] = df.apply(lambda row: get_name_address(row), axis=1)
         return df
 
     @classmethod
-    def set_full_address_fields(cls, df: pd.DataFrame, raw_address_map, id: str) -> pd.DataFrame:
+    def set_full_address_fields(cls, df: pd.DataFrame, raw_address_map, id: str | None = None) -> pd.DataFrame:
         if raw_address_map is None:
             return df
         llc: bool = False
-        if id == "llcs":
+        if id and id == "llcs":
             llc: bool = True
         for map in raw_address_map:
             df[map["full_address"]] = df.apply(
@@ -341,6 +347,44 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         )
         return df
 
+    @classmethod
+    def set_is_incomplete_address_mnsos(cls, row: pd.Series) -> bool:
+        """MNSOS-specific boolean generator indicating whether an address is complete or not."""
+        # todo: standardize this
+        if pd.isnull(row["street_1"]):
+            return True
+        elif pd.isnull(row["zip_code"]):
+            return True
+        else:
+            return False
+
+    @classmethod
+    def concatenate_addr_mnsos(cls, row, prefix: str = "") -> str | float:
+        """MNSOS-specific address full address concatenator."""
+        # todo: standardize this
+        if row["is_incomplete_address"] == True:
+            return np.nan
+
+        street_1: str = row[f"{prefix}street_1"]
+        street_2: str | float = row[f"{prefix}street_2"]
+        city: str | float = row[f"{prefix}city"]
+        state: str | float = row[f"{prefix}state"]
+        zip_code: str = row[f"{prefix}zip_code"]
+
+        address: str = ""
+        if pd.notnull(street_2):
+            address += f"{street_1} {street_2}"
+        else:
+            address += street_1
+        address += ", "
+        if pd.notnull(city):
+            address += f"{city}, "
+        if pd.notnull(state):
+            address += f"{state} "
+        address += zip_code
+
+        return address
+
 
 class DataFrameColumnManipulators(DataFrameOpsBase):
     """Dataframe operations that manipulate or transform an existing dataframe column."""
@@ -389,6 +433,20 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         for col in cols_to_set:
             df.loc[mask, col] = np.nan
         return df
+
+    @classmethod
+    def fix_states(cls, state_raw: str, state_fixer: dict[str, str]) -> str:
+        """
+        Fixes state values in raw addresses.
+
+        :param state_raw: raw value for the state component of the address being processed
+        :param state_fixer: state fixer object mapping raw messy state values to their cleaned and corrected values.
+        """
+        if state_raw in state_fixer.keys():
+            return state_fixer[state_raw]
+        if state_raw in STATES_ABBREVS.keys():
+            return STATES_ABBREVS[state_raw]
+        return state_raw
 
 
 class DataFrameSubsetters(DataFrameOpsBase):
@@ -458,15 +516,15 @@ class DataFrameSubsetters(DataFrameOpsBase):
             df_props: pd.DataFrame = df[props_cols].copy()
             df_taxpayers: pd.DataFrame = df[taxpayer_cols].copy()
             # rename columns with clean_ prefix
-            df_taxpayers.rename(columns={
-                pt.TAX_NAME: tr.CLEAN_NAME,
-                pt.TAX_ADDRESS: tr.CLEAN_ADDRESS,
-                pt.TAX_STREET: tr.CLEAN_STREET,
-                pt.TAX_CITY: tr.CLEAN_CITY,
-                pt.TAX_STATE: tr.CLEAN_STATE,
-                pt.TAX_ZIP: tr.CLEAN_ZIP,
-            })
-            df_taxpayers.drop_duplicates(subset=[tr.RAW_NAME_ADDRESS], inplace=True)
+            # df_taxpayers.rename(columns={
+            #     pt.TAX_NAME: tr.CLEAN_NAME,
+            #     pt.TAX_ADDRESS: tr.CLEAN_ADDRESS,
+            #     pt.TAX_STREET: tr.CLEAN_STREET,
+            #     pt.TAX_CITY: tr.CLEAN_CITY,
+            #     pt.TAX_STATE: tr.CLEAN_STATE,
+            #     pt.TAX_ZIP: tr.CLEAN_ZIP,
+            # })
+            df_taxpayers.drop_duplicates(subset=["raw_name_address"], inplace=True)
             return df_props, df_taxpayers
         except KeyError as e:
             print("KEY ERROR")
@@ -693,3 +751,25 @@ class DataFrameConcatenators(DataFrameOpsBase):
         df_out.rename(columns={"clean_name": "entity_clean_name"}, inplace=True)
         df_out.rename(columns={"core_name": "entity_core_name"}, inplace=True)
         return df_out
+
+
+class DataFrameCellShifters(DataFrameOpsBase):
+
+    @classmethod
+    def shift_taxpayer_data_cells(cls, row: pd.Series) -> pd.Series:
+        """Hennepin County-specific function to shift messy taxpayer name data."""
+        if pd.isnull(row["taxpayer_3"]):
+            row["taxpayer_3"] = row["taxpayer_2"]
+            row["taxpayer_2"] = row["taxpayer_1"]
+            row["taxpayer_1"] = np.nan
+        return row
+
+    @classmethod
+    def shift_street_addrs(cls, row: pd.Series) -> pd.Series:
+        """MNSOS-specific function shifting missing address data cells."""
+        street_1: str | float = row["street_1"]
+        street_2: str | float = row["street_2"]
+        if pd.isnull(street_1) and pd.notnull(street_2):
+            row["street_1"] = street_2
+            row["street_2"] = np.nan
+        return row

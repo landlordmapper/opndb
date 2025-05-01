@@ -223,21 +223,21 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
-    def raw_business_filings_1(cls, configs: WorkflowConfigs) -> Path:
+    def raw_bus_filings(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/raw/business_filings_1[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.RAW,
-            Raw.BUSINESS_FILINGS_1,
+            Raw.BUS_FILINGS,
             configs["load_ext"]
         )
     @classmethod
-    def raw_business_filings_3(cls, configs: WorkflowConfigs) -> Path:
+    def raw_bus_names_addrs(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/raw/business_filings_1[ext]"""
         return cls.generate_path(
             configs["data_root"],
             Dirs.RAW,
-            Raw.BUSINESS_FILINGS_3,
+            Raw.BUS_NAMES_ADDRS,
             configs["load_ext"]
         )
 
@@ -269,6 +269,22 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.PROCESSED,
             Processed.PROPERTIES_RENTALS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_bus_filings(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.BUS_FILINGS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_bus_names_addrs(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.BUS_NAMES_ADDRS,
             configs["load_ext"]
         )
     @classmethod

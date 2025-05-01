@@ -14,6 +14,7 @@ import numpy as np
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 import pandera as pa
 from itertools import product
+import warnings
 
 # 2. Third-party imports
 import pandas as pd
@@ -33,12 +34,12 @@ from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
 from opndb.schema.v0_1.process import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
     Corps, LLCs, FixingAddrs, FixingTaxNames, AddressAnalysis, FrequentTaxNames, TaxpayersFixed, \
     TaxpayersStringMatched, TaxpayersMerged, TaxpayersSubsetted, CorpsMerged, LLCsMerged, TaxpayersPrepped, \
-    TaxpayersNetworked
+    TaxpayersNetworked, TaxpayerRecordsMN, PropertiesMN
 from opndb.schema.v0_1.raw import (
     PropsTaxpayers,
     Corps as CorpsRaw,
     LLCs as LLCsRaw,
-    ClassCodes
+    ClassCodes, BusinessRecordsBase, PropsTaxpayersMN, BusinessFilings, BusinessNamesAddrs
 )
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio, \
     SSFixUnitsInitial, SSFixUnitsFinal, SSAddressMerge, SSNameAnalysisInitial, SSAddressAnalysisInitial, \
@@ -76,12 +77,14 @@ from opndb.services.dataframe.ops import (
     DataFrameColumnManipulators as colm_df,
     DataFrameDeduplicators as dedup_df,
     DataFrameConcatenators as concat_df,
+    DataFrameCellShifters as shift_df
 )
 from rich.console import Console
 from rich.prompt import Prompt
 
 from opndb.validator.df_model import OPNDFModel
 
+warnings.simplefilter(action="ignore", category=pd.errors.SettingWithCopyWarning)
 console = Console()
 
 class WorkflowBase(ABC):
@@ -181,32 +184,32 @@ class WorkflowBase(ABC):
             return WkflRawDataPrep(config_manager)
         elif wkfl_id == "data_clean":
             return WkflDataClean(config_manager)
-        elif wkfl_id == "address_clean":
-            return WkflAddressClean(config_manager)
-        elif wkfl_id == "address_geocodio":
-            return WkflAddressGeocodio(config_manager)
-        elif wkfl_id == "fix_units_initial":
-            return WkflFixUnitsInitial(config_manager)
-        elif wkfl_id == "fix_units_final":
-            return WkflFixUnitsFinal(config_manager)
-        elif wkfl_id == "address_merge":
-            return WkflAddressMerge(config_manager)
-        elif wkfl_id == "name_analysis_initial":
-            return WkflNameAnalysisInitial(config_manager)
-        elif wkfl_id == "address_analysis_initial":
-            return WkflAddressAnalysisInitial(config_manager)
-        elif wkfl_id == "analysis_final":
-            return WkflAnalysisFinal(config_manager)
-        elif wkfl_id == "rental_subset":
-            return WkflRentalSubset(config_manager)
-        elif wkfl_id == "clean_merge":
-            return WkflCleanMerge(config_manager)
-        elif wkfl_id == "string_match":
-            return WkflStringMatch(config_manager)
-        elif wkfl_id == "network_graph":
-            return WkflNetworkGraph(config_manager)
-        elif wkfl_id == "final_output":
-            return WkflFinalOutput(config_manager)
+        # elif wkfl_id == "address_clean":
+        #     return WkflAddressClean(config_manager)
+        # elif wkfl_id == "address_geocodio":
+        #     return WkflAddressGeocodio(config_manager)
+        # elif wkfl_id == "fix_units_initial":
+        #     return WkflFixUnitsInitial(config_manager)
+        # elif wkfl_id == "fix_units_final":
+        #     return WkflFixUnitsFinal(config_manager)
+        # elif wkfl_id == "address_merge":
+        #     return WkflAddressMerge(config_manager)
+        # elif wkfl_id == "name_analysis_initial":
+        #     return WkflNameAnalysisInitial(config_manager)
+        # elif wkfl_id == "address_analysis_initial":
+        #     return WkflAddressAnalysisInitial(config_manager)
+        # elif wkfl_id == "analysis_final":
+        #     return WkflAnalysisFinal(config_manager)
+        # elif wkfl_id == "rental_subset":
+        #     return WkflRentalSubset(config_manager)
+        # elif wkfl_id == "clean_merge":
+        #     return WkflCleanMerge(config_manager)
+        # elif wkfl_id == "string_match":
+        #     return WkflStringMatch(config_manager)
+        # elif wkfl_id == "network_graph":
+        #     return WkflNetworkGraph(config_manager)
+        # elif wkfl_id == "final_output":
+        #     return WkflFinalOutput(config_manager)
         return None
 
     @abstractmethod
@@ -292,132 +295,98 @@ class WkflRawDataPrep(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     def execute_taxpayer_pre_processing(self, df_city: pd.DataFrame, df_county: pd.DataFrame) -> pd.DataFrame:
-
-        # define minneapolis-specific functions
-        def shift_taxpayer_data_cells(row: pd.Series) -> pd.Series:
-            if pd.isnull(row["TAXPAYER_NM_3"]):
-                row["TAXPAYER_NM_3"] = row["TAXPAYER_NM_2"]
-                row["TAXPAYER_NM_2"] = row["TAXPAYER_NM_1"]
-                row["TAXPAYER_NM_1"] = np.nan
-            return row
-
-        def fix_mpls(text: str) -> str:
-            return text.replace("MPLS", "MINNEAPOLIS").replace("MNPLS", "MINNEAPOLIS")
-
         # extract relevant columns from both datasets
         df_city = df_city[[
             "PIN",
-            "HOUSE_NO",
-            "STREET_NAME",
-            "UNIT_NO",
-            "ZIP_POSTAL",
-            "OWNERNM",
-            "TAXPAYER1",
-            "TAXPAYER2",
-            "TAXPAYER3",
-            "TAXPAYER4",
-            "X",
-            "Y",
             "PRIMARY_PROP_TYPE",
-            "LANDVALUE",
-            "BLDGVALUE",
-            "TOTALVALUE",
             "IS_EXEMPT",
             "IS_HOMESTEAD",
-            "TOTAL_UNITS",
-            "FID"
         ]]
+        df_city.rename(columns={
+            "PIN": "pin",
+            "PRIMARY_PROP_TYPE": "prop_type",
+            "IS_EXEMPT": "is_exempt",
+            "IS_HOMESTEAD": "is_homestead",
+        }, inplace=True)
         df_county = df_county[[
             "PID",
-            "OWNER_NM",
             "TAXPAYER_NM",
             "TAXPAYER_NM_1",
             "TAXPAYER_NM_2",
             "TAXPAYER_NM_3",
             "MUNIC_NM",
-            "BUILD_YR",
-            "SALE_DATE",
-            "SALE_PRICE",
-            "MKT_VAL_TOT",
-            "TAXABLE_VAL_TOT",
-            "TOT_NET_TAX",
-            "TOT_SPEC_TAX",
-            "TAX_TOT",
-            "NET_TAX_PD",
-            "TOT_PENALTY_PD",
-            "PR_TYP_NM1",
-            "LAT",
-            "LON"
         ]]
+        df_county.rename(columns={
+            "PID": "pin",
+            "TAXPAYER_NM": "taxpayer",
+            "TAXPAYER_NM_1": "taxpayer_1",
+            "TAXPAYER_NM_2": "taxpayer_2",
+            "TAXPAYER_NM_3": "taxpayer_3",
+            "MUNIC_NM": "municipality",
+        }, inplace=True)
 
-        # misc cleaning
+        # fix pins on df_city
+        df_city["pin"] = df_city["pin"].apply(lambda pin: pin[1:])
+
+        # basic cleaning
+        df_county = clean_df_base.trim_whitespace(df_county, [
+            "taxpayer",
+            "taxpayer_1",
+            "taxpayer_2",
+            "taxpayer_3",
+            "municipality",
+        ])  # run cleaners only where necessary
+
+        t.print_equals("Processing raw taxpayer records")
+        # basic cleaning operations - bare minimum to execute subset, shift cells etc.
+        t.print_with_dots("Convering text to upper case")
+        df_county = clean_df_base.make_upper(df_county)
         t.print_with_dots("Trimming whitespace")
         df_county = clean_df_base.trim_whitespace(df_county)
         t.print_with_dots("Replacing empty strings with np.nan")
         df_county = clean_df_base.replace_with_nan(df_county)
         t.print_with_dots("Removing extra spaces")
         df_county = clean_df_base.remove_extra_spaces(df_county)
-        t.print_with_dots("Removing symbols & punctuation")
-        df_county = clean_df_base.remove_symbols_punctuation(df_county)
 
-        # fix pins on df_city
-        df_city["PIN"] = df_city["PIN"].apply(lambda pin: pin[1:])
-
-        # subset county data for Minneapolis only
-        df_mpls = df_county[df_county["MUNIC_NM"] == "MINNEAPOLIS"]
-
-        # further subset relevant columns
-        df_mpls = df_mpls[[
-            "PID",
-            "TAXPAYER_NM",
-            "TAXPAYER_NM_1",
-            "TAXPAYER_NM_2",
-            "TAXPAYER_NM_3",
-        ]]
+        df_mpls = df_county[df_county["municipality"] == "MINNEAPOLIS"]
 
         # shift taxpayer data
         t.print_with_dots("Shifting taxpayer data cells")
-        df_mpls = df_mpls.apply(lambda row: shift_taxpayer_data_cells(row), axis=1)
+        df_mpls = df_mpls.apply(lambda row: shift_df.shift_taxpayer_data_cells(row), axis=1)
 
         # drop Hennepin county forfeited land properties
-        df_mpls.drop(df_mpls[df_mpls["TAXPAYER_NM"] == "HENNEPIN FORFEITED LAND"].index, inplace=True)
+        df_mpls.drop(df_mpls[df_mpls["taxpayer"] == "HENNEPIN FORFEITED LAND"].index, inplace=True)
 
         # drop nulls
         t.print_with_dots("Dropping rows with missing taxpayer data")
-        df_mpls.dropna(subset=["TAXPAYER_NM"], inplace=True)
-        df_mpls.dropna(subset=["TAXPAYER_NM_2"], inplace=True)
-        df_mpls.dropna(subset=["TAXPAYER_NM_3"], inplace=True)
+        df_mpls.dropna(subset=["taxpayer"], inplace=True)
+        df_mpls.dropna(subset=["taxpayer_2"], inplace=True)
+        df_mpls.dropna(subset=["taxpayer_3"], inplace=True)
 
         # fix mpls/mnpls
-        df_mpls["TAXPAYER_NM_3"] = df_mpls["TAXPAYER_NM_3"].apply(lambda x: fix_mpls(x))
+        df_mpls = clean_df_addr.fix_mpls(df_mpls, ["taxpayer_3"])
 
         # set address columns
         t.print_with_dots("Setting address column")
-        df_mpls["tax_address"] = df_mpls.apply(lambda row: f"{row['TAXPAYER_NM_2']}, {row['TAXPAYER_NM_3']}", axis=1)
+        df_mpls["tax_address"] = df_mpls.apply(lambda row: f"{row['taxpayer_2']}, {row['taxpayer_3']}", axis=1)
 
         # merge relevant data from df_city
         t.print_with_dots("Merging city dataset into county dataset")
         df_taxpayers: pd.DataFrame = pd.merge(df_mpls, df_city[[
-            "PIN",
-            "PRIMARY_PROP_TYPE",
-            "IS_EXEMPT",
-            "IS_HOMESTEAD",
-            "TOTAL_UNITS",
-        ]], how="left", left_on="PID", right_on="PIN")
+            "pin",
+            "prop_type",
+            "is_exempt",
+            "is_homestead",
+        ]], how="left", on="pin")
 
         # drop & rename columns
         df_taxpayers.rename(columns={
             "PID": "pin",
-            "TAXPAYER_NM": "tax_name",
-            "TAXPAYER_NM_1": "tax_name_2",
-            "TAXPAYER_NM_2": "tax_street",
-            "TAXPAYER_NM_3": "tax_city_state_zip",
-            "IS_EXEMPT": "is_exempt",
-            "IS_HOMESTEAD": "is_homestead",
-            "PRIMARY_PROP_TYPE": "prop_type",
-            "TOTAL_UNITS": "num_units",
+            "taxpayer": "tax_name",
+            "taxpayer_1": "tax_name_2",
+            "taxpayer_2": "tax_street",
+            "taxpayer_3": "tax_city_state_zip",
         }, inplace=True)
-        df_taxpayers.drop(columns=["PIN"], inplace=True)
 
         return df_taxpayers
 
@@ -427,22 +396,15 @@ class WkflRawDataPrep(WorkflowStandardBase):
         df_bus3: pd.DataFrame
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
+        t.print_equals("Processing raw business filings")
+        t.print_with_dots("Extracting relevant columns")
         df_bus1 = df_bus1[[
             "master_id",
-            "business_type_code",
-            "original_filing_number",
             "minnesota_business_name",
             "business_filing_status",
-            "filing_date",
-            "expiration_date",
-            "next_renewal_due_date",
-            "home_jurisdiction",
-            "is_llc_non_profit",
-            "home_business_name"
         ]]
         df_bus1.rename(columns={
             "master_id": "uid",
-            "original_filing_number": "file_number",
             "minnesota_business_name": "name",
             "business_filing_status": "status",
         }, inplace=True)
@@ -472,23 +434,34 @@ class WkflRawDataPrep(WorkflowStandardBase):
             "country_name": "country",
         }, inplace=True)
 
+        t.print_with_dots("Trimming whitespace")
+        df_bus3 = clean_df_base.trim_whitespace(df_bus3)
+        t.print_with_dots("Replacing empty strings with np.nan")
+        df_bus3 = clean_df_base.replace_with_nan(df_bus3)
+        t.print_with_dots("Shifting street address cells")
+        df_bus3 = df_bus3.apply(lambda row: shift_df.shift_street_addrs(row), axis=1)
+        t.print_with_dots("Identifying incomplete addresses")
+        df_bus3["is_incomplete_address"] = df_bus3.apply(
+            lambda row: cols_df.set_is_incomplete_address_mnsos(row),
+            axis=1
+        )
+        t.print_with_dots("Setting full address column")
+        df_bus3["address"] = df_bus3.apply(lambda row: cols_df.concatenate_addr_mnsos(row), axis=1)
+
         return df_bus1, df_bus3
 
     def process(self) -> None:
 
-        # load df copies
         df_city: pd.DataFrame = self.dfs_in["taxpayers_city"].copy()
         df_county: pd.DataFrame = self.dfs_in["taxpayers_county"].copy()
+        df_tax_out = self.execute_taxpayer_pre_processing(df_city, df_county)
+        self.dfs_out["props_taxpayers"] = df_tax_out
+
         df_bus1: pd.DataFrame = self.dfs_in["mnsos_type1"].copy()
         df_bus3: pd.DataFrame = self.dfs_in["mnsos_type3"].copy()
-
-        df_tax_out = self.execute_taxpayer_pre_processing(df_city, df_county)
         df_bus_1_out, df_bus_3_out = self.execute_business_filings_preprocessing(df_bus1, df_bus3)
-
-        # set out dfs
-        self.dfs_out["props_taxpayers"] = df_tax_out
-        self.dfs_out["business_filings_1"] = df_bus_1_out
-        self.dfs_out["business_filings_3"] = df_bus_3_out
+        self.dfs_out["bus_filings"] = df_bus_1_out
+        self.dfs_out["bus_names_addrs"] = df_bus_3_out
 
     def summary_stats(self) -> None:
         pass
@@ -497,10 +470,213 @@ class WkflRawDataPrep(WorkflowStandardBase):
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
             "props_taxpayers": path_gen.raw_props_taxpayers(configs),
-            "business_filings_1": path_gen.raw_business_filings_1(configs),
-            "business_filings_3": path_gen.raw_business_filings_3(configs),
+            "bus_filings": path_gen.raw_bus_filings(configs),
+            "bus_names_addrs": path_gen.raw_bus_names_addrs(configs),
         }
         self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflDataClean(WorkflowStandardBase):
+    """
+    Initial data cleaning. Runs cleaners and validators on raw datasets. if they pass the validation checks, raw
+    datasets are broken up and stored in their appropriate locations.
+    """
+    WKFL_NAME: str = "INITIAL DATA CLEANING WORKFLOW"
+    WKFL_DESC: str = "Runs basic string cleaners on raw inputted datasets."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_taxpayer_cleaning(self, df: pd.DataFrame, schema_map) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+        # pre-cleaning
+        t.print_equals("Executing pre-cleaning operations")
+        # generate raw_prefixed columns
+        t.print_with_dots(f"Setting raw columns for \"{id}\"")
+        df: pd.DataFrame = cols_df.set_raw_columns(df, schema_map["props_taxpayers"].raw())
+        console.print(f"Raw columns generated ✅")
+        # rename columns to prepare for cleaning
+        df.rename(columns=schema_map["props_taxpayers"].clean_rename_map(), inplace=True)
+        t.print_with_dots(f"Concatenating raw name and address fields")
+        df: pd.DataFrame = cols_df.set_name_address_concat(
+            df, schema_map["props_taxpayers"].name_address_concat_map()["raw"]
+        )
+        console.print(f"\"name_address\" field generated ✅")
+
+        # basic cleaning
+        t.print_equals(f"Executing basic operations (all data columns)")
+        cols: list[str] = schema_map["props_taxpayers"].basic_clean()
+        t.print_with_dots("Removing symbols and punctuation")
+        df = clean_df_base.remove_symbols_punctuation(df, cols)
+        t.print_with_dots("Handling LLCs")
+        df = clean_df_base.fix_llcs(df, cols)
+        t.print_with_dots("Deduplicating repeated words")
+        df = clean_df_base.deduplicate(df, cols)
+        # t.print_with_dots("Converting ordinal numbers to digits...")  # todo: this one breaks the df, returns all null values
+        # df = clean_df_base.convert_ordinals(df, cols)
+        t.print_with_dots("Combining numbers separated by spaces")
+        df = clean_df_base.combine_numbers(df, cols)
+        console.print("Preliminary cleaning complete ✅")
+
+        # name cleaning only
+        t.print_equals(f"Executing cleaning operations (name columns only)")
+        name_cols: list[str] = schema_map["props_taxpayers"].name_clean()
+        t.print_with_dots("Replacing number ranges with first number in range")
+        df = clean_df_base.take_first(df, name_cols)
+        df = clean_df_name.switch_the(df, name_cols)
+        console.print(f"Name field cleaning complete ✅")
+
+        # address cleaning only
+        t.print_equals(f"Executing cleaning operations (address columns only)")
+        for col in schema_map["props_taxpayers"].address_clean()["street"]:
+            t.print_with_dots("Converting street suffixes")
+            df = clean_df_addr.convert_street_suffixes(df, [col])
+            t.print_with_dots("Converting directionals to their abbreviations")
+            df = clean_df_addr.convert_nsew(df, [col])
+            t.print_with_dots("Removing secondary designators")
+            df = clean_df_addr.remove_secondary_designators(df, [col])
+        console.print("Address field cleaning complete ✅")
+
+        # post-cleaning
+        t.print_equals(f"Executing post-cleaning operations")
+        # add clean full address fields
+        t.print_with_dots("Setting clean full address fields")
+        df["clean_address"] = df.apply(lambda row: f"{row['clean_street']}, {row['clean_city_state_zip']}", axis=1)
+        df = cols_df.set_name_address_concat(
+            df, schema_map["props_taxpayers"].name_address_concat_map()["clean"]
+        )
+        t.print_with_dots("Full clean address fields generated ✅")
+
+        # split dataframe into properties and taxpayer_records
+        t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
+        df_props, df_taxpayers = subset_df.split_props_taxpayers(
+            df,
+            schema_map["properties"].out(),
+            schema_map["taxpayer_records"].out()
+        )
+        df_taxpayers.dropna(subset=["raw_name"], inplace=True)
+        console.print(f"\"{id}\" successfully split into \"taxpayer_records\" and \"properties\" ✅")
+
+        return df_props, df_taxpayers
+
+    def execute_business_filings_cleaning(
+        self,
+        df_bus1: pd.DataFrame,
+        df_bus3: pd.DataFrame,
+        schema_map
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+        for id, df in {"bus_filings": df_bus1, "bus_names_addrs": df_bus3}.items():
+
+            t.print_equals(f"Executing pre-cleaning operations ({id})")
+            # generate raw_prefixed columns
+            t.print_with_dots(f"Setting raw columns for \"{id}\"")
+            df: pd.DataFrame = cols_df.set_raw_columns(df, schema_map[id].raw())
+            console.print(f"Raw columns generated ✅")
+            # rename columns to prepare for cleaning
+            df.rename(columns=schema_map[id].clean_rename_map(), inplace=True)
+
+            # basic cleaning
+            t.print_equals(f"Executing basic operations (all data columns) ({id})")
+            cols = schema_map[id].basic_clean()
+            # basic cleaning in preparation for address concatenation
+            t.print_with_dots("Converting letters to uppercase")
+            df = clean_df_base.make_upper(df, cols)
+            t.print_with_dots("Removing symbols and punctuation")
+            df = clean_df_base.remove_symbols_punctuation(df, cols)
+            t.print_with_dots("Stripping dashes")
+            df = clean_df_base.strip_dashes(df, cols)
+            t.print_with_dots("Trimming whitespace")
+            df = clean_df_base.trim_whitespace(df, cols)
+            t.print_with_dots("Removing extra spaces")
+            df = clean_df_base.remove_extra_spaces(df, cols)
+            t.print_with_dots("Deduplicating repeated words")
+            df = clean_df_base.deduplicate(df, cols)
+            t.print_with_dots("Combining numbers separated by spaces")
+            df = clean_df_base.combine_numbers(df, cols)
+
+            # name-only cleaning
+            t.print_equals(f"Executing cleaning operations (name columns only)")
+            name_cols: list[str] = schema_map[id].name_clean()
+            df = clean_df_name.switch_the(df, name_cols)
+            console.print(f"Name field cleaning complete ✅")
+
+            # address-only cleaning
+            t.print_equals(f"Executing cleaning operations (address columns only)")
+            if id == "bus_names_addrs":
+                for col in schema_map[id].address_clean()["street"]:
+                    t.print_with_dots("Converting street suffixes")
+                    df = clean_df_addr.convert_street_suffixes(df, [col])
+                    t.print_with_dots("Converting directionals to their abbreviations")
+                    df = clean_df_addr.convert_nsew(df, [col])
+                    t.print_with_dots("Removing secondary designators")
+                    df = clean_df_addr.remove_secondary_designators(df, [col])
+                    # address-specific operations
+                    state_fixer: dict[str, str] = BusinessRecordsBase.mn_state_fixer()
+                    t.print_with_dots("Cleaning up states")
+                    df["clean_state"] = df["clean_state"].apply(lambda state: colm_df.fix_states(state, state_fixer))
+                df["clean_address"] = df.apply(lambda row: cols_df.concatenate_addr_mnsos(row, prefix="clean_"), axis=1)
+
+        return df_bus1, df_bus3
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "props_taxpayers": {
+                "path": path_gen.raw_props_taxpayers(configs),
+                "schema": PropsTaxpayersMN
+            },
+            # "bus_filings": {
+            #     "path": path_gen.raw_bus_filings(configs),
+            #     "schema": BusinessFilings
+            # },
+            # "bus_names_addrs": {
+            #     "path": path_gen.raw_bus_names_addrs(configs),
+            #     "schema": BusinessNamesAddrs,
+            #     "recursive_bools": True
+            # }
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+
+        schema_map = {
+            "props_taxpayers": PropsTaxpayersMN,
+            "bus_filings": BusinessFilings,
+            "bus_names_addrs": BusinessNamesAddrs,
+            "properties": PropertiesMN,
+            "taxpayer_records": TaxpayerRecordsMN,
+        }
+
+        # taxpayer records
+        df_taxpayers: pd.DataFrame = self.dfs_in["props_taxpayers"].copy()
+        df_taxpayer_records, df_properties = self.execute_taxpayer_cleaning(df_taxpayers, schema_map)
+        self.dfs_out["taxpayer_records"] = df_taxpayer_records
+        self.dfs_out["properties"] = df_properties
+
+        # business filings
+        # df_bus1: pd.DataFrame = self.dfs_in["bus_filings"].copy()
+        # df_bus3: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
+        # df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3, schema_map)
+        # self.dfs_out["bus_filings"] = df_filings
+        # self.dfs_out["bus_names_addrs"] = df_names_addrs
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "properties": path_gen.processed_properties(configs),
+            "taxpayer_records": path_gen.processed_taxpayer_records(configs),
+            # "bus_filings": path_gen.processed_bus_filings(configs),
+            # "bus_names_addrs": path_gen.processed_bus_names_addrs(configs),
+        }
+        self.save_dfs(save_map)
+
+    def summary_stats(self) -> None:
+        pass
 
     def update_configs(self) -> None:
         pass

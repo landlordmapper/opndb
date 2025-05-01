@@ -190,7 +190,19 @@ class CleanStringBase:
         return text.strip()
 
     @classmethod
+    @safe_string_cleaner
+    def strip_dashes(cls, text: str) -> str:
+        """
+        Removes dashes from the outside of a text value.
+
+        Example:
+            '-- CHOOSE A STATE --' -> ' CHOOSE A STATE '
+        """
+        return text.strip("-")
+
+    @classmethod
     def replace_with_nan(cls, text: str) -> str | float:
+        """Replaces empty strings with np.nan values."""
         if text == "":
             return np.nan
         return text
@@ -210,6 +222,7 @@ class CleanStringBase:
         return re.sub(r"\s+", " ", text)
 
     @classmethod
+    @safe_string_cleaner
     def fix_llcs(cls, text: str) -> str:
         if "L L C" in text:
             return text.replace("L L C", "LLC")
@@ -235,6 +248,7 @@ class CleanStringBase:
                 return text
 
     @classmethod
+    @safe_string_cleaner
     def deduplicate(cls, text: str) -> str:
         """
         Removes all duplicate words in text, reducing to single instances.
@@ -267,6 +281,7 @@ class CleanStringBase:
             return text
 
     @classmethod
+    @safe_string_cleaner
     def take_first(cls, text):
         """
         Extracts first number from a hyphenated range (e.g., '123-456') and removes the range.
@@ -283,6 +298,7 @@ class CleanStringBase:
         return text
 
     @classmethod
+    @safe_string_cleaner
     def combine_numbers(cls, text: str) -> str:
         """
         Combines sequences of numbers in a list while handling special cases with zeros.
@@ -344,6 +360,7 @@ class CleanStringBase:
 class CleanStringName(CleanStringBase):
 
     @classmethod
+    @safe_string_cleaner
     def switch_the(cls, text: str) -> str:
         """
         Moves 'THE' from end of string to beginning if it appears at the end.
@@ -391,6 +408,7 @@ class CleanStringName(CleanStringBase):
 class CleanStringAddress(CleanStringBase):
 
     @classmethod
+    @safe_string_cleaner
     def convert_nsew(cls, text: str) -> str:
         """
         Converts cardinal directions to abbreviated forms, but only converts the first direction
@@ -412,7 +430,7 @@ class CleanStringAddress(CleanStringBase):
             while i < len(words):
                 if words[i] in DIRECTIONS:
                     if i + 1 < len(words) and words[i + 1] in DIRECTIONS:
-                        if i + 2 < len(words) and words[i + 2] in STREET_SUFFIXES:
+                        if i + 2 < len(words) and words[i + 2] in STREET_SUFFIXES.values():
                             words[i] = DIRECTIONS[words[i]]  # Convert only the first direction
                             i += 1  # Skip modifying the second direction
                         else:
@@ -427,6 +445,7 @@ class CleanStringAddress(CleanStringBase):
 
 
     @classmethod
+    @safe_string_cleaner
     def remove_secondary_designators(cls, text: str) -> str:
         """
         Removes unit designations from addresses, while retaining the unit number.
@@ -451,6 +470,7 @@ class CleanStringAddress(CleanStringBase):
             return text
 
     @classmethod
+    @safe_string_cleaner
     def convert_street_suffixes(cls, text: str) -> str:
         """
         Replaces full street suffix names with their standardized abbreviations using the STREET_SUFFIXES mapping.
@@ -469,6 +489,7 @@ class CleanStringAddress(CleanStringBase):
 
 
     @classmethod
+    @safe_string_cleaner
     def fix_zip(cls, text):
         """
         Normalizes ZIP codes to a five-digit format, removing non-numeric characters and padding with leading zeros if necessary.
@@ -503,6 +524,11 @@ class CleanStringAddress(CleanStringBase):
             return match.group(1)
         else:
             return np.nan
+
+    @classmethod
+    @safe_string_cleaner
+    def fix_mpls(cls, text: str) -> str:
+        return text.replace("MPLS", "MINNEAPOLIS").replace("MNPLS", "MINNEAPOLIS")
 
 
 

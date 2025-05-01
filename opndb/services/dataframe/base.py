@@ -224,6 +224,10 @@ class DataFrameBaseCleaners(DataFrameCleaners):
         return cls.apply_string_cleaner(df, clean_base.trim_whitespace, cols)
 
     @classmethod
+    def strip_dashes(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.strip_dashes, cols)
+
+    @classmethod
     def replace_with_nan(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_base.replace_with_nan, cols)
 
@@ -288,6 +292,11 @@ class DataFrameAddressCleaners(DataFrameCleaners):
     @classmethod
     def fix_zip(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_addr.fix_zip, cols)
+
+    @classmethod
+    def fix_mpls(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_addr.fix_mpls, cols)
+
 
 
 class DataFrameCleanersAccuracy(DataFrameCleaners):

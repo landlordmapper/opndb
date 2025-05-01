@@ -1,6 +1,7 @@
 import pandas as pd
 
-from opndb.services.string_clean import CleanStringBase, CleanStringName
+from opndb.constants.base import DIRECTIONS, STREET_SUFFIXES
+from opndb.services.string_clean import CleanStringBase, CleanStringName, CleanStringAddress
 
 
 def test_string_cleaners():
@@ -39,3 +40,41 @@ def test_is_zip_irregular():
     zip_code = "FRANCE"
     is_irregular = is_zip_irregular(zip_code)
     assert is_irregular == True
+
+
+def test_convert_nsew():
+
+    def convert_nsew(text: str) -> str:
+        """
+            'NORTH MAIN STREET' -> 'N MAIN STREET'
+            '123 SOUTH WEST AVE' -> '123 S WEST AVE'
+            'EAST 42ND STREET' -> 'E 42ND STREET'
+            'NORTH WEST PLAZA' -> 'N WEST PLAZA'
+            "SOUTH WEST AVE" > “S WEST AVE”
+            "NORTH EAST ST" > “N EAST ST”
+            "NORTH WEST BUILDING" > “NORTH WEST BUILDING”
+        """
+        try:
+            words = text.split()
+            i = 0
+            while i < len(words):
+                if words[i] in DIRECTIONS:
+                    if i + 1 < len(words) and words[i + 1] in DIRECTIONS:
+                        if i + 2 < len(words) and words[i + 2] in STREET_SUFFIXES.values():
+                            words[i] = DIRECTIONS[words[i]]  # Convert only the first direction
+                            i += 1  # Skip modifying the second direction
+                        else:
+                            i += 1  # Skip conversion if no street suffix follows
+                    else:
+                        words[i] = DIRECTIONS[words[i]]
+                i += 1
+
+            return " ".join(words)
+        except:
+            return text
+
+    text = "NORTH MAIN STREET"
+
+    text_cleaned = convert_nsew(text)
+
+    assert text_cleaned == "N MAIN STREET"
