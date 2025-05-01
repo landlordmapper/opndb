@@ -108,20 +108,8 @@ class WorkflowBase(ABC):
             path: Path = params["path"]
             schema: Type[OPNDFModel] = params["schema"]
             recursive_bools: bool = params["recursive_bools"] if "recursive_bools" in params.keys() else False
-            if id.startswith("mnsos"):
-                self.dfs_in[id] = pd.read_csv(
-                    str(path),
-                    dtype=str,
-                    encoding="windows-1252",
-                    encoding_errors="replace",
-                    delimiter=",",
-                    quoting=csv.QUOTE_NONE,  # disables quote logic entirely
-                    engine="python",  # fallback parser that handles irregular rows better
-                    on_bad_lines="skip",  # logs but keeps going
-                )
-            else:
-                # load df and add to self.dfs_in
-                self.dfs_in[id] = ops_df.load_df(path, schema, recursive_bools)
+            # load df and add to self.dfs_in
+            self.dfs_in[id] = ops_df.load_df(path, schema, recursive_bools)
             # print success message
             if self.dfs_in[id] is not None:
             # self.dfs_out[id] = ops_df.load_df(path, str)
@@ -177,9 +165,7 @@ class WorkflowBase(ABC):
     @classmethod
     def create_workflow(cls, config_manager: ConfigManager, wkfl_id: str) -> Optional['WorkflowBase']:
         """Instantiates workflow object based on last saved progress (config['wkfl_stage'])."""
-        if wkfl_id == "raw_prep":
-            return WkflRawDataPrep(config_manager)
-        elif wkfl_id == "data_clean":
+        if wkfl_id == "data_clean":
             return WkflDataClean(config_manager)
         elif wkfl_id == "address_clean":
             return WkflAddressClean(config_manager)
