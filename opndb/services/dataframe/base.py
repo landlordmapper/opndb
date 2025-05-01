@@ -191,10 +191,10 @@ class DataFrameCleaners(DataFrameOpsBase):
     """Base dataframe cleaning methods."""
     @classmethod
     def apply_string_cleaner(
-            cls,
-            df: pd.DataFrame,
-            cleaner_func: Callable[[str], str],
-            cols: list[str] | None = None
+        cls,
+        df: pd.DataFrame,
+        cleaner_func: Callable[[str], str],
+        cols: list[str] | None = None
     ) -> pd.DataFrame:
         """Generic method to apply any string cleaner function to specified columns"""
         cols = list(df.columns) if cols is None else cols

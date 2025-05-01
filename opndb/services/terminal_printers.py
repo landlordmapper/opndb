@@ -83,6 +83,7 @@ class TerminalBase:
 
         # Define the available workflows
         workflow_choices = [
+            {"name": "Raw Data Preparation", "value": "raw_prep"},
             {"name": "Data Cleaning", "value": "data_clean"},
             {"name": "Initial Address Cleaning", "value": "address_clean"},
             {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},

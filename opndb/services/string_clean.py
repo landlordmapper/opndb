@@ -1,5 +1,6 @@
 import re
 import string
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -15,6 +16,17 @@ from opndb.constants.base import (
     CORP_WORDS,
     PO_BOXES
 )
+
+
+def safe_string_cleaner(func: Callable) -> Callable:
+    def wrapper(cls, value):
+        if pd.isna(value):
+            return value
+        if not isinstance(value, str):
+            value = str(value)
+        return func(cls, value)
+    return wrapper
+
 
 class CleanStringBase:
 
@@ -122,6 +134,7 @@ class CleanStringBase:
         return text in org_addrs
 
     @classmethod
+    @safe_string_cleaner
     def make_upper(cls, text: str) -> str:
         """
         Converts text to uppercase.
@@ -137,6 +150,7 @@ class CleanStringBase:
         return text.upper()
 
     @classmethod
+    @safe_string_cleaner
     def remove_symbols_punctuation(cls, text: str) -> str:
         """
         Removes punctuation and special symbols from text, with special handling for:
@@ -162,6 +176,7 @@ class CleanStringBase:
         )
 
     @classmethod
+    @safe_string_cleaner
     def trim_whitespace(cls, text: str) -> str:
         """
         Removes leading and trailing whitespace from text.
@@ -181,6 +196,7 @@ class CleanStringBase:
         return text
 
     @classmethod
+    @safe_string_cleaner
     def remove_extra_spaces(cls, text: str) -> str:
         """
         Replaces multiple consecutive spaces with a single space.

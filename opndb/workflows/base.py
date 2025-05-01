@@ -1,4 +1,5 @@
 # 1. Standard library imports
+import csv
 import gc
 import shutil
 import sys
@@ -17,6 +18,7 @@ from itertools import product
 # 2. Third-party imports
 import pandas as pd
 
+from opndb.constants.base import STATES_ABBREVS
 # 3. Constants (these should have no dependencies on other local modules)
 from opndb.constants.columns import (
     ValidatedAddrs as va,
@@ -106,8 +108,20 @@ class WorkflowBase(ABC):
             path: Path = params["path"]
             schema: Type[OPNDFModel] = params["schema"]
             recursive_bools: bool = params["recursive_bools"] if "recursive_bools" in params.keys() else False
-            # load df and add to self.dfs_in
-            self.dfs_in[id] = ops_df.load_df(path, schema, recursive_bools)
+            if id.startswith("mnsos"):
+                self.dfs_in[id] = pd.read_csv(
+                    str(path),
+                    dtype=str,
+                    encoding="windows-1252",
+                    encoding_errors="replace",
+                    delimiter=",",
+                    quoting=csv.QUOTE_NONE,  # disables quote logic entirely
+                    engine="python",  # fallback parser that handles irregular rows better
+                    on_bad_lines="skip",  # logs but keeps going
+                )
+            else:
+                # load df and add to self.dfs_in
+                self.dfs_in[id] = ops_df.load_df(path, schema, recursive_bools)
             # print success message
             if self.dfs_in[id] is not None:
             # self.dfs_out[id] = ops_df.load_df(path, str)
@@ -163,7 +177,9 @@ class WorkflowBase(ABC):
     @classmethod
     def create_workflow(cls, config_manager: ConfigManager, wkfl_id: str) -> Optional['WorkflowBase']:
         """Instantiates workflow object based on last saved progress (config['wkfl_stage'])."""
-        if wkfl_id == "data_clean":
+        if wkfl_id == "raw_prep":
+            return WkflRawDataPrep(config_manager)
+        elif wkfl_id == "data_clean":
             return WkflDataClean(config_manager)
         elif wkfl_id == "address_clean":
             return WkflAddressClean(config_manager)
@@ -255,27 +271,27 @@ class WkflRawDataPrep(WorkflowStandardBase):
 
     def load(self) -> None:
         configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {  # todo: change these back
-            "raw_taxpayers_city": {
-                "path": path_gen.raw_taxpayers_city(configs),
-                "schema": TaxpayersCity
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_city": {
+                "path": path_gen.pre_process_taxpayers_city(configs),
+                "schema": None  # TaxpayersCity
             },
-            "raw_taxpayers_county": {
-                "path": path_gen.raw_taxpayers_county(configs),
-                "schema": TaxpayersCounty
+            "taxpayers_county": {
+                "path": path_gen.pre_process_taxpayers_county(configs),
+                "schema": None  # TaxpayersCounty
             },
-            "raw_business_filings_1": {
-                "path": path_gen.raw_business_filings_1(configs),
-                "schema": BusinessFilings
+            "mnsos_type1": {
+                "path": path_gen.pre_process_business_filings_1(configs),
+                "schema": None  # BusinessFilings
             },
-            "raw_business_filings_3": {
-                "path": path_gen.raw_business_filings_3(configs),
-                "schema": BusinessNamesAddrs
+            "mnsos_type3": {
+                "path": path_gen.pre_process_business_filings_3(configs),
+                "schema": None  # BusinessNamesAddrs
             }
         }
         self.load_dfs(load_map)
 
-    def process(self) -> None:
+    def execute_taxpayer_pre_processing(self, df_city: pd.DataFrame, df_county: pd.DataFrame) -> pd.DataFrame:
 
         # define minneapolis-specific functions
         def shift_taxpayer_data_cells(row: pd.Series) -> pd.Series:
@@ -285,50 +301,8 @@ class WkflRawDataPrep(WorkflowStandardBase):
                 row["TAXPAYER_NM_1"] = np.nan
             return row
 
-        def handle_attn(row: pd.Series) -> pd.Series:
-            if "ATTN" in row["TAXPAYER_NM_3"]:
-                row["attn"] = row["TAXPAYER_NM_3"]
-                row["TAXPAYER_NM_3"] = row["TAXPAYER_NM_2"]
-                row["TAXPAYER_NM_2"] = row["TAXPAYER_NM_1"]
-                row["TAXPAYER_NM_1"] = np.nan
-            return row
-
         def fix_mpls(text: str) -> str:
             return text.replace("MPLS", "MINNEAPOLIS").replace("MNPLS", "MINNEAPOLIS")
-
-        def set_city_state_zip(row: pd.Series) -> pd.Series:
-            try:
-                city_state_zip_split = row["TAXPAYER_NM_3"].split()
-                zip_ = city_state_zip_split[-1]
-                state = city_state_zip_split[-2]
-                city = " ".join(city_state_zip_split[:-2])
-                row["tax_zip"] = zip_
-                row["tax_city"] = city
-                row["tax_state"] = state
-                return row
-            except IndexError:
-                print(
-                    f"INDEX ERROR FOR FOLLOWING ADDRESS: {row['TAXPAYER_NM']}, {row['TAXPAYER_NM_1']}, {row['TAXPAYER_NM_2']}, {row['TAXPAYER_NM_3']}")
-                return row
-
-        def set_taxpayer_street(row: pd.Series) -> str | float:
-            if row["is_edge_case"] == False and row["is_zip_irregular"] == False and row["is_state_irregular"] == False:
-                return row["TAXPAYER_NM_2"]
-            return np.nan
-
-        def set_taxpayer_address(row: pd.Series) -> str:
-            street = row["tax_street"]
-            city = row["tax_city"]
-            state = row["tax_state"]
-            zip_ = row["tax_zip"]
-            if pd.notnull(zip_) and pd.notnull(city) and pd.notnull(state) and pd.notnull(street):
-                return f"{street}, {city}, {state} {zip_}"
-            else:
-                return f"{row['TAXPAYER_NM_2']}, {row['TAXPAYER_NM_3']}"
-
-        # load df copies
-        df_city: pd.DataFrame = self.dfs_in["taxpayers_city"].copy()
-        df_county: pd.DataFrame = self.dfs_in["taxpayers_county"].copy()
 
         # extract relevant columns from both datasets
         df_city = df_city[[
@@ -377,9 +351,13 @@ class WkflRawDataPrep(WorkflowStandardBase):
         ]]
 
         # misc cleaning
+        t.print_with_dots("Trimming whitespace")
         df_county = clean_df_base.trim_whitespace(df_county)
+        t.print_with_dots("Replacing empty strings with np.nan")
         df_county = clean_df_base.replace_with_nan(df_county)
+        t.print_with_dots("Removing extra spaces")
         df_county = clean_df_base.remove_extra_spaces(df_county)
+        t.print_with_dots("Removing symbols & punctuation")
         df_county = clean_df_base.remove_symbols_punctuation(df_county)
 
         # fix pins on df_city
@@ -397,36 +375,29 @@ class WkflRawDataPrep(WorkflowStandardBase):
             "TAXPAYER_NM_3",
         ]]
 
-        # set new address columns
-        df_mpls["tax_zip"] = np.nan
-        df_mpls["tax_state"] = np.nan
-        df_mpls["tax_city"] = np.nan
-        df_mpls["tax_street"] = np.nan
-        df_mpls["tax_address"] = np.nan
-        df_mpls["attn"] = np.nan
-
         # shift taxpayer data
-        df_county = df_county.apply(lambda row: shift_taxpayer_data_cells(row), axis=1)
-        df_county = df_county.apply(lambda row: handle_attn(row), axis=1)
+        t.print_with_dots("Shifting taxpayer data cells")
+        df_mpls = df_mpls.apply(lambda row: shift_taxpayer_data_cells(row), axis=1)
+
+        # drop Hennepin county forfeited land properties
+        df_mpls.drop(df_mpls[df_mpls["TAXPAYER_NM"] == "HENNEPIN FORFEITED LAND"].index, inplace=True)
 
         # drop nulls
-        df_county.dropna(subset=["TAXPAYER_NM"], inplace=True)
-        df_county.dropna(subset=["TAXPAYER_NM_2"], inplace=True)
-        df_county.dropna(subset=["TAXPAYER_NM_3"], inplace=True)
-
-        # drop Hennepin county forfeitted land properties
-        df_county.drop(df_county[df_county["TAXPAYER_NM"] == "HENNEPIN FORFEITED LAND"].index, inplace=True)
+        t.print_with_dots("Dropping rows with missing taxpayer data")
+        df_mpls.dropna(subset=["TAXPAYER_NM"], inplace=True)
+        df_mpls.dropna(subset=["TAXPAYER_NM_2"], inplace=True)
+        df_mpls.dropna(subset=["TAXPAYER_NM_3"], inplace=True)
 
         # fix mpls/mnpls
-        df_county["TAXPAYER_NM_3"] = df_county["TAXPAYER_NM_3"].apply(lambda x: fix_mpls(x))
+        df_mpls["TAXPAYER_NM_3"] = df_mpls["TAXPAYER_NM_3"].apply(lambda x: fix_mpls(x))
 
         # set address columns
-        df_county = df_county.apply(lambda row: set_city_state_zip(row), axis=1)
-        df_county["tax_street"] = df_county.apply(lambda row: set_taxpayer_street(row), axis=1)
-        df_county["tax_address"] = df_county.apply(lambda row: set_taxpayer_address(row), axis=1)
+        t.print_with_dots("Setting address column")
+        df_mpls["tax_address"] = df_mpls.apply(lambda row: f"{row['TAXPAYER_NM_2']}, {row['TAXPAYER_NM_3']}", axis=1)
 
         # merge relevant data from df_city
-        df_tax_out = pd.merge(df_county, df_city[[
+        t.print_with_dots("Merging city dataset into county dataset")
+        df_taxpayers: pd.DataFrame = pd.merge(df_mpls, df_city[[
             "PIN",
             "PRIMARY_PROP_TYPE",
             "IS_EXEMPT",
@@ -435,25 +406,89 @@ class WkflRawDataPrep(WorkflowStandardBase):
         ]], how="left", left_on="PID", right_on="PIN")
 
         # drop & rename columns
-        df_tax_out.rename(columns={
+        df_taxpayers.rename(columns={
             "PID": "pin",
             "TAXPAYER_NM": "tax_name",
             "TAXPAYER_NM_1": "tax_name_2",
+            "TAXPAYER_NM_2": "tax_street",
+            "TAXPAYER_NM_3": "tax_city_state_zip",
             "IS_EXEMPT": "is_exempt",
             "IS_HOMESTEAD": "is_homestead",
             "PRIMARY_PROP_TYPE": "prop_type",
             "TOTAL_UNITS": "num_units",
         }, inplace=True)
+        df_taxpayers.drop(columns=["PIN"], inplace=True)
 
-        df_tax_out.drop(columns=[
-            "TAXPAYER_NM_2",
-            "TAXPAYER_NM_3",
-            "attn",
-            "PIN"
-        ], inplace=True)
+        return df_taxpayers
+
+    def execute_business_filings_preprocessing(
+        self,
+        df_bus1: pd.DataFrame,
+        df_bus3: pd.DataFrame
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+        df_bus1 = df_bus1[[
+            "master_id",
+            "business_type_code",
+            "original_filing_number",
+            "minnesota_business_name",
+            "business_filing_status",
+            "filing_date",
+            "expiration_date",
+            "next_renewal_due_date",
+            "home_jurisdiction",
+            "is_llc_non_profit",
+            "home_business_name"
+        ]]
+        df_bus1.rename(columns={
+            "master_id": "uid",
+            "original_filing_number": "file_number",
+            "minnesota_business_name": "name",
+            "business_filing_status": "status",
+        }, inplace=True)
+        df_bus3 = df_bus3[[
+            "master_id",
+            "name_type_number",
+            "address_type_number",
+            "party_name",
+            "street_address_line_1",
+            "street_address_line_2",
+            "city_name",
+            "region_code",
+            "postal_code",
+            "postal_code_extension",
+            "country_name",
+        ]]
+        df_bus3.rename(columns={
+            "master_id": "uid",
+            "name_type_number": "name_type",
+            "address_type_number": "address_type",
+            "street_address_line_1": "street_1",
+            "street_address_line_2": "street_2",
+            "city_name": "city",
+            "region_code": "state",
+            "postal_code": "zip_code",
+            "postal_code_extension": "zip_code_ext",
+            "country_name": "country",
+        }, inplace=True)
+
+        return df_bus1, df_bus3
+
+    def process(self) -> None:
+
+        # load df copies
+        df_city: pd.DataFrame = self.dfs_in["taxpayers_city"].copy()
+        df_county: pd.DataFrame = self.dfs_in["taxpayers_county"].copy()
+        df_bus1: pd.DataFrame = self.dfs_in["mnsos_type1"].copy()
+        df_bus3: pd.DataFrame = self.dfs_in["mnsos_type3"].copy()
+
+        df_tax_out = self.execute_taxpayer_pre_processing(df_city, df_county)
+        df_bus_1_out, df_bus_3_out = self.execute_business_filings_preprocessing(df_bus1, df_bus3)
 
         # set out dfs
         self.dfs_out["props_taxpayers"] = df_tax_out
+        self.dfs_out["business_filings_1"] = df_bus_1_out
+        self.dfs_out["business_filings_3"] = df_bus_3_out
 
     def summary_stats(self) -> None:
         pass
