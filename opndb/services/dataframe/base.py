@@ -191,10 +191,10 @@ class DataFrameCleaners(DataFrameOpsBase):
     """Base dataframe cleaning methods."""
     @classmethod
     def apply_string_cleaner(
-            cls,
-            df: pd.DataFrame,
-            cleaner_func: Callable[[str], str],
-            cols: list[str] | None = None
+        cls,
+        df: pd.DataFrame,
+        cleaner_func: Callable[[str], str],
+        cols: list[str] | None = None
     ) -> pd.DataFrame:
         """Generic method to apply any string cleaner function to specified columns"""
         cols = list(df.columns) if cols is None else cols
@@ -222,6 +222,10 @@ class DataFrameBaseCleaners(DataFrameCleaners):
     @classmethod
     def trim_whitespace(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_base.trim_whitespace, cols)
+
+    @classmethod
+    def replace_with_nan(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_base.replace_with_nan, cols)
 
     @classmethod
     def remove_extra_spaces(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:

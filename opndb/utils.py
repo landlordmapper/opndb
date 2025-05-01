@@ -6,7 +6,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, FileSi
 from opndb.constants.base import DATA_ROOT
 from rich.console import Console
 
-from opndb.constants.files import Dirs, Raw, Processed, Geocodio, Analysis, Output
+from opndb.constants.files import Dirs, Raw, Processed, Geocodio, Analysis, Output, PreProcess
 from opndb.types.base import FileExt, WorkflowConfigs, WorkflowStage
 
 console = Console()
@@ -65,6 +65,7 @@ class UtilsBase(object):
         # define required directories
         directories = [
             Dirs.RAW,
+            Dirs.PRE_PROCESS,
             Dirs.PROCESSED,
             Dirs.ANALYSIS,
             Dirs.GEOCODIO,
@@ -142,6 +143,46 @@ class PathGenerators(UtilsBase):
     Helper functions to return the file path for each individual dataset. Methods are named by
     '{dir_name}_{dataset_name}()'
     """
+    # -------------------
+    # ----PRE_PROCESS----
+    # -------------------
+    @classmethod
+    def pre_process_taxpayers_city(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/pre_process/taxpayers_city[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PRE_PROCESS,
+            PreProcess.TAXPAYERS_CITY,
+            configs["load_ext"]
+        )
+    @classmethod
+    def pre_process_taxpayers_county(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/pre_process/taxpayers_county[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PRE_PROCESS,
+            PreProcess.TAXPAYERS_COUNTY,
+            configs["load_ext"]
+        )
+    @classmethod
+    def pre_process_business_filings_1(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/pre_process/taxpayers_city[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PRE_PROCESS,
+            PreProcess.BUSINESS_FILINGS_1,
+            configs["load_ext"]
+        )
+    @classmethod
+    def pre_process_business_filings_3(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/pre_process/taxpayers_city[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PRE_PROCESS,
+            PreProcess.BUSINESS_FILINGS_3,
+            configs["load_ext"]
+        )
+
     # -----------
     # ----RAW----
     # -----------
@@ -179,6 +220,24 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.RAW,
             Raw.CLASS_CODES,
+            configs["load_ext"]
+        )
+    @classmethod
+    def raw_business_filings_1(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/raw/business_filings_1[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.RAW,
+            Raw.BUSINESS_FILINGS_1,
+            configs["load_ext"]
+        )
+    @classmethod
+    def raw_business_filings_3(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/raw/business_filings_1[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.RAW,
+            Raw.BUSINESS_FILINGS_3,
             configs["load_ext"]
         )
 

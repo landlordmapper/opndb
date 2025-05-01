@@ -3,6 +3,7 @@ from opndb.types.base import WorkflowConfigs
 
 class Dirs:
     """Directory names for workflow data file storage, corresponding to classes."""
+    PRE_PROCESS = "pre_process"
     RAW: str = "raw"
     GEOCODIO: str = "geocodio"
     GCD_PARTIALS: str = "partials"
@@ -22,12 +23,20 @@ class FileNames:
 class Root(FileNames):
     CONFIGS: str = "configs.json"
 
+class PreProcess(FileNames):
+    TAXPAYERS_CITY: str = "Assessing_Department_Parcel_Data_2024"
+    TAXPAYERS_COUNTY: str = "County_Parcels"
+    BUSINESS_FILINGS_1: str = "mnsosdat_type1"
+    BUSINESS_FILINGS_3: str = "mnsosdat_type3"
+
 class Raw(FileNames):
     """Raw input files, saved after running initial validation checks."""
     PROPS_TAXPAYERS: str = "props_taxpayers"
     CORPS: str = "corps"
     LLCS: str = "llcs"
     CLASS_CODES: str = "class_codes"
+    BUSINESS_FILINGS_1: str = "business_filings_1"
+    BUSINESS_FILINGS_3: str = "business_filings_3"
 
 class Geocodio(FileNames):
     GCD_VALIDATED: str = "gcd_validated"
