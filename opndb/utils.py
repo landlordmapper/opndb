@@ -15,6 +15,15 @@ console = Console()
 class UtilsBase(object):
 
     @staticmethod
+    def is_int(val: str) -> bool:
+        """Returns boolean of whether the string value passed is a valid integer."""
+        try:
+            val_int = int(val)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
     def generate_filename(filename: str, ext: str = "csv") -> str:
         """Returns file name with stage prefix."""
         return f"{filename}.{ext}"
@@ -330,6 +339,15 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.PROCESSED,
             Processed.UNVALIDATED_ADDRS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_taxpayers_bus_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/taxpayers_bus_merged[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.TAXPAYERS_BUS_MERGED,
             configs["load_ext"]
         )
     @classmethod

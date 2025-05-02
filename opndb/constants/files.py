@@ -64,6 +64,8 @@ class Processed(FileNames):
     VALIDATED_ADDRS: str = "validated_addrs"
     UNVALIDATED_ADDRS: str = "unvalidated_addrs"
 
+    TAXPAYERS_BUS_MERGED: str = "taxpayers_bus_merged"
+
     TAXPAYERS_MERGED: str = "taxpayers_merged"
     CORPS_MERGED: str = "corps_merged"
     LLCS_MERGED: str = "llcs_merged"

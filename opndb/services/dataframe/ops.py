@@ -5,7 +5,6 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 
-from opndb.constants.base import STATES_ABBREVS
 from opndb.constants.columns import (
     PropsTaxpayers as pt,
     TaxpayerRecords as tr,
@@ -14,7 +13,7 @@ from opndb.constants.columns import (
     Properties as p,
     UnvalidatedAddrs as ua
 )
-from opndb.services.address import AddressBase as addr
+from opndb.services.address import AddressBase as addr, AddressBase
 from opndb.services.dataframe.base import DataFrameOpsBase
 from opndb.services.match import MatchBase
 from opndb.services.string_clean import (
@@ -351,6 +350,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
     def set_is_incomplete_address_mnsos(cls, row: pd.Series) -> bool:
         """MNSOS-specific boolean generator indicating whether an address is complete or not."""
         # todo: standardize this
+        # todo: have this follow the pattern of returning dataframes
         if pd.isnull(row["street_1"]):
             return True
         elif pd.isnull(row["zip_code"]):
@@ -359,10 +359,17 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
             return False
 
     @classmethod
+    def concatenate_addr_mpls(cls, row):
+        if pd.notnull(row["clean_state"]) or pd.notnull(row["clean_zip_code"]):
+            return cls.concatenate_addr_mnsos(row, "clean_")
+        else:
+            return f"{row['clean_street']}, {row['clean_city_state_zip']}"
+
+    @classmethod
     def concatenate_addr_mnsos(cls, row, prefix: str = "") -> str | float:
         """MNSOS-specific address full address concatenator."""
         # todo: standardize this
-        if row["is_incomplete_address"] == True:
+        if "is_incomplete_address" in row.keys() and row["is_incomplete_address"] == True:
             return np.nan
 
         street_1: str = row[f"{prefix}street_1"]
@@ -384,6 +391,33 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         address += zip_code
 
         return address
+
+    @classmethod
+    def set_city_state_zip(cls, df: pd.DataFrame) -> pd.DataFrame:
+
+        def parse_city_state_zip(row: pd.Series) -> pd.Series:
+            """
+            Parses single field for city_state_zip. If the state and zip code values are valid, return row with city, state
+            and zip fields populated. If not, returns row as-is.
+            """
+            city_state_zip = row["clean_city_state_zip"].split()
+            if len(city_state_zip) > 1:
+                zip_code = city_state_zip[-1]
+                state = city_state_zip[-2]
+                city = " ".join(city_state_zip[:-2])
+                if not AddressBase.is_irregular_zip(zip_code) and not AddressBase.is_irregular_state(state):
+                    row["clean_city"] = city
+                    row["clean_state"] = state
+                    row["clean_zip_code"] = zip_code
+            return row
+
+        df["clean_city"] = np.nan
+        df["clean_state"] = np.nan
+        df["clean_zip_code"] = np.nan
+        df = df.apply(lambda row: parse_city_state_zip(row), axis=1)
+
+        return df
+
 
 
 class DataFrameColumnManipulators(DataFrameOpsBase):
@@ -410,7 +444,7 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         return df
 
     @classmethod
-    def set_corp_llc_names_taxpayers(cls, df: pd.DataFrame) -> pd.DataFrame:
+    def set_business_names_taxpayers(cls, df: pd.DataFrame) -> pd.DataFrame:
         mask = df["entity_clean_name"].notna()
         df.loc[mask, "clean_name"] = df.loc[mask, "entity_clean_name"]
         df.loc[mask, "core_name"] = df.loc[mask, "entity_core_name"]
@@ -444,8 +478,8 @@ class DataFrameColumnManipulators(DataFrameOpsBase):
         """
         if state_raw in state_fixer.keys():
             return state_fixer[state_raw]
-        if state_raw in STATES_ABBREVS.keys():
-            return STATES_ABBREVS[state_raw]
+        if state_raw in AddressBase.STATES_ABBREVS.keys():
+            return AddressBase.STATES_ABBREVS[state_raw]
         return state_raw
 
 

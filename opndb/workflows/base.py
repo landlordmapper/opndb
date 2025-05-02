@@ -18,7 +18,6 @@ from itertools import product
 # 2. Third-party imports
 import pandas as pd
 
-from opndb.constants.base import STATES_ABBREVS
 # 3. Constants (these should have no dependencies on other local modules)
 from opndb.constants.columns import (
     ValidatedAddrs as va,
@@ -1463,7 +1462,7 @@ class WkflCleanMerge(WorkflowStandardBase):
             - 'ROOT/processed/props_prepped[FileExt]'
     """
     WKFL_NAME: str = "PRE-MATCH CLEANING & MERGING WORKFLOW"
-    WKFL_DESC: str = "Runs basic string cleaners on raw inputted datasets."
+    WKFL_DESC: str = "Adds boolean columns identifying patterns in taxpayer names, merges corporate/LLC records into taxpayer data."
 
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
@@ -1623,7 +1622,7 @@ class WkflCleanMerge(WorkflowStandardBase):
         # remove corp/LLC record data for rows where exclude_name == True
         df_taxpayers = colm_df.fix_corp_llc_exclude_names(df_taxpayers)
         # set taxpayer clean and core name equal to corporate/llc records clean and core names
-        df_taxpayers = colm_df.set_corp_llc_names_taxpayers(df_taxpayers)
+        df_taxpayers = colm_df.set_business_names_taxpayers(df_taxpayers)
 
         # fetch addresses to exclude automatically from analysis
         df_exclude: pd.DataFrame = df_analysis[

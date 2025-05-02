@@ -22,15 +22,106 @@ from opndb.services.dataframe.base import (
     DataFrameOpsBase as ops_df,
     DataFrameBaseCleaners as clean_df
 )
-from opndb.utils import (UtilsBase as utils, PathGenerators as utils_path)
+from opndb.utils import (UtilsBase as utils, PathGenerators as utils_path, UtilsBase)
 
 
 class AddressBase:
 
     # todo: get this out of here - all file processing should be handled in the workflow
 
+    STATES_ABBREVS: dict[str, str] = {
+        "ALABAMA": "AL",
+        "ALASKA": "AK",
+        "ARIZONA": "AZ",
+        "ARKANSAS": "AR",
+        "CALIFORNIA": "CA",
+        "COLORADO": "CO",
+        "CONNECTICUT": "CT",
+        "DELAWARE": "DE",
+        "FLORIDA": "FL",
+        "GEORGIA": "GA",
+        "HAWAII": "HI",
+        "IDAHO": "ID",
+        "ILLINOIS": "IL",
+        "INDIANA": "IN",
+        "IOWA": "IA",
+        "KANSAS": "KS",
+        "KENTUCKY": "KY",
+        "LOUISIANA": "LA",
+        "MAINE": "ME",
+        "MARYLAND": "MD",
+        "MASSACHUSETTS": "MA",
+        "MICHIGAN": "MI",
+        "MINNESOTA": "MN",
+        "MISSISSIPPI": "MS",
+        "MISSOURI": "MO",
+        "MONTANA": "MT",
+        "NEBRASKA": "NE",
+        "NEVADA": "NV",
+        "NEW HAMPSHIRE": "NH",
+        "NEW JERSEY": "NJ",
+        "NEW MEXICO": "NM",
+        "NEW YORK": "NY",
+        "NORTH CAROLINA": "NC",
+        "NORTH DAKOTA": "ND",
+        "OHIO": "OH",
+        "OKLAHOMA": "OK",
+        "OREGON": "OR",
+        "PENNSYLVANIA": "PA",
+        "RHODE ISLAND": "RI",
+        "SOUTH CAROLINA": "SC",
+        "SOUTH DAKOTA": "SD",
+        "TENNESSEE": "TN",
+        "TEXAS": "TX",
+        "UTAH": "UT",
+        "VERMONT": "VT",
+        "VIRGINIA": "VA",
+        "WASHINGTON": "WA",
+        "WEST VIRGINIA": "WV",
+        "WISCONSIN": "WI",
+        "WYOMING": "WY",
+        "PUERTO RICO": "PR",
+        "WASHINGTON DC": "DC",
+        "GUAM": "GU"
+    }
+    STATES: list[str] = list(STATES_ABBREVS.keys()) + list(STATES_ABBREVS.values())
+
     def __init__(self):
         self.geocodio_api_key = ""
+
+    @classmethod
+    def is_irregular_zip(cls, val: str) -> bool:
+        """Tests whether a value matches a valid zip code pattern."""
+        if pd.isnull(val):
+            return True
+        # zip code is as expected - either 5 or 9 numbers
+        if len(val) == 5 or len(val) == 9:
+            if UtilsBase.is_int(val):
+                return False
+            else:
+                return True
+        # zip code include final 4 digits separated by dash
+        if "-" in val:
+            zip_split = val.split("-")
+            if len(zip_split[0]) == 5 and len(zip_split[1]) == 4:
+                if UtilsBase.is_int(zip_split[0]) and UtilsBase.is_int(zip_split[1]):
+                    return False
+                else:
+                    return True
+            else:
+                return True
+        return True
+
+    @classmethod
+    def is_irregular_state(cls, val: str) -> bool:
+        """Tests whether a value matches a valid US state pattern."""
+        if pd.isnull(val):
+            return True
+        if len(val.strip()) == 2 and val in cls.STATES:
+            return False
+        if val.strip() in cls.STATES:
+            return False
+        return True
 
     @classmethod
     def fix_formatted_address_unit(cls, row: pd.Series) -> str:  # how to assign type to "row" object?
