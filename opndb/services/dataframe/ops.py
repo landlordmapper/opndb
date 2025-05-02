@@ -360,8 +360,8 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def concatenate_addr_mpls(cls, row):
-        if pd.notnull(row["clean_state"]) or pd.notnull(row["clean_zip_code"]):
-            return cls.concatenate_addr_mnsos(row, "clean_")
+        if pd.notnull(row["clean_city"]) and pd.notnull(row["clean_state"]) and pd.notnull(row["clean_zip_code"]):
+            return f"{row["clean_street"]}, {row["clean_city"]}, {row["clean_state"]} {row[f"clean_zip_code"]}"
         else:
             return f"{row['clean_street']}, {row['clean_city_state_zip']}"
 
@@ -369,7 +369,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
     def concatenate_addr_mnsos(cls, row, prefix: str = "") -> str | float:
         """MNSOS-specific address full address concatenator."""
         # todo: standardize this
-        if "is_incomplete_address" in row.keys() and row["is_incomplete_address"] == True:
+        if row["is_incomplete_address"] == True:
             return np.nan
 
         street_1: str = row[f"{prefix}street_1"]
@@ -417,6 +417,15 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         df = df.apply(lambda row: parse_city_state_zip(row), axis=1)
 
         return df
+
+    @classmethod
+    def set_clean_street_mnsos(cls, row: pd.Series) -> str:
+        street_1: str | float = row[f"clean_street_1"]
+        street_2: str | float = row[f"clean_street_2"]
+        if pd.notnull(street_1) and pd.notnull(street_2):
+            return f"{street_1} {street_2}"
+        else:
+            return str(street_1)
 
 
 

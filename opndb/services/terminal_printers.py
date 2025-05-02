@@ -104,6 +104,7 @@ class TerminalBase:
             {"name": "Raw Data Preparation", "value": "raw_prep"},
             {"name": "Data Cleaning", "value": "data_clean"},
             {"name": "Pre-Match Cleaning", "value": "clean_merge"},
+            {"name": "Unvalidated Address Dataset Generator", "value": "unvalidated_addrs"},
         ]
 
         # Let user select a workflow

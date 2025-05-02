@@ -185,6 +185,8 @@ class WorkflowBase(ABC):
             return WkflDataClean(config_manager)
         elif wkfl_id == "clean_merge":
             return WkflCleanMerge(config_manager)
+        elif wkfl_id == "unvalidated_addrs":
+            return WkflUnvalidatedAddrs(config_manager)
         return None
 
     @abstractmethod
@@ -522,7 +524,7 @@ class WkflDataClean(WorkflowStandardBase):
         df = cols_df.set_city_state_zip(df)
         # add clean full address fields
         t.print_with_dots("Setting clean full address fields")
-        df["clean_address"] = df.apply(lambda row: f"{row['clean_street']}, {row['clean_city_state_zip']}", axis=1)
+        df["clean_address"] = df.apply(lambda row: cols_df.concatenate_addr_mpls(row), axis=1)
         df = cols_df.set_name_address_concat(
             df, schema_map["props_taxpayers"].name_address_concat_map()["clean"]
         )
@@ -863,10 +865,6 @@ class WkflUnvalidatedAddrs(WorkflowStandardBase):
                 "path": path_gen.processed_taxpayers_bus_merged(configs),
                 "schema": None  # TaxpayersBusMergedMN,
             },
-            "bus_filings": {
-                "path": path_gen.processed_bus_filings(configs),
-                "schema": BusinessFilings
-            },
             "bus_names_addrs": {
                 "path": path_gen.processed_bus_names_addrs(configs),
                 "schema": BusinessNamesAddrs
@@ -877,20 +875,40 @@ class WkflUnvalidatedAddrs(WorkflowStandardBase):
     def process(self) -> None:
 
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
-        df_bus_filings: pd.DataFrame = self.dfs_in["bus_filings"].copy()
         df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
 
-        # fetch all unique clean addresses from taxpayer records
+        unique_entities: list[str] = list(df_taxpayers["uid"].dropna().unique())
+
+        t.print_with_dots("Fetching unique addresses from taxpayer records")
+        df_tax_u: pd.DataFrame = df_taxpayers[["clean_street", "clean_city", "clean_state", "clean_zip_code", "clean_address"]]
+        df_tax_u.drop_duplicates(subset=["clean_address"], inplace=True)
+
         # fetch all unique clean addresses from business records for matching orgs
+        t.print_with_dots("Fetching unique addresses from business records")
+        df_bus_u: pd.DataFrame = df_bus_names_addrs[df_bus_names_addrs["uid"].isin(unique_entities)]
+        df_bus_u = df_bus_u[["clean_street_1", "clean_street_2", "clean_city", "clean_state", "clean_zip_code", "clean_address"]]
+        df_bus_u.dropna(subset=["clean_address"], inplace=True)
+        df_bus_u.drop_duplicates(subset=["clean_address"], inplace=True)
+        df_bus_u["clean_street"] = df_bus_u.apply(lambda row: cols_df.set_clean_street_mnsos(row), axis=1)
+        for col in df_bus_u.columns:
+            print(col)
+        df_bus_u.drop(columns=["clean_street_1", "clean_street_2"], inplace=True)
+
         # generate final unvalidated address file
-        pass
+        t.print_with_dots("Generating master unvalidated dataset")
+        df_unvalidated: pd.DataFrame = pd.concat([df_tax_u, df_bus_u], ignore_index=True)
+        df_unvalidated.drop_duplicates(subset=["clean_address"], inplace=True)
+        self.dfs_out["unvalidated_addrs"] = df_unvalidated
+
 
     def summary_stats(self) -> None:
         pass
 
     def save(self) -> None:
         configs = self.config_manager.configs
-        save_map: dict[str, Path] = {}
+        save_map: dict[str, Path] = {
+            "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
+        }
         self.save_dfs(save_map)
 
     def update_configs(self) -> None:
