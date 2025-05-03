@@ -249,7 +249,7 @@ class AddressBase:
     def save_geocodio_partial(cls, results: list[dict], configs: WorkflowConfigs):
         timestamp = utils.get_timestamp()
         df_partial = pd.DataFrame(results)
-        ops_df.save_df(df_partial, utils_path.geocodio_partial(configs, f"gcd_partial_({timestamp}).csv"))
+        ops_df.save_df(df_partial, utils_path.geocodio_partial(configs, f"gcd_partial_({timestamp})"))
 
     @classmethod
     def check_matching_addrs(cls, df: pd.DataFrame) -> bool:

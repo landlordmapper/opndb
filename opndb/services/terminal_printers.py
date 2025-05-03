@@ -106,6 +106,8 @@ class TerminalBase:
             {"name": "Business/Tax Record Matching", "value": "bus_merge"},
             {"name": "Unvalidated Address Dataset Generator", "value": "unvalidated_addrs"},
             {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
+            {"name": "Geocodio Fix", "value": "geocodio_fix"},
+
         ]
 
         # Let user select a workflow

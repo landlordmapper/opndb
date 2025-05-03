@@ -30,7 +30,7 @@ class UtilsBase(object):
 
     @staticmethod
     def get_timestamp():
-        return datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        return datetime.now().strftime("%Y_%m_%d_%H_%M_%S_%f")
 
     @staticmethod
     def list_directory_files(directory: Path) -> list[Path]:
@@ -445,21 +445,29 @@ class PathGenerators(UtilsBase):
     # ----GEOCODIO----
     # -----------------
     @classmethod
-    def geocodio_gcd_validated(cls, configs: WorkflowConfigs) -> Path:
+    def geocodio_gcd_validated(cls, configs: WorkflowConfigs, test: bool = False) -> Path:
         """:returns: ROOT/geocodio/gcd_validated[ext]"""
+        if test:
+            file_name: str = Geocodio.GCD_VALIDATED + "_test"
+        else:
+            file_name: str = Geocodio.GCD_VALIDATED
         return cls.generate_path(
             configs["data_root"],
             Dirs.GEOCODIO,
-            Geocodio.GCD_VALIDATED,
+            file_name,
             configs["load_ext"]
         )
     @classmethod
-    def geocodio_gcd_unvalidated(cls, configs: WorkflowConfigs) -> Path:
+    def geocodio_gcd_unvalidated(cls, configs: WorkflowConfigs, test: bool = False) -> Path:
         """:returns: ROOT/geocodio/gcd_unvalidated[ext]"""
+        if test:
+            file_name: str = Geocodio.GCD_UNVALIDATED + "_test"
+        else:
+            file_name: str = Geocodio.GCD_UNVALIDATED
         return cls.generate_path(
             configs["data_root"],
             Dirs.GEOCODIO,
-            Geocodio.GCD_UNVALIDATED,
+            file_name,
             configs["load_ext"]
         )
     @classmethod

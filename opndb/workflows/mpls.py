@@ -52,7 +52,7 @@ from opndb.types.base import (
     StringMatchParams,
     NetworkMatchParams,
     CleaningColumnMap,
-    BooleanColumnMap, WorkflowStage, GeocodioReturnObject,
+    BooleanColumnMap, WorkflowStage, GeocodioReturnObject, GeocodioResultProcessed, GeocodioResultFlat, CleanAddress,
 )
 
 # 5. Utils (these should only depend on constants and types)
@@ -60,7 +60,7 @@ from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
 
 # 6. Services (these can depend on everything else)
 from opndb.services.match import StringMatch, NetworkMatchBase, MatchBase
-from opndb.services.address import AddressBase as addr
+from opndb.services.address import AddressBase as addr, AddressBase
 from opndb.services.terminal_printers import TerminalBase as t
 from opndb.services.terminal_printers import TerminalInteract as ti
 from opndb.services.dataframe.base import (
@@ -190,6 +190,8 @@ class WorkflowBase(ABC):
             return WkflUnvalidatedAddrs(config_manager)
         elif wkfl_id == "address_geocodio":
             return WkflAddressGeocodio(config_manager)
+        elif wkfl_id == "geocodio_fix":
+            return WkflGeocodioFix(config_manager)
         return None
 
     @abstractmethod
@@ -1063,5 +1065,293 @@ class WkflAddressGeocodio(WorkflowStandardBase):
     def save(self) -> None:
         pass
 
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflGeocodioFix(WorkflowStandardBase):
+    WKFL_NAME: str = "WORKFLOW GEOCODIO FIX"
+    WKFL_DESC: str = "Runs filters on all Geocodio partials and creates validated/unvalidated address datasets resulting from the filters."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_geocodio_partial_concatenator(self) -> pd.DataFrame:
+        partials_path: Path = Path(self.config_manager.configs["data_root"]) / "geocodio" / "partials"
+        dfs: list[pd.DataFrame] = []
+        for file in partials_path.iterdir():
+            if file.is_file() and file.suffix == ".csv":
+                df = pd.read_csv(file, dtype=str)
+                dfs.append(df)
+        df_results = pd.concat(dfs, ignore_index=True)
+        return df_results
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "unvalidated_addrs": {
+                "path": path_gen.processed_unvalidated_addrs(configs),
+                "schema": UnvalidatedAddrs,
+            },
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+
+        df_results: pd.DataFrame = self.execute_geocodio_partial_concatenator()
+        clean_addrs: list[str] = list(df_results["clean_address"].unique())
+        grouped = df_results.groupby("clean_address")
+
+        gcd_results_obj: GeocodioReturnObject = {  # object to be used to create/update dataframes in workflow process
+            "validated": [],
+            "unvalidated": [],
+        }
+
+        # Set up Rich progress display
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            "•",
+            TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+        ) as progress:
+            geocodio_task = progress.add_task(
+                "[yellow]Processing Geocodio API call results...",
+                total=len(clean_addrs),
+                processed=0,
+            )
+            processed_count = 0
+            for addr in clean_addrs:
+                group = grouped.get_group(addr).reset_index(drop=True)
+                flattened_results: list[GeocodioResultFlat] = []
+                clean_addr_row: pd.Series = self.dfs_in["unvalidated_addrs"].loc[
+                    self.dfs_in["unvalidated_addrs"]["clean_address"] == addr
+                ].iloc[0]
+                clean_address: CleanAddress = AddressBase.build_clean_address_object(clean_addr_row)
+                for i, row in group.iterrows():
+                    flattened_results.append(row.to_dict())
+                results_processed: GeocodioResultProcessed = AddressBase.process_geocodio_results(
+                    clean_address,
+                    flattened_results
+                )
+                if len(results_processed["results_parsed"]) == 1:
+                    new_validated = results_processed["results_parsed"][0]
+                    new_validated["clean_address"] = row["clean_address"]
+                    # new_validated["is_pobox"] = clean_address["is_pobox"]
+                    gcd_results_obj["validated"].append(new_validated)
+                else:
+                    for result in results_processed["results_parsed"]:
+                        new_unvalidated = result
+                        new_unvalidated["clean_address"] = clean_address["clean_address"]
+                        gcd_results_obj["unvalidated"].append(new_unvalidated)
+                processed_count += 1
+                progress.update(
+                    geocodio_task,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing address {processed_count}/{len(clean_addrs)}"
+                )
+
+        df_gcd_validated: pd.DataFrame = pd.DataFrame(gcd_results_obj["validated"])
+        df_gcd_unvalidated: pd.DataFrame = pd.DataFrame(gcd_results_obj["unvalidated"])
+
+        self.dfs_out["gcd_validated"] = df_gcd_validated
+        self.dfs_out["gcd_unvalidated"] = df_gcd_unvalidated
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs, test=True),
+            "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs, test=True),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+
+class WkflFixUnitsInitial(WorkflowStandardBase):
+    """
+    Outputs validated address subset dataset for rows whose raw (or clean) addresses contain secondary unit numbers
+    but whose validated addresses do not. To be used for manual investigation and address fixing
+    """
+    WKFL_NAME: str = "INITIAL FIX UNITS WORKFLOW"
+    WKFL_DESC: str = ("Outputs validated addresses whose raw addresses contain secondary unit numbers but whose "
+                      "validated addresses do not.")
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        # subset validated addresses for only ones which do not have a secondary number
+        df_unit = df_unit[df_unit["secondarynumber"].isnull()]
+        # check street addresses for digits at the end
+        df_unit = cols_df.set_check_sec_num(df_unit, "clean_address")
+        # subset check_sec_num results to only include rows where a number WAS detected
+        df_unit = df_unit[df_unit["check_sec_num"].notnull()]
+        self.dfs_out["fixing_addrs"] = df_unit
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSFixUnitsInitial(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "fixing_addrs": path_gen.analysis_fixing_addrs(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflFixUnitsFinal(WorkflowStandardBase):
+    """
+    Changes validated addresses to include unit numbers not initially detected by the workflow.
+    """
+    WKFL_NAME: str = "FINAL FIX UNITS WORKFLOW"
+    WKFL_DESC: str = "Changes validated addresses to include unit numbers not initially detected by the workflow."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "fixing_addrs": {
+                "path": path_gen.analysis_fixing_addrs(configs),
+                "schema": FixingAddrs,
+            },
+        }
+
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        df_fix: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
+        # run validator
+        self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
+        self.run_validator("fixing_addrs", df_fix, self.config_manager.configs, self.WKFL_NAME, FixingAddrs)
+        t.print_equals("Adding missing unit numbers to validated addresses")
+        total_addresses = len(df_fix["clean_address"])
+        # Set up Rich progress display
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            "•",
+            TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+        ) as progress:
+            task = progress.add_task(
+                "[yellow]Fixing validated addresses...",
+                total=total_addresses,
+                processed=0,
+            )
+            processed_count = 0
+            for _, row in df_fix.iterrows():  # todo: add progress bar
+                address: str = row["clean_address"]
+                mask = df_valid["clean_address"] == address
+                matching_indices = df_valid.index[mask]
+                df_valid.loc[matching_indices, "secondarynumber"] = row["secondarynumber"]
+                for idx in matching_indices:
+                    row_to_fix = df_valid.loc[idx]
+                    df_valid.loc[idx, "formatted_address"] = addr.fix_formatted_address_unit(row_to_fix)
+                processed_count += 1
+                progress.update(
+                    task,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing address {processed_count}/{total_addresses}"
+                )
+        # generate formatted_address_v
+        df_valid = cols_df.set_formatted_address_v(df_valid)
+        self.dfs_out["gcd_validated"] = df_valid
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSFixUnitsFinal(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass

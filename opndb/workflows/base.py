@@ -752,6 +752,7 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         ss_obj = SSAddressGeocodio(
             self.config_manager.configs,
             self.WKFL_NAME,
+            self.dfs_in,
             self.dfs_out
         )
         ss_obj.calculate()
