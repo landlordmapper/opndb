@@ -808,11 +808,11 @@ class DataFrameCellShifters(DataFrameOpsBase):
         return row
 
     @classmethod
-    def shift_street_addrs(cls, row: pd.Series) -> pd.Series:
+    def shift_street_addrs(cls, row: pd.Series, prefix: str = "") -> pd.Series:
         """MNSOS-specific function shifting missing address data cells."""
-        street_1: str | float = row["street_1"]
-        street_2: str | float = row["street_2"]
+        street_1: str | float = row[f"{prefix}street_1"]
+        street_2: str | float = row[f"{prefix}street_2"]
         if pd.isnull(street_1) and pd.notnull(street_2):
-            row["street_1"] = street_2
-            row["street_2"] = np.nan
+            row[f"{prefix}street_1"] = street_2
+            row[f"{prefix}street_2"] = np.nan
         return row

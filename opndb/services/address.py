@@ -3,6 +3,7 @@ from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 import time
 import traceback
+from operator import itemgetter
 from pprint import pprint
 
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
@@ -16,7 +17,7 @@ from opndb.types.base import (
     CleanAddress,
     GeocodioResult,
     GeocodioResponse,
-    GeocodioResultFlat, GeocodioReturnObject, WorkflowConfigs, GeocodioResultProcessed
+    GeocodioResultFlat, GeocodioReturnObject, WorkflowConfigs, GeocodioResultProcessed, GeocodioQueryObject
 )
 from opndb.services.dataframe.base import (
     DataFrameOpsBase as ops_df,
@@ -179,6 +180,54 @@ class AddressBase:
         if api_key == "":
             raise Exception("No API key detected.")
         url: str = GEOCODIO_URL + api_key + "&q=" + address_search_string
+        res: req.Response = req.get(url)
+        if res.status_code == 200:
+            data: GeocodioResponse = res.json()
+            return data["results"]
+        else:
+            return None
+
+    @classmethod
+    def build_address_search_object(cls, row: pd.Series) -> GeocodioQueryObject:
+        address_search_object: GeocodioQueryObject = {
+            "street": row["clean_street_1"],
+            "street2": row["clean_street_2"] if pd.notnull(row["clean_street_2"]) else None,
+            "city": row["clean_city"] if pd.notnull(row["clean_city"]) else None,
+            "state": row["clean_state"] if pd.notnull(row["clean_state"]) else None,
+            "postal_code": row["clean_zip_code"] if pd.notnull(row["clean_zip_code"]) else None,
+            "country": row["clean_country"] if pd.notnull(row["clean_country"]) else None,
+            "complete_address": row["clean_address"]
+        }
+        return address_search_object
+
+    @classmethod
+    def build_geocodio_url_params(cls, api_key: str, address_search_object: GeocodioQueryObject) -> str:
+        """Adds query parameters to geocodio API URL."""
+        url: str = GEOCODIO_URL + api_key
+        street, street2, city, state, postal_code, country, complete_address = itemgetter(
+            "street", "street2", "city", "state", "postal_code", "country", "complete_address"
+        )(address_search_object)
+        if postal_code is None:
+            url += "&q=" + complete_address
+        else:
+            url += "&street=" + street
+            if street2 is not None:
+                url += "&street2=" + street2
+            if city is not None:
+                url += "&city=" + city
+            if state is not None:
+                url += "&state=" + state
+            url += "&postal_code=" + postal_code
+            if country is not None:
+                url += "&country=" + country
+        return url
+
+    @classmethod
+    def call_geocodio_mpls(cls, api_key: str, address_search_object: GeocodioQueryObject) -> list[GeocodioResult] | None:
+        """Executes Geocodio API call."""
+        if api_key == "":
+            raise Exception("No API key detected.")
+        url: str = cls.build_geocodio_url_params(api_key, address_search_object)
         res: req.Response = req.get(url)
         if res.status_code == 200:
             data: GeocodioResponse = res.json()
@@ -473,6 +522,120 @@ class AddressBase:
                             else:
                                 return_obj["failed"].append(clean_address)
                                 gcd_results.append(clean_address)
+                            # save geocodio partial and empty out gcd_results
+                            if interval is not None and len(gcd_results) >= interval:
+                                progress.update(geocodio_task, description="[magenta]Saving partial results...")
+                                cls.save_geocodio_partial(gcd_results, configs)
+                                gcd_results = []
+                            # Update progress
+                            processed_count += 1
+                            progress.update(
+                                geocodio_task,
+                                advance=1,
+                                processed=processed_count,
+                                description=f"[yellow]Processing address {processed_count}/{total_addresses}"
+                            )
+                        except Exception as e:
+                            progress.console.print(f"[red]Error: {e}[/red]")
+                            progress.console.print(traceback.format_exc())
+                    if interval is not None and gcd_results:
+                        progress.update(geocodio_task, description="[magenta]Saving final batch...")
+                        cls.save_geocodio_partial(gcd_results, configs)
+                if interval is None:
+                    cls.save_geocodio_partial(gcd_results, configs)
+            # Complete the task
+            progress.update(geocodio_task, description="[green]Geocodio processing complete!")
+            # log time
+            end_time = time.time()
+            elapsed_minutes = round((end_time - start_time) / 60, 2)
+            progress.console.print(f"[bold green]Total processing time: {elapsed_minutes} minutes[/bold green]")
+            return return_obj
+        except Exception as e:
+            print(f"Error: {e}")
+            print(traceback.format_exc())
+            return return_obj
+
+    @classmethod
+    def run_geocodio_mpls(
+        cls,
+        api_key: str,
+        df_addrs: pd.DataFrame,
+        configs: WorkflowConfigs,
+        interval: int = 50
+    ) -> GeocodioReturnObject:
+        """
+        Executes Geocodio API calls for raw, unvalidated addresses.
+
+        :param api_key: user's unique Geocodio API key
+        :param df_addrs: Dataframe of rows containing raw address data, with one row per unique address.
+        :param addr_col: Column name containing the addresses to be validated.
+        :param interval: Optional interval setting to control how many Geocodio calls should trigger a partial save.
+        :return:
+        """
+        return_obj: GeocodioReturnObject = {  # object to be used to create/update dataframes in workflow process
+            "validated": [],
+            "unvalidated": [],
+            "failed": [],
+        }
+        try:
+            gcd_results = []  # list of all results to store as partials
+            total_addresses = len(df_addrs)
+
+            # Set up Rich progress display
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                BarColumn(bar_width=None),
+                "[progress.percentage]{task.percentage:>3.0f}%",
+                "•",
+                TimeElapsedColumn(),
+                "•",
+                TimeRemainingColumn(),
+                "•",
+                TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+            ) as progress:
+                geocodio_task = progress.add_task(
+                    "[yellow]Processing Geocodio API calls...",
+                    total=total_addresses,
+                    processed=0,
+                )
+                start_time = time.time()
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    # store all unique addresses from dataframe into future object
+                    futures = {}
+                    for i, row in df_addrs.iterrows():
+                        address_search_object: GeocodioQueryObject = cls.build_address_search_object(row)
+                        future = executor.submit(cls.call_geocodio_mpls, api_key, address_search_object)
+                        futures[future] = (i, row)
+                    processed_count = 0
+                    # loop through futures object, executing geocodio calls for each one
+                    for future in as_completed(futures):  # todo: add progress bar visualization
+                        try:
+                            i, row = futures[future]
+                            clean_address: CleanAddress = row.to_dict()  # create CleanAddress object from dataframe row
+                            results: list[GeocodioResult] = future.result()  # fetch results returned by call_geocodio()
+                            # flatten geocodio results to include lat, lng, accuracy and formatted address
+                            if results:  # API call succeeded, begin processing results
+                                flattened_results: list[GeocodioResultFlat] = [
+                                    cls.flatten_geocodio_result(result) for result in results
+                                ]
+                                results_processed: GeocodioResultProcessed = cls.process_geocodio_results(
+                                    clean_address,
+                                    flattened_results
+                                )
+                                if len(results_processed["results_parsed"]) == 1:
+                                    new_validated = results_processed["results_parsed"][0]
+                                    new_validated["clean_address"] = row["clean_address"]
+                                    new_validated["is_pobox"] = clean_address["is_pobox"]
+                                    return_obj["validated"].append(new_validated)
+                                else:
+                                    for result in results_processed["results_parsed"]:
+                                        new_unvalidated = result
+                                        new_unvalidated["clean_address"] = clean_address["clean_address"]
+                                        return_obj["unvalidated"].append(new_unvalidated)
+                                # add all results and their associated raw address to the partial
+                                for result in flattened_results:
+                                    gcd_results.append({**clean_address, **result})
                             # save geocodio partial and empty out gcd_results
                             if interval is not None and len(gcd_results) >= interval:
                                 progress.update(geocodio_task, description="[magenta]Saving partial results...")

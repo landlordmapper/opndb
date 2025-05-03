@@ -601,6 +601,7 @@ class WkflDataClean(WorkflowStandardBase):
                     t.print_with_dots("Cleaning up states")
                     df["clean_state"] = df["clean_state"].apply(lambda state: colm_df.fix_states(state, state_fixer))
                 df["clean_address"] = df.apply(lambda row: cols_df.concatenate_addr_mnsos(row, prefix="clean_"), axis=1)
+                df = df.apply(lambda row: shift_df.shift_street_addrs(row, prefix="clean_"), axis=1)
 
         return df_bus1, df_bus3
 
@@ -611,15 +612,15 @@ class WkflDataClean(WorkflowStandardBase):
                 "path": path_gen.raw_props_taxpayers(configs),
                 "schema": PropsTaxpayersMN
             },
-            # "bus_filings": {
-            #     "path": path_gen.raw_bus_filings(configs),
-            #     "schema": BusinessFilings
-            # },
-            # "bus_names_addrs": {
-            #     "path": path_gen.raw_bus_names_addrs(configs),
-            #     "schema": BusinessNamesAddrs,
-            #     "recursive_bools": True
-            # }
+            "bus_filings": {
+                "path": path_gen.raw_bus_filings(configs),
+                "schema": BusinessFilings
+            },
+            "bus_names_addrs": {
+                "path": path_gen.raw_bus_names_addrs(configs),
+                "schema": BusinessNamesAddrs,
+                "recursive_bools": True
+            }
         }
         self.load_dfs(load_map)
 
@@ -640,19 +641,19 @@ class WkflDataClean(WorkflowStandardBase):
         self.dfs_out["properties"] = df_properties
 
         # business filings
-        # df_bus1: pd.DataFrame = self.dfs_in["bus_filings"].copy()
-        # df_bus3: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
-        # df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3, schema_map)
-        # self.dfs_out["bus_filings"] = df_filings
-        # self.dfs_out["bus_names_addrs"] = df_names_addrs
+        df_bus1: pd.DataFrame = self.dfs_in["bus_filings"].copy()
+        df_bus3: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
+        df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3, schema_map)
+        self.dfs_out["bus_filings"] = df_filings
+        self.dfs_out["bus_names_addrs"] = df_names_addrs
 
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
             "properties": path_gen.processed_properties(configs),
             "taxpayer_records": path_gen.processed_taxpayer_records(configs),
-            # "bus_filings": path_gen.processed_bus_filings(configs),
-            # "bus_names_addrs": path_gen.processed_bus_names_addrs(configs),
+            "bus_filings": path_gen.processed_bus_filings(configs),
+            "bus_names_addrs": path_gen.processed_bus_names_addrs(configs),
         }
         self.save_dfs(save_map)
 
@@ -882,17 +883,14 @@ class WkflUnvalidatedAddrs(WorkflowStandardBase):
         t.print_with_dots("Fetching unique addresses from taxpayer records")
         df_tax_u: pd.DataFrame = df_taxpayers[["clean_street", "clean_city", "clean_state", "clean_zip_code", "clean_address"]]
         df_tax_u.drop_duplicates(subset=["clean_address"], inplace=True)
+        df_tax_u.rename(columns={"clean_street": "clean_street_1"}, inplace=True)
 
         # fetch all unique clean addresses from business records for matching orgs
         t.print_with_dots("Fetching unique addresses from business records")
         df_bus_u: pd.DataFrame = df_bus_names_addrs[df_bus_names_addrs["uid"].isin(unique_entities)]
-        df_bus_u = df_bus_u[["clean_street_1", "clean_street_2", "clean_city", "clean_state", "clean_zip_code", "clean_address"]]
+        df_bus_u = df_bus_u[["clean_street_1", "clean_street_2", "clean_city", "clean_state", "clean_zip_code", "clean_country", "clean_address"]]
         df_bus_u.dropna(subset=["clean_address"], inplace=True)
         df_bus_u.drop_duplicates(subset=["clean_address"], inplace=True)
-        df_bus_u["clean_street"] = df_bus_u.apply(lambda row: cols_df.set_clean_street_mnsos(row), axis=1)
-        for col in df_bus_u.columns:
-            print(col)
-        df_bus_u.drop(columns=["clean_street_1", "clean_street_2"], inplace=True)
 
         # generate final unvalidated address file
         t.print_with_dots("Generating master unvalidated dataset")
@@ -910,6 +908,102 @@ class WkflUnvalidatedAddrs(WorkflowStandardBase):
             "unvalidated_addrs": path_gen.processed_unvalidated_addrs(configs),
         }
         self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAddressGeocodio(WorkflowStandardBase):
+
+    WKFL_NAME: str = "ADDRESS VALIDATION (GEOCODIO) WORKFLOW"
+    WKFL_DESC: str = ("Executes Geocodio API calls for unvalidated addresses. Processes and stores results in data "
+                      "directories.")
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_gcd_address_subset(self, df_unvalidated: pd.DataFrame) -> pd.DataFrame:
+        """
+        Subsets unvalidated master address file by filtering out addresses that have already been run through the
+        validator. Returns dataframe slice containing only columns required for processing Geocodio API calls.
+        """
+        # fetch addresses already processed
+        addrs: list[str] = []
+        if self.dfs_in["gcd_validated"] is not None:
+            addrs.extend(list(self.dfs_in["gcd_validated"]["clean_address"].unique()))
+        if self.dfs_in["gcd_unvalidated"] is not None:
+            addrs.extend(list(self.dfs_in["gcd_unvalidated"]["clean_address"].unique()))
+        # filter out addresses already processed
+        if len(addrs) > 0:
+            df_addrs: pd.DataFrame = df_unvalidated[~df_unvalidated["clean_address"].isin(set(addrs))]
+        else:
+            df_addrs: pd.DataFrame = df_unvalidated
+        return df_addrs[[
+            "clean_street",
+            "clean_city",
+            "clean_state",
+            "clean_zip_code",
+            "clean_address",
+        ]]
+
+    def execute_api_key_handler_warning(self, df_addrs: pd.DataFrame) -> bool:
+        """
+        Prompts user to enter geocodio API key if not already found in configs.json. Prints out warning telling user
+        how many addresses are set to be geocoded and how much id could cost them, and aborts workflow if user quits.
+        """
+        if "geocodio_api_key" not in self.config_manager.configs.keys():
+            while True:
+                console.print("\n")
+                api_key: str = Prompt.ask(
+                    "[bold cyan]Copy & paste your geocodio API key for address validation[/bold cyan]"
+                )
+                if len(api_key) > 0:
+                    self.config_manager.set("geocodio_api_key", api_key)
+                else:
+                    console.print("You must enter an API key to continue.")
+        t.print_geocodio_warning(df_addrs)
+        cont: bool = t.press_enter_to_continue("execute geocodio API calls ")
+        if not cont:
+            console.print("Aborted!")
+        return cont
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "unvalidated_addrs": {
+                "path": path_gen.processed_unvalidated_addrs(configs),
+                "schema": UnvalidatedAddrs,
+            },
+            "gcd_unvalidated": {
+                "path": path_gen.geocodio_gcd_unvalidated(configs),
+                "schema": Geocodio,
+            },
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+
+        df_unvalidated_master: pd.DataFrame = self.dfs_in["unvalidated_addrs"].copy()
+        df_gcd_validated: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        df_gcd_unvalidated: pd.DataFrame = self.dfs_in["gcd_unvalidated"].copy()
+
+        # fetch addresses to be geocoded
+        df_addrs: pd.DataFrame = self.execute_gcd_address_subset(df_unvalidated_master)
+
+        # get geocodio api key from user if not already exists in configs.json
+        cont: bool = self.execute_api_key_handler_warning(df_addrs)
+        if not cont: return
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
 
     def update_configs(self) -> None:
         pass

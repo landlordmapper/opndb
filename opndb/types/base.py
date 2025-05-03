@@ -60,6 +60,18 @@ class CleanAddress(TypedDict, total=False):
     zip: str | None
     is_pobox: bool
 
+
+class GeocodioQueryObject(TypedDict):
+    """Used to construct URL query parameters for geocodio API calls"""
+    street: str
+    street2: str | None
+    city: str | None
+    state: str | None
+    postal_code: str | None
+    country: str | None
+    complete_address: str
+
+
 class GeocodioAddressComponents(TypedDict, total=False):
     number: str
     predirectional: str
