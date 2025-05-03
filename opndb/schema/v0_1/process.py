@@ -1028,7 +1028,7 @@ class UnvalidatedAddrsClean(UnvalidatedAddrs):
     def geocodio_columns(cls) -> list[str]:
         return cls._GEOCODIO_COLUMNS
 
-    is_pobox: bool = pa.Field(
+    is_pobox: bool | None = pa.Field(
         nullable=False,
         unique=False,
         title="Is PO Box?",
@@ -1174,7 +1174,7 @@ class Geocodio(OPNDFModel):
         title="Formatted Address",
         description="Concatenation of all address components into a single string."
     )
-    is_pobox: bool = pa.Field(
+    is_pobox: bool | None = pa.Field(
         nullable=False,
         unique=False,
         title="Is PO Box?",

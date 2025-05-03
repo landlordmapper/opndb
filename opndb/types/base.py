@@ -155,7 +155,7 @@ class GeocodioResultFinal(TypedDict):
     formatted_address: str
     is_pobox: bool
 
-class GeocodioReturnObject(TypedDict):
+class GeocodioReturnObject(TypedDict, total=False):
     validated: list[GeocodioResultFinal]
     unvalidated: list[GeocodioResultFinal]
     failed: list[GeocodioResultFinal]

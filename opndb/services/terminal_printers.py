@@ -103,8 +103,9 @@ class TerminalBase:
         workflow_choices = [
             {"name": "Raw Data Preparation", "value": "raw_prep"},
             {"name": "Data Cleaning", "value": "data_clean"},
-            {"name": "Pre-Match Cleaning", "value": "clean_merge"},
+            {"name": "Business/Tax Record Matching", "value": "bus_merge"},
             {"name": "Unvalidated Address Dataset Generator", "value": "unvalidated_addrs"},
+            {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
         ]
 
         # Let user select a workflow
@@ -583,3 +584,26 @@ class TerminalInteract(TerminalBase):
             except ValueError:
                 console.print("[red]Please enter a valid number.[/red]")
 
+    @classmethod
+    def prompt_geocode_count(cls, addresses_remaining: int) -> int:
+        """
+        Prompt the user to select the number of addresses to geocode.
+
+        Returns:
+            int: The selected number of addresses to geocode
+        """
+        choices: list[str] = [
+            "100", "500", "1000", "5000", "10000", "20000", "50000", f"All ({addresses_remaining})"
+        ]
+        console.print("\n[bold cyan]How many addresses would you like to geocode?[/bold cyan]")
+        selection = questionary.select(
+            "Select the number of addresses to geocode:",
+            choices=choices
+        ).ask()
+
+        if selection.startswith("All"):
+            selected_count: int = addresses_remaining
+        else:
+            selected_count: int = int(selection)
+        console.print(f"[green]✓ You selected to geocode {selected_count:,} addresses.[/green]\n")
+        return selected_count

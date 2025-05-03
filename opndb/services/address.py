@@ -236,6 +236,16 @@ class AddressBase:
             return None
 
     @classmethod
+    def build_clean_address_object(cls, row: pd.Series) -> CleanAddress:
+        return {
+            "clean_address": row["clean_address"],
+            "street": row["clean_street_1"],
+            "city": row["clean_city"],
+            "state": row["clean_state"],
+            "zip": row["clean_zip_code"],
+        }
+
+    @classmethod
     def save_geocodio_partial(cls, results: list[dict], configs: WorkflowConfigs):
         timestamp = utils.get_timestamp()
         df_partial = pd.DataFrame(results)
@@ -558,9 +568,8 @@ class AddressBase:
     @classmethod
     def run_geocodio_mpls(
         cls,
-        api_key: str,
-        df_addrs: pd.DataFrame,
         configs: WorkflowConfigs,
+        df_addrs: pd.DataFrame,
         interval: int = 50
     ) -> GeocodioReturnObject:
         """
@@ -572,10 +581,10 @@ class AddressBase:
         :param interval: Optional interval setting to control how many Geocodio calls should trigger a partial save.
         :return:
         """
+        api_key: str = configs["geocodio_api_key"]
         return_obj: GeocodioReturnObject = {  # object to be used to create/update dataframes in workflow process
             "validated": [],
             "unvalidated": [],
-            "failed": [],
         }
         try:
             gcd_results = []  # list of all results to store as partials
@@ -609,10 +618,10 @@ class AddressBase:
                         futures[future] = (i, row)
                     processed_count = 0
                     # loop through futures object, executing geocodio calls for each one
-                    for future in as_completed(futures):  # todo: add progress bar visualization
+                    for future in as_completed(futures):
                         try:
                             i, row = futures[future]
-                            clean_address: CleanAddress = row.to_dict()  # create CleanAddress object from dataframe row
+                            clean_address: CleanAddress = AddressBase.build_clean_address_object(row)  # create CleanAddress object from dataframe row
                             results: list[GeocodioResult] = future.result()  # fetch results returned by call_geocodio()
                             # flatten geocodio results to include lat, lng, accuracy and formatted address
                             if results:  # API call succeeded, begin processing results
@@ -626,7 +635,7 @@ class AddressBase:
                                 if len(results_processed["results_parsed"]) == 1:
                                     new_validated = results_processed["results_parsed"][0]
                                     new_validated["clean_address"] = row["clean_address"]
-                                    new_validated["is_pobox"] = clean_address["is_pobox"]
+                                    # new_validated["is_pobox"] = clean_address["is_pobox"]
                                     return_obj["validated"].append(new_validated)
                                 else:
                                     for result in results_processed["results_parsed"]:

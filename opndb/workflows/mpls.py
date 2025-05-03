@@ -62,6 +62,7 @@ from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
 from opndb.services.match import StringMatch, NetworkMatchBase, MatchBase
 from opndb.services.address import AddressBase as addr
 from opndb.services.terminal_printers import TerminalBase as t
+from opndb.services.terminal_printers import TerminalInteract as ti
 from opndb.services.dataframe.base import (
     DataFrameOpsBase as ops_df,
     DataFrameBaseCleaners as clean_df_base,
@@ -183,10 +184,12 @@ class WorkflowBase(ABC):
             return WkflRawDataPrep(config_manager)
         elif wkfl_id == "data_clean":
             return WkflDataClean(config_manager)
-        elif wkfl_id == "clean_merge":
-            return WkflCleanMerge(config_manager)
+        elif wkfl_id == "bus_merge":
+            return WkflBusinessMerge(config_manager)
         elif wkfl_id == "unvalidated_addrs":
             return WkflUnvalidatedAddrs(config_manager)
+        elif wkfl_id == "address_geocodio":
+            return WkflAddressGeocodio(config_manager)
         return None
 
     @abstractmethod
@@ -664,7 +667,7 @@ class WkflDataClean(WorkflowStandardBase):
         pass
 
 
-class WkflCleanMerge(WorkflowStandardBase):
+class WkflBusinessMerge(WorkflowStandardBase):
 
     WKFL_NAME: str = "PRE-MATCH CLEANING & MERGING WORKFLOW"
     WKFL_DESC: str = "Adds boolean columns identifying patterns in taxpayer names, merges corporate/LLC records into taxpayer data."
@@ -939,13 +942,17 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             df_addrs: pd.DataFrame = df_unvalidated[~df_unvalidated["clean_address"].isin(set(addrs))]
         else:
             df_addrs: pd.DataFrame = df_unvalidated
+        # get number of addresses to run through geocodio
+        num_addrs_to_geocodio: int = ti.prompt_geocode_count(len(df_addrs))
         return df_addrs[[
-            "clean_street",
+            "clean_street_1",
+            "clean_street_2",
             "clean_city",
             "clean_state",
             "clean_zip_code",
+            "clean_country",
             "clean_address",
-        ]]
+        ]].head(num_addrs_to_geocodio)
 
     def execute_api_key_handler_warning(self, df_addrs: pd.DataFrame) -> bool:
         """
@@ -968,6 +975,52 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             console.print("Aborted!")
         return cont
 
+    def execute_geocodio_postprocessor(self, gcd_results_obj: GeocodioReturnObject) -> None:
+        """
+        Processes results of run_geocodio. Updates gcd_validated, gcd_unvalidated and gcd_failed based on results of
+        run_geocodio call. Stores final dataframes to be saved in self.dfs_out.
+        """
+        t.print_with_dots("Merging validated address data")
+        # create new dataframes from the resulting geocodio call
+        df_gcd_validated_new: pd.DataFrame = pd.DataFrame(gcd_results_obj["validated"])
+        df_gcd_unvalidated_new: pd.DataFrame = pd.DataFrame(gcd_results_obj["unvalidated"])
+
+        # if there were already gcd_validated, gcd_unvalidated and gcd_failed in the directories, concatenate the new one and set to dfs_out
+        if self.dfs_in["gcd_validated"] is not None:
+            df_gcd_validated_out = pd.concat([self.dfs_in["gcd_validated"], df_gcd_validated_new], ignore_index=True)
+        else:
+            df_gcd_validated_out = df_gcd_validated_new
+        if self.dfs_in["gcd_unvalidated"] is not None:
+            df_gcd_unvalidated_out = pd.concat([self.dfs_in["gcd_unvalidated"], df_gcd_unvalidated_new], ignore_index=True)
+        else:
+            df_gcd_unvalidated_out = df_gcd_unvalidated_new
+        # calculate stats to print
+        if not df_gcd_validated_out.empty:
+            validated_before: int = len(self.dfs_in["gcd_validated"]) if self.dfs_in["gcd_validated"] is not None else 0
+            validated_after: int = len(df_gcd_validated_out)
+            validated_diff: int = validated_after - validated_before
+            console.print(f"Total validated addresses: {validated_after} (+{validated_diff})")
+
+        if not df_gcd_unvalidated_out.empty:
+            unvalidated_before: int = len(self.dfs_in["gcd_unvalidated"]["clean_address"].unique()) if self.dfs_in["gcd_unvalidated"] is not None else 0
+            unvalidated_after: int = len(df_gcd_unvalidated_out["clean_address"].unique())
+            unvalidated_diff: int = unvalidated_after - unvalidated_before
+            console.print(f"Total unvalidated addresses: {unvalidated_after} (+{unvalidated_diff})")
+
+        # set dfs_in with updated validated address datasets to run again
+        self.dfs_in["gcd_validated"] = df_gcd_validated_out
+        self.dfs_in["gcd_unvalidated"] = df_gcd_unvalidated_out
+
+        # set dfs_out and save progress
+        self.dfs_out["gcd_validated"] = df_gcd_validated_out
+        self.dfs_out["gcd_unvalidated"] = df_gcd_unvalidated_out
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+            "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs),
+        }
+        self.save_dfs(save_map)
+
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
@@ -989,15 +1042,20 @@ class WkflAddressGeocodio(WorkflowStandardBase):
     def process(self) -> None:
 
         df_unvalidated_master: pd.DataFrame = self.dfs_in["unvalidated_addrs"].copy()
-        df_gcd_validated: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
-        df_gcd_unvalidated: pd.DataFrame = self.dfs_in["gcd_unvalidated"].copy()
 
-        # fetch addresses to be geocoded
-        df_addrs: pd.DataFrame = self.execute_gcd_address_subset(df_unvalidated_master)
-
-        # get geocodio api key from user if not already exists in configs.json
-        cont: bool = self.execute_api_key_handler_warning(df_addrs)
-        if not cont: return
+        while True:
+            # fetch addresses to be geocoded
+            df_addrs: pd.DataFrame = self.execute_gcd_address_subset(df_unvalidated_master)
+            # get geocodio api key from user if not already exists in configs.json
+            cont: bool = self.execute_api_key_handler_warning(df_addrs)
+            if not cont: return
+            # call geocodio or exit
+            gcd_results_obj: GeocodioReturnObject = addr.run_geocodio_mpls(
+                self.config_manager.configs,
+                df_addrs,
+            )
+            # execute post-processor
+            self.execute_geocodio_postprocessor(gcd_results_obj)
 
     def summary_stats(self) -> None:
         pass
