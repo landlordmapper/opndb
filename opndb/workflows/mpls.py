@@ -1070,6 +1070,7 @@ class WkflAddressGeocodio(WorkflowStandardBase):
 
 
 class WkflGeocodioFix(WorkflowStandardBase):
+
     WKFL_NAME: str = "WORKFLOW GEOCODIO FIX"
     WKFL_DESC: str = "Runs filters on all Geocodio partials and creates validated/unvalidated address datasets resulting from the filters."
 
@@ -1179,7 +1180,6 @@ class WkflGeocodioFix(WorkflowStandardBase):
         pass
 
 
-
 class WkflFixUnitsInitial(WorkflowStandardBase):
     """
     Outputs validated address subset dataset for rows whose raw (or clean) addresses contain secondary unit numbers
@@ -1275,7 +1275,6 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
                 "schema": FixingAddrs,
             },
         }
-
         self.load_dfs(load_map)
 
     # -----------------
@@ -1285,8 +1284,8 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
         df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         df_fix: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
         # run validator
-        self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
-        self.run_validator("fixing_addrs", df_fix, self.config_manager.configs, self.WKFL_NAME, FixingAddrs)
+        # self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
+        # self.run_validator("fixing_addrs", df_fix, self.config_manager.configs, self.WKFL_NAME, FixingAddrs)
         t.print_equals("Adding missing unit numbers to validated addresses")
         total_addresses = len(df_fix["clean_address"])
         # Set up Rich progress display
@@ -1353,5 +1352,372 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
     # -----------------------
     # ----CONFIGS UPDATER----
     # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAddressMerge(WorkflowStandardBase):
+
+    WKFL_NAME: str = "ADDRESS MERGE WORKFLOW"
+    WKFL_DESC: str = "Merges validated addresses to address fields in taxpayer and business filing records."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "taxpayers_bus_merged": {
+                "path": path_gen.processed_taxpayers_bus_merged(configs),
+                "schema": TaxpayerRecordsMN,
+            },
+            "bus_filings": {
+                "path": path_gen.processed_bus_filings(configs),
+                "schema": BusinessFilings
+            }
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        schema_map = {
+            "gcd_validated": Geocodio,
+            "taxpayer_records": TaxpayerRecords,
+            "corps": Corps,
+            "llcs": LLCs,
+        }
+        df_valid = self.dfs_in["gcd_validated"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
+        df_bus_names_addrs: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
+        # run validator on validated address dataset
+        # self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
+
+        t.print_dataset_name("taxpayers_bus_merged")
+
+        df = merge_df.merge_validated_address(df_taxpayers, df_valid, "clean_address")
+        # remove redundant columns
+        df = clean_df_base.combine_columns_parallel(df)
+        # drop duplicates resulting from merge
+        if id == "llcs":
+            df.drop_duplicates(subset=["file_number"], inplace=True)
+        self.dfs_out[id] = df
+        console.print("Validated addresses merged ✅ 🗺️ 📍")
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSAddressMerge(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_addr_merged": path_gen.processed_taxpayers_addr_merged(configs),
+            "bus_names_addrs_merged": path_gen.processed_bus_names_addrs_merged(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflNameAnalysisInitial(WorkflowStandardBase):
+    """
+    Initial taxpayer name analysis workflow. Generates frequency and name analysis dataframes.
+
+    INPUTS:
+    OUTPUTS:
+    """
+
+    WKFL_NAME: str = "NAME ANALYSIS INITIAL WORKFLOW"
+    WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_merged": {
+                "path": path_gen.processed_taxpayers_merged(configs),
+                "schema": TaxpayersMerged,
+                "recursive_bools": True
+            },
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        df = self.dfs_in["taxpayer_records"].copy()
+        # run validator
+        self.run_validator("taxpayer_records", df, self.config_manager.configs, self.WKFL_NAME, TaxpayerRecords)
+        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
+        # frequent_tax_names
+        self.dfs_out["frequent_tax_names"] = df_freq
+        self.dfs_out["frequent_tax_names"]["exclude_name"] = ""
+        # fixing_tax_names
+        self.dfs_out["fixing_tax_names"] = pd.DataFrame(
+            columns=["raw_value", "standardized_value"],
+            data=[
+                [
+                    "Paste the EXACT string from the messy data to be standardized in this column",
+                    "Paste the fixed version in this column"
+                ],
+                ["EXAMPLES","EXAMPLES"],
+                ["COMMUNITY SAV BK LT", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BK TR", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BK", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BANK", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY BK TR LT", "COMMUNITY SAVINGS BANK"],
+                ["COMM SAVINGS BK LT", "COMMUNITY SAVINGS BANK"],
+                ["COMM SAVGS BK LT", "COMMUNITY SAVINGS BANK"],
+            ]
+        )
+
+    def summary_stats(self) -> None:
+        ss_obj = SSNameAnalysisInitial(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
+            "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAddressAnalysisInitial(WorkflowStandardBase):
+    """
+    Address analysis
+
+    INPUTS:
+        - Master validated address file
+            - 'ROOT/processed/validated_addrs[FileExt]'
+        - User inputs manual address research data
+    OUTPUTS:
+        - Address analysis dataset
+            - 'ROOT/analysis/address_freq[FileExt]'
+    """
+    WKFL_NAME: str = "ADDRESS ANALYSIS INITIAL WORKFLOW"
+    WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
+
+    ANALYSIS_FIELDS: list[str] = [
+        "name",
+        "urls",
+        "notes",
+        "is_landlord_org",
+        "is_govt_agency",
+        "is_lawfirm",
+        "is_missing_suite",
+        "is_financial_services",
+        "is_assoc_bus",
+        "fix_address",
+        "is_virtual_office_agent",
+        "yelp_urls",
+        "is_nonprofit",
+        "google_urls",
+        "is_ignore_misc",
+        "google_place_id",
+        "is_researched"
+    ]
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "taxpayers_merged": {
+                "path": path_gen.processed_taxpayers_merged(configs),
+                "schema": TaxpayersMerged,
+                "recursive_bools": True
+            },
+            "corps": {
+                "path": path_gen.processed_corps_merged(configs),
+                "schema": Corps,
+            },
+            "llcs": {
+                "path": path_gen.processed_llcs_merged(configs),
+                "schema": LLCs,
+            },
+        }
+
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        schema_map = {
+            "gcd_validated": Geocodio,
+            "taxpayers_merged": TaxpayersMerged,
+            "corps": Corps,
+            "llcs": LLCs,
+        }
+        addrs = []
+        for id, df_in in self.dfs_in.items():
+            self.run_validator(id, df_in, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+            if id == "gcd_validated":
+                continue
+            for addr_col in schema_map[id].validated_address_merge():
+                addrs.extend(
+                    [
+                        addr
+                        for addr in df_in[f"{addr_col}_v"]
+                        if pd.notnull(addr) and addr != ""
+                    ]
+                )
+        df_addrs: pd.DataFrame = pd.DataFrame(columns=["address"], data=addrs)
+        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df_addrs, "address")
+        for field in self.ANALYSIS_FIELDS:
+            df_freq[field] = ""
+        df_freq["is_researched"] = "f"
+        self.dfs_out["address_analysis"] = df_freq
+
+    def summary_stats(self) -> None:
+        ss_obj = SSAddressAnalysisInitial(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "address_analysis": path_gen.analysis_address_analysis(configs),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAnalysisFinal(WorkflowStandardBase):
+    """
+    Fixes taxpayer names based on standardized spellings manually specified in the fixing_tax_names dataset. Adds
+    boolean columns to taxpayer records for exclude_name, based on manual input in
+    fixing_tax_names dataset.
+    """
+    WKFL_NAME: str = "FIX NAMES ADDRESSES WORKFLOW"
+    WKFL_DESC: str = "Changes taxpayer names and validated addresses based on manual input."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def get_banks_dict(self, df: pd.DataFrame) -> dict:
+        banks = {}
+        for standard_name in list(df["standardized_value"].unique()):
+            df_name: pd.DataFrame = df[df["standardized_value"] == standard_name]
+            for raw_name in list(df_name["raw_value"].unique()):
+                banks[raw_name] = standard_name
+        return banks
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "fixing_tax_names": {
+                "path": path_gen.analysis_fixing_tax_names(configs),
+                "schema": FixingTaxNames,  # <- swap with actual schema if needed
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+            },
+            "frequent_tax_names": {
+                "path": path_gen.analysis_frequent_tax_names(configs),
+                "schema": FrequentTaxNames,
+            },
+            "taxpayers_merged": {
+                "path": path_gen.processed_taxpayers_merged(configs),
+                "schema": TaxpayersMerged,
+                "recursive_bools": True
+            },
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        schema_map = {
+            "fixing_tax_names": FixingTaxNames,
+            "address_analysis": AddressAnalysis,
+            "frequent_tax_names": FrequentTaxNames,
+            "taxpayers_merged": TaxpayersMerged,
+        }
+        # run validators
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+        # copy dfs
+        df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_merged"].copy()
+
+        df_taxpayers.dropna(subset=["raw_name"], inplace=True)
+        # create banks dict
+        t.print_with_dots("Setting standardized name dictionary")
+        banks: dict[str, str] = self.get_banks_dict(df_fix_names)
+        t.print_with_dots("Fixing taxpayer names")
+        df_taxpayers = colm_df.fix_tax_names(df_taxpayers, banks)
+        t.print_with_dots("Setting exclude_name boolean column")
+        df_taxpayers = cols_df.set_exclude_name(df_taxpayers, df_freq_names)
+        # t.print_with_dots("Setting is_landlord_org boolean column")
+        # df_taxpayers = cols_df.set_is_landlord_org(df_taxpayers, df_analysis)
+        self.dfs_out["taxpayers_fixed"] = df_taxpayers
+
+    def summary_stats(self) -> None:
+        ss_obj = SSAnalysisFinal(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_fixed": path_gen.processed_taxpayers_fixed(configs)
+        }
+        self.save_dfs(save_map)
+
     def update_configs(self) -> None:
         pass

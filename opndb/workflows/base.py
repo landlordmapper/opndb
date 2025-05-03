@@ -871,7 +871,6 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
                 "schema": FixingAddrs,
             },
         }
-
         self.load_dfs(load_map)
 
     # -----------------

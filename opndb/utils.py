@@ -297,6 +297,14 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
+    def processed_bus_names_addrs_merged(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.BUS_NAMES_ADDRS_MERGED,
+            configs["load_ext"]
+        )
+    @classmethod
     def processed_corps(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/corps[ext]"""
         return cls.generate_path(
@@ -357,6 +365,15 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.PROCESSED,
             Processed.TAXPAYERS_MERGED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_taxpayers_addr_merged(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/processed/taxpayers_merged[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.TAXPAYERS_ADDR_MERGED,
             configs["load_ext"]
         )
     @classmethod
