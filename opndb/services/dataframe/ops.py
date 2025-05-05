@@ -32,6 +32,7 @@ from rich.progress import (
 from rich.console import Console
 
 from opndb.services.terminal_printers import TerminalBase as t
+from opndb.utils import UtilsBase
 
 console = Console()
 
@@ -448,6 +449,37 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         clean_addr_split = row["original_doc"].split(",")[0]
         street_split = clean_addr_split.split()
         return sec_num in street_split
+
+    @classmethod
+    def set_is_not_secondarynumber(cls, df: pd.DataFrame) -> pd.DataFrame:
+        def get_is_not_secondarynumber(clean_addr: str) -> bool:
+            clean_split: list[str] = clean_addr.split(",")
+            addr_split: list[str] = clean_split[0].split()
+            if UtilsBase.is_int(addr_split[-1]):
+                if len(addr_split) > 1:
+                    if addr_split[-2] in ["HWY", "HIGHWAY"]:
+                        if " ".join(addr_split[-3:-1]) != "DUPONT HWY":
+                            return True
+                    if " ".join(addr_split[-3:-1]) in [
+                        "CO RD",
+                        "COUNTY RD",
+                        "STATE RD",
+                        "ST RD"
+                    ]:
+                        return True
+            return False
+        df["is_not_secondarynumber"] = df["clean_address"].apply(get_is_not_secondarynumber)
+        return df
+
+    @classmethod
+    def set_is_invalid_street(cls, df: pd.DataFrame) -> pd.DataFrame:
+        def get_is_invalid_street(clean_addr: str) -> bool:
+            clean_split: list[str] = clean_addr.split(",")
+            if UtilsBase.is_int(clean_split[0]):
+                return True
+            return False
+        df["is_invalid_street"] = df["clean_address"].apply(get_is_invalid_street)
+        return df
 
 
 

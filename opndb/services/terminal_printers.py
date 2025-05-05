@@ -108,6 +108,8 @@ class TerminalBase:
             {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
             {"name": "Geocodio Fix", "value": "geocodio_fix"},
             {"name": "Geocodio String Match", "value": "gcd_string_match"},
+            {"name": "Fix Units Initial", "value": "fix_units_initial"},
+            {"name": "Fix Units Final", "value": "fix_units_final"},
         ]
 
         # Let user select a workflow

@@ -194,6 +194,10 @@ class WorkflowBase(ABC):
             return WkflGeocodioFix(config_manager)
         elif wkfl_id == "gcd_string_match":
             return WkflGeocodioStringMatch(config_manager)
+        elif wkfl_id == "fix_units_initial":
+            return WkflFixUnitsInitial(config_manager)
+        elif wkfl_id == "fix_units_final":
+            return WkflFixUnitsFinal(config_manager)
         return None
 
     @abstractmethod
@@ -1145,9 +1149,14 @@ class WkflGeocodioFix(WorkflowStandardBase):
                 )
                 if len(results_processed["results_parsed"]) == 1:
                     new_validated = results_processed["results_parsed"][0]
-                    new_validated["clean_address"] = row["clean_address"]
-                    # new_validated["is_pobox"] = clean_address["is_pobox"]
-                    gcd_results_obj["validated"].append(new_validated)
+                    if pd.isnull(new_validated["number"]) or new_validated["number"] == "":
+                        new_unvalidated = new_validated
+                        new_unvalidated["clean_address"] = clean_address["clean_address"]
+                        gcd_results_obj["unvalidated"].append(new_unvalidated)
+                    else:
+                        new_validated["clean_address"] = row["clean_address"]
+                        # new_validated["is_pobox"] = clean_address["is_pobox"]
+                        gcd_results_obj["validated"].append(new_validated)
                 else:
                     for result in results_processed["results_parsed"]:
                         new_unvalidated = result
@@ -1323,8 +1332,14 @@ class WkflFixUnitsInitial(WorkflowStandardBase):
     # -----------------
     def process(self) -> None:
         df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        df_unit = cols_df.set_is_pobox(df_unit, "clean_address")
         # subset validated addresses for only ones which do not have a secondary number
         df_unit = df_unit[df_unit["secondarynumber"].isnull()]
+        df_unit = cols_df.set_is_not_secondarynumber(df_unit)
+        # subset addresses with invalid streets
+        df_unit = cols_df.set_is_invalid_street(df_unit)
+        df_unit = df_unit[df_unit["is_invalid_street"] == False]
+        df_unit = df_unit[df_unit["is_not_secondarynumber"] == False]
         # check street addresses for digits at the end
         df_unit = cols_df.set_check_sec_num(df_unit, "clean_address")
         # subset check_sec_num results to only include rows where a number WAS detected
@@ -1502,12 +1517,6 @@ class WkflAddressMerge(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
-        schema_map = {
-            "gcd_validated": Geocodio,
-            "taxpayer_records": TaxpayerRecords,
-            "corps": Corps,
-            "llcs": LLCs,
-        }
         df_valid = self.dfs_in["gcd_validated"].copy()
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
         df_bus_names_addrs: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
@@ -1516,13 +1525,17 @@ class WkflAddressMerge(WorkflowStandardBase):
 
         t.print_dataset_name("taxpayers_bus_merged")
 
-        df = merge_df.merge_validated_address(df_taxpayers, df_valid, "clean_address")
-        # remove redundant columns
-        df = clean_df_base.combine_columns_parallel(df)
-        # drop duplicates resulting from merge
-        if id == "llcs":
-            df.drop_duplicates(subset=["file_number"], inplace=True)
-        self.dfs_out[id] = df
+        df_tax_merge = merge_df.merge_validated_address(df_taxpayers, df_valid, "clean_address")
+        df_tax_merge = clean_df_base.combine_columns_parallel(df_tax_merge)
+        df_tax_merge.drop_duplicates(subset=["raw_name_address"], inplace=True)
+
+        df_bus_merge = merge_df.merge_validated_address(df_bus_names_addrs, df_valid, "clean_address")
+        df_bus_merge = clean_df_base.combine_columns_parallel(df_bus_merge)
+        df_bus_merge.drop_duplicates(subset=["uid"], inplace=True)
+
+        self.dfs_out["taxpayers_addr_merged"] = df_tax_merge
+        self.dfs_out["bus_names_addrs_merged"] = df_bus_merge
+
         console.print("Validated addresses merged ✅ 🗺️ 📍")
 
     # -------------------------------

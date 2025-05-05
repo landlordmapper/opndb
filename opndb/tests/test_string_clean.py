@@ -2,6 +2,7 @@ import pandas as pd
 
 from opndb.constants.base import DIRECTIONS, STREET_SUFFIXES
 from opndb.services.string_clean import CleanStringBase, CleanStringName, CleanStringAddress
+from opndb.utils import UtilsBase
 
 
 def test_string_cleaners():
@@ -78,3 +79,24 @@ def test_convert_nsew():
     text_cleaned = convert_nsew(text)
 
     assert text_cleaned == "N MAIN STREET"
+
+
+
+def test_chec_sec_num():
+    def get_is_not_secondarynumber(clean_addr: str) -> bool:
+        clean_split: list[str] = clean_addr.split(",")
+        addr_split: list[str] = clean_split[0].split()
+        if UtilsBase.is_int(addr_split[-1]):
+            if addr_split[-2] in ["HWY", "HIGHWAY"]:
+                if " ".join(addr_split[-3:-1]) != "DUPONT HWY":
+                    return True
+            if " ".join(addr_split[-3:-1]) in [
+                "CO RD",
+                "COUNTY RD",
+                "STATE RD",
+                "ST RD"
+            ]:
+                return True
+        return False
+    test_string = "25715 COUNTY RD 136, ST CLOUD, MN 56301"
+    assert get_is_not_secondarynumber(test_string) is True
