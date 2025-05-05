@@ -198,6 +198,15 @@ class WorkflowBase(ABC):
             return WkflFixUnitsInitial(config_manager)
         elif wkfl_id == "fix_units_final":
             return WkflFixUnitsFinal(config_manager)
+        elif wkfl_id == "address_merge":
+            return WkflAddressMerge(config_manager)
+        elif wkfl_id == "name_analysis_initial":
+            return WkflNameAnalysisInitial(config_manager)
+        elif wkfl_id == "address_analysis_initial":
+            return WkflAddressAnalysisInitial(config_manager)
+        elif wkfl_id == "analysis_final":
+            return WkflAnalysisFinal(config_manager)
+
         return None
 
     @abstractmethod
@@ -1506,8 +1515,8 @@ class WkflAddressMerge(WorkflowStandardBase):
                 "path": path_gen.processed_taxpayers_bus_merged(configs),
                 "schema": TaxpayerRecordsMN,
             },
-            "bus_filings": {
-                "path": path_gen.processed_bus_filings(configs),
+            "bus_names_addrs": {
+                "path": path_gen.processed_bus_names_addrs(configs),
                 "schema": BusinessFilings
             }
         }
@@ -1519,24 +1528,26 @@ class WkflAddressMerge(WorkflowStandardBase):
     def process(self) -> None:
         df_valid = self.dfs_in["gcd_validated"].copy()
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
-        df_bus_names_addrs: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
+        df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
         # run validator on validated address dataset
         # self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
 
         t.print_dataset_name("taxpayers_bus_merged")
-
+        t.print_with_dots("Merging validated addresses into taxpayers_bus_merged")
         df_tax_merge = merge_df.merge_validated_address(df_taxpayers, df_valid, "clean_address")
         df_tax_merge = clean_df_base.combine_columns_parallel(df_tax_merge)
         df_tax_merge.drop_duplicates(subset=["raw_name_address"], inplace=True)
 
+        t.print_dataset_name("bus_names_addrs")
+        t.print_with_dots("Merging validated addresses into bus_names_addrs")
         df_bus_merge = merge_df.merge_validated_address(df_bus_names_addrs, df_valid, "clean_address")
         df_bus_merge = clean_df_base.combine_columns_parallel(df_bus_merge)
-        df_bus_merge.drop_duplicates(subset=["uid"], inplace=True)
+
+        console.print("Validated addresses merged ✅ 🗺️ 📍")
 
         self.dfs_out["taxpayers_addr_merged"] = df_tax_merge
         self.dfs_out["bus_names_addrs_merged"] = df_bus_merge
 
-        console.print("Validated addresses merged ✅ 🗺️ 📍")
 
     # -------------------------------
     # ----SUMMARY STATS GENERATOR----
