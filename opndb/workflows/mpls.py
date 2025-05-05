@@ -192,6 +192,8 @@ class WorkflowBase(ABC):
             return WkflAddressGeocodio(config_manager)
         elif wkfl_id == "geocodio_fix":
             return WkflGeocodioFix(config_manager)
+        elif wkfl_id == "gcd_string_match":
+            return WkflGeocodioStringMatch(config_manager)
         return None
 
     @abstractmethod
@@ -1171,8 +1173,118 @@ class WkflGeocodioFix(WorkflowStandardBase):
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
-            "gcd_validated": path_gen.geocodio_gcd_validated(configs, test=True),
-            "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs, test=True),
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs, suffix="_test"),
+            "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs, suffix="_test"),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflGeocodioStringMatch(WorkflowStandardBase):
+
+    WKFL_NAME: str = "GEOCODIO STRING MATCH WORKFLOW"
+    WKFL_DESC: str = "Matches geocodio results based on similarity to original address, filtering for street number and zip code equality."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio
+            },
+            "gcd_unvalidated": {
+                "path": path_gen.geocodio_gcd_unvalidated(configs),
+                "schema": Geocodio
+            },
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        # copy df for processing
+        df_gcd_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        df_gcd_un: pd.DataFrame = self.dfs_in["gcd_unvalidated"].copy()
+        # set ref_docs
+        t.print_with_dots("Executing string matching for geocodio results")
+        df_gcd_un = df_gcd_un.dropna(subset=["number"])
+        ref_docs: list[str] = list(df_gcd_un["formatted_address"].dropna().unique())
+        console.print("REF DOC COUNT:", len(ref_docs))
+        query_docs: list[str] = list(df_gcd_un["clean_address"].dropna().unique())
+        console.print("QUERY DOC COUNT:", len(query_docs))
+        df_string_matches: pd.DataFrame = StringMatch.match_strings(
+            ref_docs,
+            query_docs,
+            params={
+                "name_col": None,
+                "match_threshold": .7,
+                "include_unvalidated": True,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "nmslib_opts": {
+                    "method": "hnsw",
+                    "space": "cosinesimil_sparse_fast",
+                    "data_type": nmslib.DataType.SPARSE_VECTOR
+                },
+                "query_batch_opts": {
+                    "num_threads": 8,
+                    "K": 1
+                }
+            }
+        )
+        df_merged: pd.DataFrame = pd.merge(
+            df_string_matches,
+            df_gcd_un,
+            how="left",
+            left_on="matched_doc",
+            right_on="formatted_address",
+        )
+        df_merged.drop_duplicates(subset=["original_doc"], inplace=True)
+        df_merged["is_good_match_street"] = df_merged.apply(lambda row: cols_df.is_match_street(row), axis=1)
+        df_merged["is_good_match_zip"] = df_merged.apply(lambda row: cols_df.is_match_zip(row), axis=1)
+        df_merged["is_good_match_sec_num"] = df_merged.apply(lambda row: cols_df.is_match_secondary(row), axis=1)
+        df_valid_new = df_merged[
+            (df_merged["is_good_match_street"] == True) &
+            (df_merged["is_good_match_zip"] == True) &
+            (df_merged["is_good_match_sec_num"] != False)
+        ]
+        df_valid_new.drop(columns=[
+            "formatted_address",
+            "clean_address",
+            "conf",
+            "conf1",
+            "ldist",
+            "is_good_match_street",
+            "is_good_match_zip",
+            "is_good_match_sec_num",
+        ], inplace=True)
+        df_valid_new.rename(columns={
+            "original_doc": "clean_address",
+            "matched_doc": "formatted_address"
+        }, inplace=True)
+
+        df_valid_new = pd.concat([self.dfs_in["gcd_validated"],df_valid_new], ignore_index=True)
+        df_unvalid_new: pd.DataFrame = self.dfs_in["gcd_unvalidated"][
+            ~self.dfs_in["gcd_unvalidated"]["clean_address"].isin(
+                list(df_valid_new["clean_address"].unique())
+            )
+        ]
+
+        self.dfs_out["gcd_validated"] = df_valid_new
+        self.dfs_out["gcd_unvalidated"] = df_unvalid_new
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "gcd_validated": path_gen.geocodio_gcd_validated(configs),
+            "gcd_unvalidated": path_gen.geocodio_gcd_unvalidated(configs)
         }
         self.save_dfs(save_map)
 
@@ -1721,3 +1833,4 @@ class WkflAnalysisFinal(WorkflowStandardBase):
 
     def update_configs(self) -> None:
         pass
+

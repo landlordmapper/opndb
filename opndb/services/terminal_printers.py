@@ -107,7 +107,7 @@ class TerminalBase:
             {"name": "Unvalidated Address Dataset Generator", "value": "unvalidated_addrs"},
             {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
             {"name": "Geocodio Fix", "value": "geocodio_fix"},
-
+            {"name": "Geocodio String Match", "value": "gcd_string_match"},
         ]
 
         # Let user select a workflow

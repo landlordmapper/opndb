@@ -462,12 +462,9 @@ class PathGenerators(UtilsBase):
     # ----GEOCODIO----
     # -----------------
     @classmethod
-    def geocodio_gcd_validated(cls, configs: WorkflowConfigs, test: bool = False) -> Path:
+    def geocodio_gcd_validated(cls, configs: WorkflowConfigs, suffix: str = "") -> Path:
         """:returns: ROOT/geocodio/gcd_validated[ext]"""
-        if test:
-            file_name: str = Geocodio.GCD_VALIDATED + "_test"
-        else:
-            file_name: str = Geocodio.GCD_VALIDATED
+        file_name: str = Geocodio.GCD_VALIDATED + suffix
         return cls.generate_path(
             configs["data_root"],
             Dirs.GEOCODIO,
@@ -475,12 +472,9 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
-    def geocodio_gcd_unvalidated(cls, configs: WorkflowConfigs, test: bool = False) -> Path:
+    def geocodio_gcd_unvalidated(cls, configs: WorkflowConfigs, suffix: str = "") -> Path:
         """:returns: ROOT/geocodio/gcd_unvalidated[ext]"""
-        if test:
-            file_name: str = Geocodio.GCD_UNVALIDATED + "_test"
-        else:
-            file_name: str = Geocodio.GCD_UNVALIDATED
+        file_name: str = Geocodio.GCD_UNVALIDATED + suffix
         return cls.generate_path(
             configs["data_root"],
             Dirs.GEOCODIO,
@@ -494,6 +488,15 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.GEOCODIO,
             Geocodio.GCD_FAILED,
+            configs["load_ext"]
+        )
+    @classmethod
+    def geocodio_gcd_string_match(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/geocodio/gcd_string_match[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.GEOCODIO,
+            Geocodio.GCD_STRING_MATCH,
             configs["load_ext"]
         )
     @classmethod

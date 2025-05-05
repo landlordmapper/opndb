@@ -427,6 +427,28 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         else:
             return str(street_1)
 
+    # GEOCODIO STRING MATCH PROCESSING COLUMNS
+    @classmethod
+    def is_match_street(cls, row: pd.Series) -> bool:
+        street_num_original = row["original_doc"].split()[0]
+        street_num_match = row["matched_doc"].split()[0]
+        return street_num_original.strip() == street_num_match.strip()
+
+    @classmethod
+    def is_match_zip(cls, row: pd.Series) -> bool:
+        zip_original = row["original_doc"].split()[-1]
+        zip_match = row["matched_doc"].split()[-1]
+        return zip_original.strip() == zip_match.strip()
+
+    @classmethod
+    def is_match_secondary(cls, row: pd.Series) -> bool | float:
+        if pd.isnull(row["secondarynumber"]):
+            return np.nan
+        sec_num = row["secondarynumber"].strip()
+        clean_addr_split = row["original_doc"].split(",")[0]
+        street_split = clean_addr_split.split()
+        return sec_num in street_split
+
 
 
 class DataFrameColumnManipulators(DataFrameOpsBase):

@@ -2465,3 +2465,33 @@ class WkflFinalOutput(WorkflowStandardBase):
 
     def update_configs(self) -> None:
         pass
+
+
+# class WkflTemplate(WorkflowStandardBase):
+#     WKFL_NAME: str = ""
+#     WKFL_DESC: str = ""
+#
+#     def __init__(self, config_manager: ConfigManager):
+#         super().__init__(config_manager)
+#         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+#
+#     def load(self) -> None:
+#         configs = self.config_manager.configs
+#         load_map: dict[str, dict[str, Any]] = {
+#         }
+#         self.load_dfs(load_map)
+#
+#     def process(self) -> None:
+#         pass
+#
+#     def summary_stats(self) -> None:
+#         pass
+#
+#     def save(self) -> None:
+#         configs = self.config_manager.configs
+#         save_map: dict[str, Path] = {
+#         }
+#         self.save_dfs(save_map)
+#
+#     def update_configs(self) -> None:
+#         pass
