@@ -1598,8 +1598,8 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
-            "taxpayers_merged": {
-                "path": path_gen.processed_taxpayers_merged(configs),
+            "taxpayers_addrs_merged": {
+                "path": path_gen.processed_taxpayers_addr_merged(configs),
                 "schema": TaxpayersMerged,
                 "recursive_bools": True
             },
@@ -1607,9 +1607,9 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     def process(self) -> None:
-        df = self.dfs_in["taxpayer_records"].copy()
+        df = self.dfs_in["taxpayers_addrs_merged"].copy()
         # run validator
-        self.run_validator("taxpayer_records", df, self.config_manager.configs, self.WKFL_NAME, TaxpayerRecords)
+        # self.run_validator("taxpayer_records", df, self.config_manager.configs, self.WKFL_NAME, TaxpayerRecords)
         df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
         # frequent_tax_names
         self.dfs_out["frequent_tax_names"] = df_freq
@@ -1701,43 +1701,31 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
                 "path": path_gen.geocodio_gcd_validated(configs),
                 "schema": Geocodio,
             },
-            "taxpayers_merged": {
-                "path": path_gen.processed_taxpayers_merged(configs),
+            "taxpayers_addrs_merged": {
+                "path": path_gen.processed_taxpayers_addr_merged(configs),
                 "schema": TaxpayersMerged,
                 "recursive_bools": True
             },
-            "corps": {
-                "path": path_gen.processed_corps_merged(configs),
-                "schema": Corps,
-            },
-            "llcs": {
-                "path": path_gen.processed_llcs_merged(configs),
-                "schema": LLCs,
-            },
+            "bus_names_addrs_merged": {
+                "path": path_gen.processed_bus_names_addrs_merged(configs),
+                "schema": None,
+            }
         }
-
         self.load_dfs(load_map)
 
     def process(self) -> None:
-        schema_map = {
-            "gcd_validated": Geocodio,
-            "taxpayers_merged": TaxpayersMerged,
-            "corps": Corps,
-            "llcs": LLCs,
-        }
         addrs = []
-        for id, df_in in self.dfs_in.items():
-            self.run_validator(id, df_in, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+        for id, df in self.dfs_in.items():
+            # self.run_validator(id, df_in, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
             if id == "gcd_validated":
                 continue
-            for addr_col in schema_map[id].validated_address_merge():
-                addrs.extend(
-                    [
-                        addr
-                        for addr in df_in[f"{addr_col}_v"]
-                        if pd.notnull(addr) and addr != ""
-                    ]
-                )
+            addrs.extend(
+                [
+                    addr
+                    for addr in df["clean_address_v"]
+                    if pd.notnull(addr) and addr != ""
+                ]
+            )
         df_addrs: pd.DataFrame = pd.DataFrame(columns=["address"], data=addrs)
         df_freq: pd.DataFrame = subset_df.generate_frequency_df(df_addrs, "address")
         for field in self.ANALYSIS_FIELDS:
