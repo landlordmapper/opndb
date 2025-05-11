@@ -390,7 +390,7 @@ class CleanStringName(CleanStringBase):
         # Obtain a list of keys from the "banks" dictionary
         bank_keys = sorted(banks.keys(), key=len, reverse=True)
 
-        text = row["raw_name"]
+        text = row["clean_name"]
 
         # Iterate through each key and check if it's found within the "text" string
         for key in bank_keys:

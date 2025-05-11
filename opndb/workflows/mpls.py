@@ -1932,16 +1932,12 @@ class WkflAnalysisFinal(WorkflowStandardBase):
                 "path": path_gen.analysis_fixing_tax_names(configs),
                 "schema": FixingTaxNames,  # <- swap with actual schema if needed
             },
-            "address_analysis": {
-                "path": path_gen.analysis_address_analysis(configs),
-                "schema": AddressAnalysis,
-            },
             "frequent_tax_names": {
                 "path": path_gen.analysis_frequent_tax_names(configs),
                 "schema": FrequentTaxNames,
             },
             "taxpayers_merged": {
-                "path": path_gen.processed_taxpayers_merged(configs),
+                "path": path_gen.processed_taxpayers_addr_merged(configs),
                 "schema": TaxpayersMerged,
                 "recursive_bools": True
             },
@@ -1951,16 +1947,14 @@ class WkflAnalysisFinal(WorkflowStandardBase):
     def process(self) -> None:
         schema_map = {
             "fixing_tax_names": FixingTaxNames,
-            "address_analysis": AddressAnalysis,
             "frequent_tax_names": FrequentTaxNames,
             "taxpayers_merged": TaxpayersMerged,
         }
         # run validators
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+        # for id, df in self.dfs_in.items():
+            # self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
         # copy dfs
         df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
-        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
         df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_merged"].copy()
 
