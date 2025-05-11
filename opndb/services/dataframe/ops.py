@@ -78,12 +78,23 @@ class DataFrameMergers(DataFrameOpsBase):
         """Merges validated addresses into specified address column in df."""
         df_merged: pd.DataFrame = pd.merge(
             df,
-            df_addrs[["clean_address", "formatted_address_v"]],
+            df_addrs[[
+                "clean_address",
+                "formatted_address_v1",
+                "formatted_address_v2",
+                "formatted_address_v3",
+                "formatted_address_v4",
+            ]],
             how="left",
             left_on=addr_col,
             right_on="clean_address"
         )
-        df_merged.rename(columns={"formatted_address_v": f"{addr_col}_v"}, inplace=True)
+        df_merged.rename(columns={
+            "formatted_address_v1": f"{addr_col}_v1",
+            "formatted_address_v2": f"{addr_col}_v2",
+            "formatted_address_v3": f"{addr_col}_v3",
+            "formatted_address_v4": f"{addr_col}_v4",
+        }, inplace=True)
         return df_merged
 
 
@@ -285,8 +296,23 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df[df["is_pobox"] == False]
 
     @classmethod
-    def set_formatted_address_v(cls, df: pd.DataFrame) -> pd.DataFrame:
-        df["formatted_address_v"] = df.apply(lambda row: addr.get_formatted_address_v(row), axis=1)
+    def set_formatted_address_v1(cls, df: pd.DataFrame) -> pd.DataFrame:
+        df["formatted_address_v1"] = df.apply(lambda row: addr.get_formatted_address_v1(row), axis=1)
+        return df
+
+    @classmethod
+    def set_formatted_address_v2(cls, df: pd.DataFrame) -> pd.DataFrame:
+        df["formatted_address_v2"] = df.apply(lambda row: addr.get_formatted_address_v2(row), axis=1)
+        return df
+
+    @classmethod
+    def set_formatted_address_v3(cls, df: pd.DataFrame) -> pd.DataFrame:
+        df["formatted_address_v3"] = df.apply(lambda row: addr.get_formatted_address_v3(row), axis=1)
+        return df
+
+    @classmethod
+    def set_formatted_address_v4(cls, df: pd.DataFrame) -> pd.DataFrame:
+        df["formatted_address_v4"] = df.apply(lambda row: addr.get_formatted_address_v4(row), axis=1)
         return df
 
     @classmethod

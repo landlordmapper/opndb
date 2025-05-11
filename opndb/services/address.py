@@ -758,7 +758,7 @@ class AddressBase:
                 return raw_addr_fixed
 
     @classmethod
-    def get_formatted_address_v(cls, row: pd.Series) -> str:
+    def get_formatted_address_v1(cls, row: pd.Series) -> str:
 
         if "city" not in row or pd.isna(row.get("city")):
             return row.get("formatted_address", "")
@@ -786,7 +786,88 @@ class AddressBase:
         addr_out += ","
         addr_out += f" {row['state']} {row['zip']}"
 
-        return addr_out
+        return addr_out.replace("  ", " ")
+
+    @classmethod
+    def get_formatted_address_v2(cls, row: pd.Series) -> str:
+
+        if "city" not in row or pd.isna(row.get("city")):
+            return row.get("formatted_address", "")
+
+        addr_out: str = ""
+
+        if row["street"] == "PO BOX":
+            addr_out += f"PO BOX {row["number"]},"
+        else:
+            addr_out += row["number"]
+            if pd.notna(row["predirectional"]):
+                addr_out += f" {row['predirectional']}"
+            if pd.notna(row["prefix"]):
+                addr_out += f" {row['prefix']}"
+            addr_out += f" {row['street']}"
+            if pd.notna(row["suffix"]):
+                addr_out += f" {row['suffix']}"
+            if pd.notna(row["postdirectional"]):
+                addr_out += f" {row['postdirectional']}"
+            addr_out += ","
+
+        addr_out += f" {row['city']}"
+        addr_out += ","
+        addr_out += f" {row['state']} {row['zip']}"
+
+        return addr_out.replace("  ", " ")
+
+    @classmethod
+    def get_formatted_address_v3(cls, row: pd.Series) -> str:
+
+        if "city" not in row or pd.isna(row.get("city")):
+            return row.get("formatted_address", "")
+
+        addr_out: str = ""
+
+        if row["street"] == "PO BOX":
+            addr_out += f"PO BOX {row["number"]},"
+        else:
+            addr_out += row["number"]
+            if pd.notna(row["prefix"]):
+                addr_out += f" {row['prefix']}"
+            addr_out += f" {row['street']}"
+            if pd.notna(row["suffix"]):
+                addr_out += f" {row['suffix']}"
+            addr_out += ","
+            if pd.notna(row["secondarynumber"]):
+                addr_out += f" {row['secondarynumber']},"
+
+        addr_out += f" {row['city']}"
+        addr_out += ","
+        addr_out += f" {row['state']} {row['zip']}"
+
+        return addr_out.replace("  ", " ")
+
+    @classmethod
+    def get_formatted_address_v4(cls, row: pd.Series) -> str:
+
+        if "city" not in row or pd.isna(row.get("city")):
+            return row.get("formatted_address", "")
+
+        addr_out: str = ""
+
+        if row["street"] == "PO BOX":
+            addr_out += f"PO BOX {row["number"]},"
+        else:
+            addr_out += row["number"]
+            if pd.notna(row["prefix"]):
+                addr_out += f" {row['prefix']}"
+            addr_out += f" {row['street']}"
+            if pd.notna(row["suffix"]):
+                addr_out += f" {row['suffix']}"
+            addr_out += ","
+
+        addr_out += f" {row['city']}"
+        addr_out += ","
+        addr_out += f" {row['state']} {row['zip']}"
+
+        return addr_out.replace("  ", " ")
 
 
 class AddressValidatorBase(AddressBase):
