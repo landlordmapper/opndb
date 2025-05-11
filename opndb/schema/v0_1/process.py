@@ -9,7 +9,17 @@ VALID_ZIP_CODE_REGEX: Final[re] = r"^\d{5}(-\d{4})?$"
 
 class PropertiesMN(OPNDFModel):
 
-    _OUT: list[str] = ["pin", "raw_name_address", "clean_name_address"]
+    _OUT: list[str] = [
+        "pin",
+        "land_use",
+        "building_use",
+        "prop_type",
+        "is_exempt",
+        "is_homestead",
+        "raw_name_address",
+        "clean_name_address",
+        "num_units"
+    ]
 
     @classmethod
     def out(cls) -> list[str]:

@@ -300,15 +300,22 @@ class WkflRawDataPrep(WorkflowStandardBase):
         # extract relevant columns from both datasets
         df_city = df_city[[
             "PIN",
+            "LANDUSE",
+            "BUILDINGUSE",
+            "YEARBUILT",
             "PRIMARY_PROP_TYPE",
             "IS_EXEMPT",
             "IS_HOMESTEAD",
+            "TOTAL_UNITS",
         ]]
         df_city.rename(columns={
             "PIN": "pin",
+            "LANDUSE": "land_use",
+            "BUILDINGUSE": "building_use",
             "PRIMARY_PROP_TYPE": "prop_type",
             "IS_EXEMPT": "is_exempt",
             "IS_HOMESTEAD": "is_homestead",
+            "TOTAL_UNITS": "num_units",
         }, inplace=True)
         df_county = df_county[[
             "PID",
@@ -637,15 +644,15 @@ class WkflDataClean(WorkflowStandardBase):
                 "path": path_gen.raw_props_taxpayers(configs),
                 "schema": PropsTaxpayersMN
             },
-            "bus_filings": {
-                "path": path_gen.raw_bus_filings(configs),
-                "schema": BusinessFilings
-            },
-            "bus_names_addrs": {
-                "path": path_gen.raw_bus_names_addrs(configs),
-                "schema": BusinessNamesAddrs,
-                "recursive_bools": True
-            }
+            # "bus_filings": {
+            #     "path": path_gen.raw_bus_filings(configs),
+            #     "schema": BusinessFilings
+            # },
+            # "bus_names_addrs": {
+            #     "path": path_gen.raw_bus_names_addrs(configs),
+            #     "schema": BusinessNamesAddrs,
+            #     "recursive_bools": True
+            # }
         }
         self.load_dfs(load_map)
 
@@ -666,19 +673,19 @@ class WkflDataClean(WorkflowStandardBase):
         self.dfs_out["properties"] = df_properties
 
         # business filings
-        df_bus1: pd.DataFrame = self.dfs_in["bus_filings"].copy()
-        df_bus3: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
-        df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3, schema_map)
-        self.dfs_out["bus_filings"] = df_filings
-        self.dfs_out["bus_names_addrs"] = df_names_addrs
+        # df_bus1: pd.DataFrame = self.dfs_in["bus_filings"].copy()
+        # df_bus3: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
+        # df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3, schema_map)
+        # self.dfs_out["bus_filings"] = df_filings
+        # self.dfs_out["bus_names_addrs"] = df_names_addrs
 
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
             "properties": path_gen.processed_properties(configs),
             "taxpayer_records": path_gen.processed_taxpayer_records(configs),
-            "bus_filings": path_gen.processed_bus_filings(configs),
-            "bus_names_addrs": path_gen.processed_bus_names_addrs(configs),
+            # "bus_filings": path_gen.processed_bus_filings(configs),
+            # "bus_names_addrs": path_gen.processed_bus_names_addrs(configs),
         }
         self.save_dfs(save_map)
 
@@ -1464,7 +1471,7 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
                     description=f"[yellow]Processing address {processed_count}/{total_addresses}"
                 )
         # generate formatted_address_v
-        df_valid = cols_df.set_formatted_address_v(df_valid)
+        df_valid = cols_df.set_formatted_address_v1(df_valid)
         self.dfs_out["gcd_validated"] = df_valid
 
     # -------------------------------
@@ -1500,7 +1507,7 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
 class WkflFixAddrsInitial(WorkflowStandardBase):
 
 
-    WKFL_NAME: str = "Fix Addresses (Initial)"
+    WKFL_NAME: str = "FIX ADDRESSES (INITIAL)"
     WKFL_DESC: str = "Outputs subset of gcd_validated for addresses identified from manual research as requiring manual fixing."
 
     def __init__(self, config_manager: ConfigManager):
@@ -1549,7 +1556,7 @@ class WkflFixAddrsInitial(WorkflowStandardBase):
 
 class WkflFixAddrsFinal(WorkflowStandardBase):
 
-    WKFL_NAME: str = "Fix Addresses (Final)"
+    WKFL_NAME: str = "FIX ADDRESSES (FINAL)"
     WKFL_DESC: str = "Updates validated address master list with manual changes & adjustments made in fix_addrs dataset."
 
     def __init__(self, config_manager: ConfigManager):
@@ -1580,7 +1587,7 @@ class WkflFixAddrsFinal(WorkflowStandardBase):
         df_valid_dropped = df_valid[~df_valid["clean_address"].isin(addrs_to_drop)]
         # concatenate fixed addresses to master list
         df_valid_out = pd.concat([df_valid_dropped, df_fixed], ignore_index=True)
-        df_valid_out = cols_df.set_formatted_address_v(df_valid_out)
+        df_valid_out = cols_df.set_formatted_address_v1(df_valid_out)
         # set out dfs
         self.dfs_out["gcd_validated_fixed"] = df_valid_out
 
@@ -1600,7 +1607,7 @@ class WkflFixAddrsFinal(WorkflowStandardBase):
 
 class WkflSetAddressColumns(WorkflowStandardBase):
 
-    WKFL_NAME: str = "Set Validated Address Columns"
+    WKFL_NAME: str = "SET VALIDATED ADDRESS COLUMNS WORKFLOW"
     WKFL_DESC: str = "Sets columns for validated address matching."
 
     def __init__(self, config_manager: ConfigManager):
@@ -1968,6 +1975,16 @@ class WkflAnalysisFinal(WorkflowStandardBase):
         df_taxpayers = cols_df.set_exclude_name(df_taxpayers, df_freq_names)
         # t.print_with_dots("Setting is_landlord_org boolean column")
         # df_taxpayers = cols_df.set_is_landlord_org(df_taxpayers, df_analysis)
+        t.print_with_dots("Setting clean_name_address field with fixed names")
+        df_taxpayers = cols_df.set_name_address_concat_fix(
+            df_taxpayers,
+            {
+                "name_addr": "clean_name_address",
+                "name": "clean_name",
+                "name_2": "clean_name_2",
+                "addr": "clean_address"
+            }
+        )
         self.dfs_out["taxpayers_fixed"] = df_taxpayers
 
     def summary_stats(self) -> None:
@@ -1990,3 +2007,88 @@ class WkflAnalysisFinal(WorkflowStandardBase):
     def update_configs(self) -> None:
         pass
 
+
+class WkflRentalSubset(WorkflowStandardBase):
+
+    WKFL_NAME: str = "RENTAL SUBSET WORKFLOW"
+    WKFL_DESC: str = "Subsets property and taxpayer record datasets for rental properties only."
+
+    PROP_TYPES: list[str] = [  # todo: move to schema class
+        "2 UNIT RESIDENTIAL",
+        "3 UNIT RESIDENTIAL",
+        "APARTMENT",
+        "COMMERCIAL",
+        "VACANT LAND - RESIDENTIAL"
+    ]
+    LAND_USES: list[str] = [
+        "2 UNIT RESIDENTIAL - DUPLEX",
+        "2 UNIT RESIDENTIAL - SF HOUSE AND ADU",
+        "2 UNIT RESIDENTIAL - SF HOUSE AND CARRIAGE HOUSE",
+        "2 UNIT RESIDENTIAL - TWO HOUSES",
+        "3 UNIT RESIDENTIAL - DUPLEX AND ADU",
+        "3 UNIT RESIDENTIAL - DUPLEX AND SF HOUSE",
+        "3 UNIT RESIDENTIAL - TRIPLEX",
+        "MIXED OFFICE, RETAIL, RESIDENTIAL, ETC",
+        "MULTI - FAMILY APARTMENT",
+        "MULTI - FAMILY RESIDENTIAL",
+        "OFFICE STRUCTURE",
+        "VACANT"
+    ]
+    BUILDING_USES: list[str] = [
+        "APARTMENT 4 OR 5 UNIT",
+        "APARTMENT CONVERTED",
+        "BAR / FOOD / REST.W RES",
+        "BOARDING OR LODGING",
+        "COMMERCIAL",
+        "DUPLEX",
+        "DUPLEX W / ADU",
+        "GROUP HOME",
+        "TRIPLEX"
+    ]
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_fixed": {
+                "path": path_gen.processed_taxpayers_fixed(configs),
+                "schema": None,
+                "recursive_bools": True
+            },
+            "properties": {
+                "path": path_gen.processed_properties(configs),
+                "schema": None,
+            },
+            "rental_licenses": {
+                "path": path_gen.pre_process_rental_licenses(configs),
+                "schema": None,
+            }
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        # 1. subset by rental licenses
+        # 2. subset by non-homesteaded
+        # 3. subset by prop_type
+        # 4. subset by land_use
+        # 5. subset by building_use
+        # 6. subset by num_units
+        # 7. subset by rental addresses - pull in remaining properties based on matching addresses from rental subset
+        pass
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "properties_rentals": path_gen.processed_properties_rentals(configs),
+            "taxpayers_subsetted": path_gen.processed_taxpayers_subsetted(configs),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass

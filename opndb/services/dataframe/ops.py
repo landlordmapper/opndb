@@ -260,6 +260,17 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df
 
     @classmethod
+    def set_name_address_concat_fix(cls, df: pd.DataFrame, col_map: dict[str, str]) -> pd.DataFrame:
+        """
+        Returns concatenation of taxpayer name and address.
+
+        :param df: Dataframe to add column to
+        :param col_map: Map of name to address columns
+        """
+        df[col_map["name_addr"]] = df.apply(lambda row: row[col_map["name"]] + " -- " + row[col_map["addr"]], axis=1)
+        return df
+
+    @classmethod
     def set_full_address_fields(cls, df: pd.DataFrame, raw_address_map, id: str | None = None) -> pd.DataFrame:
         if raw_address_map is None:
             return df

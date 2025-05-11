@@ -191,6 +191,15 @@ class PathGenerators(UtilsBase):
             PreProcess.BUSINESS_FILINGS_3,
             configs["load_ext"]
         )
+    @classmethod
+    def pre_process_rental_licenses(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/pre_process/taxpayers_city[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PRE_PROCESS,
+            PreProcess.RENTAL_LICENSES,
+            configs["load_ext"]
+        )
 
     # -----------
     # ----RAW----

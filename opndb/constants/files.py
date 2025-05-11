@@ -28,6 +28,7 @@ class PreProcess(FileNames):
     TAXPAYERS_COUNTY: str = "County_Parcels"
     BUSINESS_FILINGS_1: str = "mnsosdat_type1"
     BUSINESS_FILINGS_3: str = "mnsosdat_type3"
+    RENTAL_LICENSES: str = "Active_Rental_Licenses"
 
 class Raw(FileNames):
     """Raw input files, saved after running initial validation checks."""
