@@ -49,6 +49,7 @@ class Analysis(FileNames):
     FREQUENT_TAX_NAMES: str = "frequent_tax_names"
     FIXING_TAX_NAMES: str = "fixing_tax_names"
     FIXING_ADDRS: str = "fixing_addrs"
+    FIXING_ADDRS_ANALYSIS: str = "fixing_addrs_analysis"
     ADDRESS_ANALYSIS: str = "address_analysis"
 
 class Processed(FileNames):

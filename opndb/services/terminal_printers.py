@@ -110,6 +110,8 @@ class TerminalBase:
             {"name": "Geocodio String Match", "value": "gcd_string_match"},
             {"name": "Fix Units Initial", "value": "fix_units_initial"},
             {"name": "Fix Units Final", "value": "fix_units_final"},
+            {"name": "Fix Addresses (Initial)", "value": "fix_addrs_initial"},
+            {"name": "Fix Addresses (Final)", "value": "fix_addrs_final"},
             {"name": "Address Merge", "value": "address_merge"},
             {"name": "Name Analysis Initial", "value": "name_analysis_initial"},
             {"name": "Address Analysis Initial", "value": "address_analysis_initial"},

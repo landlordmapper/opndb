@@ -198,6 +198,10 @@ class WorkflowBase(ABC):
             return WkflFixUnitsInitial(config_manager)
         elif wkfl_id == "fix_units_final":
             return WkflFixUnitsFinal(config_manager)
+        elif wkfl_id == "fix_addrs_initial":
+            return WkflFixAddrsInitial(config_manager)
+        elif wkfl_id == "fix_addrs_final":
+            return WkflFixAddrsFinal(config_manager)
         elif wkfl_id == "address_merge":
             return WkflAddressMerge(config_manager)
         elif wkfl_id == "name_analysis_initial":
@@ -206,7 +210,6 @@ class WorkflowBase(ABC):
             return WkflAddressAnalysisInitial(config_manager)
         elif wkfl_id == "analysis_final":
             return WkflAnalysisFinal(config_manager)
-
         return None
 
     @abstractmethod
@@ -1492,6 +1495,107 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
         pass
 
 
+class WkflFixAddrsInitial(WorkflowStandardBase):
+
+
+    WKFL_NAME: str = "Fix Addresses (Initial)"
+    WKFL_DESC: str = "Outputs subset of gcd_validated for addresses identified from manual research as requiring manual fixing."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+                "recursive_bools": True
+            }
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        # set copies
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        # subset validated addresses
+        df_to_fix = df_analysis[df_analysis["fix_address"] == True]
+        addrs_to_fix: list[str] = list(df_to_fix["value"].unique())
+        df_out = df_valid[df_valid["formatted_address_v"].isin(addrs_to_fix)]
+        # set out df
+        self.dfs_out["fixing_addrs_analysis"] = df_out
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "fixing_addrs_analysis": path_gen.analysis_fixing_addrs_analysis(configs),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflFixAddrsFinal(WorkflowStandardBase):
+
+    WKFL_NAME: str = "Fix Addresses (Final)"
+    WKFL_DESC: str = "Updates validated address master list with manual changes & adjustments made in fix_addrs dataset."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "fixing_addrs_analysis": {
+                "path": path_gen.analysis_fixing_addrs_analysis(configs),
+                "schema": None,
+            },
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            }
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        # set copies
+        df_fixed: pd.DataFrame = self.dfs_in["fixing_addrs_analysis"].copy()
+        df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        # remove manually fixed address rows from validated master list
+        addrs_to_drop: list[str] = list(df_fixed["clean_address"].unique())
+        df_valid_dropped = df_valid[~df_valid["clean_address"].isin(addrs_to_drop)]
+        # concatenate fixed addresses to master list
+        df_valid_out = pd.concat([df_valid_dropped, df_fixed], ignore_index=True)
+        df_valid_out = cols_df.set_formatted_address_v(df_valid_out)
+        # set out dfs
+        self.dfs_out["gcd_validated_fixed"] = df_valid_out
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "gcd_validated_fixed": path_gen.geocodio_gcd_validated(configs, "_fixed"),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
 class WkflAddressMerge(WorkflowStandardBase):
 
     WKFL_NAME: str = "ADDRESS MERGE WORKFLOW"
@@ -1508,7 +1612,7 @@ class WkflAddressMerge(WorkflowStandardBase):
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "gcd_validated": {
-                "path": path_gen.geocodio_gcd_validated(configs),
+                "path": path_gen.geocodio_gcd_validated(configs, "_fixed"),
                 "schema": Geocodio,
             },
             "taxpayers_bus_merged": {
@@ -1526,12 +1630,12 @@ class WkflAddressMerge(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
+        # set df copies
         df_valid = self.dfs_in["gcd_validated"].copy()
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
         df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
         # run validator on validated address dataset
         # self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
-
         t.print_dataset_name("taxpayers_bus_merged")
         t.print_with_dots("Merging validated addresses into taxpayers_bus_merged")
         df_tax_merge = merge_df.merge_validated_address(df_taxpayers, df_valid, "clean_address")

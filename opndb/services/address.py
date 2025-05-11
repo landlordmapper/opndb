@@ -763,19 +763,25 @@ class AddressBase:
         if "city" not in row or pd.isna(row.get("city")):
             return row.get("formatted_address", "")
 
-        addr_out: str = row["number"]
-        if pd.notna(row["predirectional"]):
-            addr_out += f" {row['predirectional']}"
-        if pd.notna(row["prefix"]):
-            addr_out += f" {row['prefix']}"
-        addr_out += f" {row['street']}"
-        if pd.notna(row["suffix"]):
-            addr_out += f" {row['suffix']}"
-        if pd.notna(row["postdirectional"]):
-            addr_out += f" {row['postdirectional']}"
-        addr_out += ","
-        if pd.notna(row["secondarynumber"]):
-            addr_out += f" {row['secondarynumber']},"
+        addr_out: str = ""
+
+        if row["street"] == "PO BOX":
+            addr_out += f"PO BOX {row["number"]},"
+        else:
+            addr_out += row["number"]
+            if pd.notna(row["predirectional"]):
+                addr_out += f" {row['predirectional']}"
+            if pd.notna(row["prefix"]):
+                addr_out += f" {row['prefix']}"
+            addr_out += f" {row['street']}"
+            if pd.notna(row["suffix"]):
+                addr_out += f" {row['suffix']}"
+            if pd.notna(row["postdirectional"]):
+                addr_out += f" {row['postdirectional']}"
+            addr_out += ","
+            if pd.notna(row["secondarynumber"]):
+                addr_out += f" {row['secondarynumber']},"
+
         addr_out += f" {row['city']}"
         addr_out += ","
         addr_out += f" {row['state']} {row['zip']}"
