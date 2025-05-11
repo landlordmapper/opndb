@@ -518,6 +518,16 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         df["is_invalid_street"] = df["clean_address"].apply(get_is_invalid_street)
         return df
 
+    @classmethod
+    def set_is_unit_gte_1(cls, df: pd.DataFrame) -> pd.DataFrame:
+        def is_gte_1(val):
+            if UtilsBase.is_int(val):
+                val_int = int(val)
+                return val_int > 1
+            return False
+        df["is_unit_gte_1"] = df["num_units"].apply(lambda unit: is_gte_1(unit))
+        return df
+
 
 
 class DataFrameColumnManipulators(DataFrameOpsBase):
@@ -728,6 +738,7 @@ class DataFrameSubsetters(DataFrameOpsBase):
         })
         freq_df = freq_df.sort_values("frequency", ascending=False).reset_index(drop=True)
         return freq_df
+
 
 class DataFrameDeduplicators(DataFrameOpsBase):
 

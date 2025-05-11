@@ -212,6 +212,8 @@ class WorkflowBase(ABC):
             return WkflAddressAnalysisInitial(config_manager)
         elif wkfl_id == "analysis_final":
             return WkflAnalysisFinal(config_manager)
+        elif wkfl_id == "rental_subset":
+            return WkflRentalSubset(config_manager)
         return None
 
     @abstractmethod
@@ -285,14 +287,14 @@ class WkflRawDataPrep(WorkflowStandardBase):
                 "path": path_gen.pre_process_taxpayers_county(configs),
                 "schema": None  # TaxpayersCounty
             },
-            "mnsos_type1": {
-                "path": path_gen.pre_process_business_filings_1(configs),
-                "schema": None  # BusinessFilings
-            },
-            "mnsos_type3": {
-                "path": path_gen.pre_process_business_filings_3(configs),
-                "schema": None  # BusinessNamesAddrs
-            }
+            # "mnsos_type1": {
+            #     "path": path_gen.pre_process_business_filings_1(configs),
+            #     "schema": None  # BusinessFilings
+            # },
+            # "mnsos_type3": {
+            #     "path": path_gen.pre_process_business_filings_3(configs),
+            #     "schema": None  # BusinessNamesAddrs
+            # }
         }
         self.load_dfs(load_map)
 
@@ -383,9 +385,12 @@ class WkflRawDataPrep(WorkflowStandardBase):
         t.print_with_dots("Merging city dataset into county dataset")
         df_taxpayers: pd.DataFrame = pd.merge(df_mpls, df_city[[
             "pin",
+            "land_use",
+            "building_use",
             "prop_type",
             "is_exempt",
             "is_homestead",
+            "num_units",
         ]], how="left", on="pin")
 
         # drop & rename columns
@@ -644,15 +649,15 @@ class WkflDataClean(WorkflowStandardBase):
                 "path": path_gen.raw_props_taxpayers(configs),
                 "schema": PropsTaxpayersMN
             },
-            # "bus_filings": {
-            #     "path": path_gen.raw_bus_filings(configs),
-            #     "schema": BusinessFilings
-            # },
-            # "bus_names_addrs": {
-            #     "path": path_gen.raw_bus_names_addrs(configs),
-            #     "schema": BusinessNamesAddrs,
-            #     "recursive_bools": True
-            # }
+            "bus_filings": {
+                "path": path_gen.raw_bus_filings(configs),
+                "schema": BusinessFilings
+            },
+            "bus_names_addrs": {
+                "path": path_gen.raw_bus_names_addrs(configs),
+                "schema": BusinessNamesAddrs,
+                "recursive_bools": True
+            }
         }
         self.load_dfs(load_map)
 
@@ -673,19 +678,19 @@ class WkflDataClean(WorkflowStandardBase):
         self.dfs_out["properties"] = df_properties
 
         # business filings
-        # df_bus1: pd.DataFrame = self.dfs_in["bus_filings"].copy()
-        # df_bus3: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
-        # df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3, schema_map)
-        # self.dfs_out["bus_filings"] = df_filings
-        # self.dfs_out["bus_names_addrs"] = df_names_addrs
+        df_bus1: pd.DataFrame = self.dfs_in["bus_filings"].copy()
+        df_bus3: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
+        df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3, schema_map)
+        self.dfs_out["bus_filings"] = df_filings
+        self.dfs_out["bus_names_addrs"] = df_names_addrs
 
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
             "properties": path_gen.processed_properties(configs),
             "taxpayer_records": path_gen.processed_taxpayer_records(configs),
-            # "bus_filings": path_gen.processed_bus_filings(configs),
-            # "bus_names_addrs": path_gen.processed_bus_names_addrs(configs),
+            "bus_filings": path_gen.processed_bus_filings(configs),
+            "bus_names_addrs": path_gen.processed_bus_names_addrs(configs),
         }
         self.save_dfs(save_map)
 
@@ -2065,19 +2070,56 @@ class WkflRentalSubset(WorkflowStandardBase):
             "rental_licenses": {
                 "path": path_gen.pre_process_rental_licenses(configs),
                 "schema": None,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": None,
             }
         }
         self.load_dfs(load_map)
 
     def process(self) -> None:
+        # copy dfs
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_fixed"].copy()
+        df_props: pd.DataFrame = self.dfs_in["properties"].copy()
+        df_lic: pd.DataFrame = self.dfs_in["rental_licenses"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        t.print_with_dots("Fetching property pins for rental property subset of taxpayer data")
         # 1. subset by rental licenses
+        license_pins: list[str] = list(df_lic["apn"].dropna().unique())
         # 2. subset by non-homesteaded
+        is_homestead_pins: list[str] = list(df_props[df_props["is_homestead"] == "NON-HOMESTEADED"]["pin"])
         # 3. subset by prop_type
+        type_pins: list[str] = list(df_props[df_props["prop_type"].isin(self.PROP_TYPES)]["pin"])
         # 4. subset by land_use
+        land_use_pins: list[str] = list(df_props[df_props["land_use"].isin(self.LAND_USES)]["pin"])
         # 5. subset by building_use
+        bldg_use_pins: list[str] = list(df_props[df_props["building_use"].isin(self.BUILDING_USES)]["pin"])
         # 6. subset by num_units
+        df_props = cols_df.set_is_unit_gte_1(df_props)
+        num_units_pins: list[str] = list(df_props[df_props["is_unit_gte_1"] == True]["pin"])
+        # use set of pins to subset original props df
+        rental_pins: set[str] = set(license_pins + is_homestead_pins + type_pins + land_use_pins + bldg_use_pins + num_units_pins)
+        df_rentals: pd.DataFrame = df_props[df_props["pin"].isin(rental_pins)]
         # 7. subset by rental addresses - pull in remaining properties based on matching addresses from rental subset
-        pass
+        # 7a. get taxpayer addresses
+        rental_taxpayers: list[str] = list(df_rentals["raw_name_address"].unique())
+        t.print_with_dots("Executing sub-subset on properties excluded from initial subset")
+        # get addrs to exclude
+        registered_agent_addrs: list[str] = list(df_analysis[df_analysis["is_virtual_office_agent"] == True]["value"])
+        financial_services_addrs: list[str] = list(df_analysis[df_analysis["is_financial_services"] == True]["value"])
+        law_firm_addrs: list[str] = list(df_analysis[df_analysis["is_lawfirm"] == True]["value"])
+        exclude_addrs: set[str] = set(registered_agent_addrs + financial_services_addrs + law_firm_addrs)
+        # subset taxpayers for rentals only
+        df_taxpayers_r: pd.DataFrame = df_taxpayers[df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
+        df_taxpayers_nr: pd.DataFrame = df_taxpayers[~df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
+        # fetch taxpayer addresses to execute final subset
+        addrs_to_subset: list[str] = list(df_taxpayers_r[~df_taxpayers_r["clean_address_v1"].isin(exclude_addrs)])
+        df_nonrentals_r: pd.DataFrame = df_taxpayers_nr[df_taxpayers_nr["clean_address_v1"].isin(addrs_to_subset)]
+        df_subset_final: pd.DataFrame = pd.concat([df_taxpayers_r, df_nonrentals_r], ignore_index=True)
+
+        self.dfs_out["properties_rentals"] = df_rentals
+        self.dfs_out["taxpayers_subsetted"] = df_subset_final
 
     def summary_stats(self) -> None:
         pass
