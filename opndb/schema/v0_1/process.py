@@ -554,7 +554,7 @@ class TaxpayersSubsetted(TaxpayersFixed):
     # --------------------
     # ----MODEL FIELDS----
     # --------------------
-    is_rental: bool = pa.Field(
+    is_rental: bool | None = pa.Field(
         nullable=False,
         title="Is Rental?",
         description="Boolean column indicating whether or not the taxpayer record is associated with a rental property."
@@ -1234,7 +1234,7 @@ class AddressAnalysis(OPNDFModel):
         description="Column used to match researched addresses for Chicago. Should NOT be present in future iterations"
     )
     name: str = pa.Field(
-        nullable=True,\
+        nullable=True,
         unique=False,
         title="Name",
         description="Name of organization/entity associated with the address"
@@ -1273,7 +1273,19 @@ class AddressAnalysis(OPNDFModel):
         nullable=True,
         unique=False,
         title="Is Missing Suite?",
-        description="Boolean representing whether or not the address is missing a suite number. Applies to addresses that point to office buildings, UPS stores, lock box services or other virtual mail services but that do NOT include a secondary address identifier."
+        description="Boolean representing whether or not the address is missing a suite number. Applies to addresses that point to office buildings, UPS stores, lock box services or other virtual mail services but that do NOT include a secondary address identifier. Could indicate that the address represents the owner of the commercial property itself, or a specific organization within the commercial property."
+    )
+    is_problematic_suite: bool = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Problematic Suite?",
+        description="Boolean representing whether or not the suite number in a researched address is either associated with too many different organizations to definitively establish a relationship, or is simply no information online could be found for that suite number."
+    )
+    is_realtor: bool = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Realtor?",
+        description="Boolean representing whether or not the address is associated with a realtor or a realty agency's office."
     )
     is_financial_services: bool = pa.Field(
         nullable=True,

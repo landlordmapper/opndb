@@ -214,8 +214,8 @@ class WorkflowBase(ABC):
             return WkflAnalysisFinal(config_manager)
         elif wkfl_id == "rental_subset":
             return WkflRentalSubset(config_manager)
-        elif wkfl_id == "clean_merge":
-            return WkflCleanMerge(config_manager)
+        elif wkfl_id == "match_addr_cols":
+            return WkflMatchAddressCols(config_manager)
         return None
 
     @abstractmethod
@@ -2138,10 +2138,10 @@ class WkflRentalSubset(WorkflowStandardBase):
         pass
 
 
-class WkflCleanMerge(WorkflowStandardBase):
+class WkflMatchAddressCols(WorkflowStandardBase):
 
-    WKFL_NAME: str = "PRE-MATCH CLEANING & MERGING WORKFLOW"
-    WKFL_DESC: str = ""
+    WKFL_NAME: str = "MATCH ADDRESS & BOOLEAN IDENTIFIER GENERATORS WORKFLOW"
+    WKFL_DESC: str = "Assigns boolean identifiers for various address analysis categories. Subsets business filings data by presence of validated addresses from initial subset. Generates name + address concatenated columns for string matching."
 
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
@@ -2152,7 +2152,7 @@ class WkflCleanMerge(WorkflowStandardBase):
         load_map: dict[str, dict[str, Any]] = {
             "taxpayers_subsetted": {
                 "path": path_gen.processed_taxpayers_subsetted(configs),
-                "schema": None,  # TaxpayersSubsetted,
+                "schema": TaxpayersSubsetted,
                 "recursive_bools": True
             },
             "bus_names_addrs_merged": {
@@ -2161,7 +2161,8 @@ class WkflCleanMerge(WorkflowStandardBase):
             },
             "address_analysis": {
                 "path": path_gen.analysis_address_analysis(configs),
-                "schema": None  # AddressAnalysis,
+                "schema": AddressAnalysis,
+                "recursive_bools": True
             },
             "gcd_validated": {
                 "path": path_gen.geocodio_gcd_validated(configs, "_fixed"),
@@ -2186,8 +2187,10 @@ class WkflCleanMerge(WorkflowStandardBase):
         df_uids: pd.DataFrame = df_bus[df_bus["uid"].isin(uids)]
         # fetch unique validated addresses for matched entities
         addrs_for_uids: list[str] = list(df_uids["clean_address_v1"].dropna().unique())
+
         # subset entire dataset for ALL records associated with validated addresses
-        df_bus_subset: pd.DataFrame = df_bus[df_bus["clean_address_v1"].isin(addrs_for_uids)]
+        uids_sub: set[str] = set(list(df_bus[df_bus["clean_address_v1"].isin(addrs_for_uids)]["uid"].unique()) + uids)
+        df_bus_subset: pd.DataFrame = df_bus[df_bus["uid"].isin(uids_sub)]
 
         # set address lists for bool col generators
         t.print_with_dots("Fetching researched address lists to be used in boolean column generators")
@@ -2205,9 +2208,7 @@ class WkflCleanMerge(WorkflowStandardBase):
         realtor_addrs: list[str] = list(df_analysis[df_analysis["is_realtor"] == True]["value"])
 
         for id, df in {"taxpayers": df_taxpayers, "business_filings": df_bus_subset}.items():
-
             t.print_dataset_name(id)
-
             t.print_with_dots(f"Setting match_address_v1 for {id}")
             df = cols_df.set_match_address(df, "clean_address_v1", "_v1")
             t.print_with_dots(f"Setting match_address_v2 for {id}")

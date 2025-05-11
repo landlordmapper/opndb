@@ -118,7 +118,7 @@ class TerminalBase:
             {"name": "Address Analysis Initial", "value": "address_analysis_initial"},
             {"name": "Analysis Final", "value": "analysis_final"},
             {"name": "Subset Rentals", "value": "rental_subset"},
-            {"name": "Pre-Match Cleaning", "value": "clean_merge"},
+            {"name": "Match Address & Boolean Identifiers", "value": "match_addr_cols"},
 
         ]
 
