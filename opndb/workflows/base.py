@@ -1642,7 +1642,7 @@ class WkflCleanMerge(WorkflowStandardBase):
         t.print_with_dots("Adding match_address column to taxpayer records")
         df_taxpayers = cols_df.set_match_address_t(df_taxpayers)
         for col_map in TaxpayersPrepped.match_address_col_map():
-            suffix = col_map["match"].split("_")[-1]
+            suffix = "_" + col_map["match"].split("_")[-1]
             t.print_with_dots(f"Adding is_validated_{suffix} column to taxpayer records")
             df_taxpayers = cols_df.set_is_validated(df_taxpayers, col_map["validated"], suffix)
             t.print_with_dots(f"Adding exclude_address_{suffix} column to taxpayer records")

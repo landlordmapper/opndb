@@ -314,6 +314,14 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
+    def processed_bus_names_addrs_subsetted(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.BUS_NAMES_ADDRS_SUBSETTED,
+            configs["load_ext"]
+        )
+    @classmethod
     def processed_corps(cls, configs: WorkflowConfigs) -> Path:
         """:returns: ROOT/processed/corps[ext]"""
         return cls.generate_path(

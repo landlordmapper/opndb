@@ -70,6 +70,7 @@ class Processed(FileNames):
     TAXPAYERS_BUS_MERGED: str = "taxpayers_bus_merged"
     TAXPAYERS_ADDR_MERGED: str = "taxpayers_addr_merged"
     BUS_NAMES_ADDRS_MERGED: str = "bus_names_addrs_merged"
+    BUS_NAMES_ADDRS_SUBSETTED: str = "bus_names_addrs_subsetted"
 
     TAXPAYERS_MERGED: str = "taxpayers_merged"
     CORPS_MERGED: str = "corps_merged"

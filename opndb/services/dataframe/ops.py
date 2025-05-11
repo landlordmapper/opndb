@@ -327,9 +327,9 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df
 
     @classmethod
-    def concatenate_name_addr(cls, df: pd.DataFrame,name_col: str, addr_col: str) -> pd.DataFrame:
+    def concatenate_name_addr(cls, df: pd.DataFrame, name_col: str, addr_col: str, suffix: str = "") -> pd.DataFrame:
         """Generates column with name and address concatenated. Used for string matching workflow."""
-        df[f"{name_col}_address"] = df[name_col] + " - " + df[addr_col]
+        df[f"{name_col}_address{suffix}"] = df[name_col] + " - " + df[addr_col]
         return df
 
     @classmethod
@@ -340,14 +340,29 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df
 
     @classmethod
+    def set_match_address(cls, df: pd.DataFrame, address_col: str, suffix: str = "") -> pd.DataFrame:
+        """
+        Sets match_address column for taxpayer and business filing records to be used in string matching and network
+        graph generation. Returns validated address if one exists, and cleaned unvalidated address if otherwise. Set
+        suffix to specify which address to set (e.g. clean_address_v1, clean_address_v2, etc.)
+        """
+        def get_match_address(row: pd.Series) -> str:
+            if pd.notnull(row[address_col]):
+                return row[address_col]
+            else:
+                return row["clean_address"]
+        df[f"match_address{suffix}"] = df.apply(lambda row: get_match_address(row), axis=1)
+        return df
+
+    @classmethod
     def set_exclude_address(
         cls,
         exclude_addrs: list[str],
         df: pd.DataFrame,
         match_col: str,
-        suffix: str
+        suffix: str = ""
     ) -> pd.DataFrame:
-        df[f"exclude_address_{suffix}"] = df[match_col].apply(lambda addr: addr in exclude_addrs)
+        df[f"exclude_address{suffix}"] = df[match_col].apply(lambda addr: addr in exclude_addrs)
         return df
 
     @classmethod
@@ -356,9 +371,9 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         researched_addrs: list[str],
         df: pd.DataFrame,
         match_col: str,
-        suffix: str
+        suffix: str = ""
     ) -> pd.DataFrame:
-        df[f"is_researched_{suffix}"] = df[match_col].apply(lambda addr: addr in researched_addrs)
+        df[f"is_researched{suffix}"] = df[match_col].apply(lambda addr: addr in researched_addrs)
         return df
 
     @classmethod
@@ -367,9 +382,9 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         org_addrs: list[str],
         df: pd.DataFrame,
         match_col: str,
-        suffix: str
+        suffix: str = ""
     ) -> pd.DataFrame:
-        df[f"is_org_address_{suffix}"] = df[match_col].apply(lambda addr: addr in org_addrs)
+        df[f"is_org_address{suffix}"] = df[match_col].apply(lambda addr: addr in org_addrs)
         return df
 
     @classmethod
@@ -377,11 +392,44 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         cls,
         df: pd.DataFrame,
         valid_col: str,
-        suffix: str
+        suffix: str = ""
     ) -> pd.DataFrame:
-        df[f"is_validated_{suffix}"] = df[valid_col].apply(
+        df[f"is_validated{suffix}"] = df[valid_col].apply(
             lambda addr: pd.notnull(addr)
         )
+        return df
+
+    @classmethod
+    def set_is_missing_suite(
+        cls,
+        missing_suite_addrs: list[str],
+        df: pd.DataFrame,
+        valid_col: str,
+        suffix: str = ""
+    ) -> pd.DataFrame:
+        df[f"is_missing_suite{suffix}"] = df[valid_col].apply(lambda addr: addr in missing_suite_addrs)
+        return df
+
+    @classmethod
+    def set_is_problem_suite(
+        cls,
+        problem_suite_addrs: list[str],
+        df: pd.DataFrame,
+        valid_col: str,
+        suffix: str = ""
+    ) -> pd.DataFrame:
+        df[f"is_problem_suite{suffix}"] = df[valid_col].apply(lambda addr: addr in problem_suite_addrs)
+        return df
+
+    @classmethod
+    def set_is_realtor(
+        cls,
+        realtor_addrs: list[str],
+        df: pd.DataFrame,
+        valid_col: str,
+        suffix: str = ""
+    ) -> pd.DataFrame:
+        df[f"is_realtor{suffix}"] = df[valid_col].apply(lambda addr: addr in realtor_addrs)
         return df
 
     @classmethod

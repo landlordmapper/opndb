@@ -214,6 +214,8 @@ class WorkflowBase(ABC):
             return WkflAnalysisFinal(config_manager)
         elif wkfl_id == "rental_subset":
             return WkflRentalSubset(config_manager)
+        elif wkfl_id == "clean_merge":
+            return WkflCleanMerge(config_manager)
         return None
 
     @abstractmethod
@@ -2129,6 +2131,127 @@ class WkflRentalSubset(WorkflowStandardBase):
         save_map: dict[str, Path] = {
             "properties_rentals": path_gen.processed_properties_rentals(configs),
             "taxpayers_subsetted": path_gen.processed_taxpayers_subsetted(configs),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflCleanMerge(WorkflowStandardBase):
+
+    WKFL_NAME: str = "PRE-MATCH CLEANING & MERGING WORKFLOW"
+    WKFL_DESC: str = ""
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_subsetted": {
+                "path": path_gen.processed_taxpayers_subsetted(configs),
+                "schema": None,  # TaxpayersSubsetted,
+                "recursive_bools": True
+            },
+            "bus_names_addrs_merged": {
+                "path": path_gen.processed_bus_names_addrs_merged(configs),
+                "schema": None,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": None  # AddressAnalysis,
+            },
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs, "_fixed"),
+                "schema": Geocodio
+            }
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+
+        # copy dfs
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_subsetted"].copy()
+        df_bus: pd.DataFrame = self.dfs_in["bus_names_addrs_merged"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+
+        # subset business filings
+        t.print_with_dots("Subsetting business filings data")
+        # fetch all uids merged into taxpayer records via name matching
+        uids: list[str] = list(df_taxpayers["uid"].dropna().unique())
+        # subset business name and address records for ONLY records associated with matched uids
+        df_uids: pd.DataFrame = df_bus[df_bus["uid"].isin(uids)]
+        # fetch unique validated addresses for matched entities
+        addrs_for_uids: list[str] = list(df_uids["clean_address_v1"].dropna().unique())
+        # subset entire dataset for ALL records associated with validated addresses
+        df_bus_subset: pd.DataFrame = df_bus[df_bus["clean_address_v1"].isin(addrs_for_uids)]
+
+        # set address lists for bool col generators
+        t.print_with_dots("Fetching researched address lists to be used in boolean column generators")
+        df_exclude: pd.DataFrame = df_analysis[
+            (df_analysis["is_lawfirm"] == True) |
+            (df_analysis["is_financial_services"] == True) |
+            (df_analysis["is_virtual_office_agent"] == True)
+        ]
+        exclude_addrs: list[str] = list(df_exclude["value"])
+        pobox_addrs: list[str] = list(df_valid[df_valid["street"] == "PO BOX"]["formatted_address_v1"].unique())
+        researched_addrs: list[str] = list(df_analysis[df_analysis["is_researched"] == True]["value"])
+        org_addrs: list[str] = list(df_analysis[df_analysis["is_landlord_org"] == True]["value"])
+        missing_suite_addrs: list[str] = list(df_analysis[df_analysis["is_missing_suite"] == True]["value"])
+        problem_suite_addrs: list[str] = list(df_analysis[df_analysis["is_problematic_suite"] == True]["value"])
+        realtor_addrs: list[str] = list(df_analysis[df_analysis["is_realtor"] == True]["value"])
+
+        for id, df in {"taxpayers": df_taxpayers, "business_filings": df_bus_subset}.items():
+
+            t.print_dataset_name(id)
+
+            t.print_with_dots(f"Setting match_address_v1 for {id}")
+            df = cols_df.set_match_address(df, "clean_address_v1", "_v1")
+            t.print_with_dots(f"Setting match_address_v2 for {id}")
+            df = cols_df.set_match_address(df, "clean_address_v2", "_v2")
+            t.print_with_dots(f"Setting match_address_v3 for {id}")
+            df = cols_df.set_match_address(df, "clean_address_v3", "_v3")
+            t.print_with_dots(f"Setting match_address_v4 for {id}")
+            df = cols_df.set_match_address(df, "clean_address_v4", "_v4")
+            t.print_with_dots(f"Setting is_validated for {id}")
+            df = cols_df.set_is_validated(df, "clean_address_v1")
+            t.print_with_dots(f"Setting exclude_address for {id}")
+            df = cols_df.set_exclude_address(exclude_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_researched for {id}")
+            df = cols_df.set_is_researched(researched_addrs + pobox_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_org_address for {id}")
+            df = cols_df.set_is_org_address(org_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_missing_suite for {id}")
+            df = cols_df.set_is_missing_suite(missing_suite_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_problem_suite for {id}")
+            df = cols_df.set_is_problem_suite(problem_suite_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_realtor for {id}")
+            df = cols_df.set_is_realtor(realtor_addrs, df, "clean_address_v1")
+
+        # add name+address concatenated columns to use for matching
+        t.print_with_dots("Adding name + address concatenation columns")
+        for suffix in ["_v1", "_v2", "_v3", "_v4"]:
+            df_taxpayers = cols_df.concatenate_name_addr(
+                df_taxpayers, "clean_name", f"match_address{suffix}", suffix
+            )
+            df_taxpayers = cols_df.concatenate_name_addr(
+                df_taxpayers, "core_name", f"match_address{suffix}", suffix
+            )
+
+        self.dfs_out["taxpayers_prepped"] = df_taxpayers
+        self.dfs_out["bus_names_addrs_subsetted"] = df_bus_subset
+
+    def summary_stats(self) -> None:
+        pass
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_prepped": path_gen.processed_taxpayers_prepped(configs),
+            "bus_names_addrs_subsetted": path_gen.processed_bus_names_addrs_subsetted(configs),
         }
         self.save_dfs(save_map)
 
