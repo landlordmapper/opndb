@@ -89,6 +89,63 @@ class MatchBase:
         #         return False
 
     @classmethod
+    def check_address_mpls(
+        cls,
+        address: str | None,
+        is_validated: bool,  # COLUMN
+        is_researched: bool,  # COLUMN
+        exclude_address: bool,  # COLUMN
+        is_org_address: bool,  # COLUMN
+        is_missing_suite: bool,  # COLUMN
+        is_problem_suite: bool,  # COLUMN
+        include_unvalidated: bool,  # PARAM
+        include_unresearched: bool,  # PARAM
+        include_orgs: bool,  # PARAM
+        include_missing_suites: bool,  # PARAM
+        include_problem_suites: bool,  # PARAM
+        address_suffix: str  # PARAM
+    ) -> bool:
+        """
+        Returns "True" if the address SHOULD be included in the network analysis, and False if it should be ignored.
+        """
+        if not address or pd.isna(address):
+            return False
+
+        # first check: address is NOT validated and include_unvalidated is False
+        if not is_validated and not include_unvalidated:
+            return False
+
+        # second check: address is NOT validated and include_unvalidated is True
+        # non-validated addresses are necessarily always unresearched
+        if not is_validated and include_unvalidated:
+            return include_unresearched
+
+        # third check: address is validated but not researched
+        if is_validated and not is_researched:
+            return include_unresearched
+
+        # fourth check: address is validated and researched, but is marked as auto-exclude
+        # addresses at this point are necessarily validated and researched
+        if exclude_address:
+            return False
+
+        # sixth check: address is marked as having a missing suite number
+        if address_suffix in ["v2", "v4"] and is_missing_suite:
+            return include_missing_suites
+
+        # seventh check: address is marked as having a problematic suite number
+        if address_suffix in ["v2", "v4"] and is_problem_suite:
+            return include_problem_suites
+
+        # fifth check: address is associated with landlord organizations
+        # landlord org addresses are necessarily NOT missing suite NOR problematic
+        if is_org_address:
+            return include_orgs
+        # address is validated, researched, not marked to auto-exclude, no problems with suite number, and not a landlord org address: add
+        else:
+            return True
+
+    @classmethod
     def set_matching_address(cls, row):
         if pd.isna(row["raw_address_v"]) or row["raw_address_v"].strip() == "":
             return row["raw_address"]  # todo: run cleaned addresses through validator and change this to "clean_address_v" throughout the code where needed

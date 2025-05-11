@@ -178,6 +178,18 @@ class StringMatchParams(TypedDict):
     nmslib_opts: NmslibOptions
     query_batch_opts: QueryBatchOptions
 
+class StringMatchParamsMN(TypedDict):
+    name_col: str | None
+    match_threshold: int | float
+    include_unvalidated: bool
+    include_unresearched: bool
+    include_orgs: bool
+    include_missing_suites: bool
+    include_problem_suites: bool
+    address: str
+    nmslib_opts: NmslibOptions
+    query_batch_opts: QueryBatchOptions
+
 class NetworkMatchParams(TypedDict):
     taxpayer_name_col: str
     include_unvalidated: bool

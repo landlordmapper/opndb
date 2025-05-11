@@ -759,7 +759,9 @@ class AddressBase:
 
     @classmethod
     def get_formatted_address_v1(cls, row: pd.Series) -> str:
-
+        """
+        Returns complete formatted address, omitting only suite number prefixes (STE, APT, UNIT, etc.)
+        """
         if "city" not in row or pd.isna(row.get("city")):
             return row.get("formatted_address", "")
 
@@ -790,7 +792,9 @@ class AddressBase:
 
     @classmethod
     def get_formatted_address_v2(cls, row: pd.Series) -> str:
-
+        """
+        Returns formatted address, omitting suite numbers and prefixes entirely.
+        """
         if "city" not in row or pd.isna(row.get("city")):
             return row.get("formatted_address", "")
 
@@ -819,7 +823,9 @@ class AddressBase:
 
     @classmethod
     def get_formatted_address_v3(cls, row: pd.Series) -> str:
-
+        """
+        Returns formatted address, omitting pre- and post-directionals but leaving suite numbers.
+        """
         if "city" not in row or pd.isna(row.get("city")):
             return row.get("formatted_address", "")
 
@@ -846,7 +852,9 @@ class AddressBase:
 
     @classmethod
     def get_formatted_address_v4(cls, row: pd.Series) -> str:
-
+        """
+        Returns formatted address, omitting pre- and post-directionals AND suite numbers.
+        """
         if "city" not in row or pd.isna(row.get("city")):
             return row.get("formatted_address", "")
 

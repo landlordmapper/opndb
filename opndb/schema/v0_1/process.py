@@ -831,6 +831,87 @@ class TaxpayersStringMatched(TaxpayersPrepped):
     )
 
 
+class TaxpayersPreppedMN(TaxpayersSubsetted):
+
+    is_trust: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Trust?",
+        description="Boolean representing whether or not a trust string pattern is identified in the cleaned taxpayer name"
+    )
+    is_person: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Person?",
+        description="Boolean representing whether or not a person string pattern is identified in the cleaned taxpayer name"
+    )
+    is_org: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Org?",
+        description="Boolean representing whether or not an organization name string pattern is identified in the cleaned taxpayer name"
+    )
+    is_llc: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is LLC?",
+        description="Boolean representing whether or not an LLC string pattern is identified in the cleaned taxpayer name"
+    )
+    is_clean_match: bool = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Clean Match?",
+        description="Boolean representing whether or not the match was made on based on the clean taxpayer name"
+    )
+    is_core_match: bool = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Core Match?",
+        description="Boolean representing whether or not the match was made on based on the core taxpayer name"
+    )
+    is_string_match: bool = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is String Match?",
+        description="Boolean representing whether or not the match was made as a result of string matching workflow"
+    )
+    is_validated: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Validated Address? (Taxpayer)",
+    )
+    exclude_address: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Taxpayer Mailing)",
+    )
+    is_researched: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Taxpayer Mailing)",
+    )
+    is_org_address: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Landlord Org Address? (Taxpayer Mailing)",
+    )
+    is_missing_suite: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Missing Suite?",
+    )
+    is_problem_suite: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Problem Suite?",
+    )
+    is_realtor: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Realtor?",
+    )
+
+
 class TaxpayersNetworked(TaxpayersStringMatched):
     # --------------------
     # ----MODEL FIELDS----

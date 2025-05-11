@@ -119,6 +119,7 @@ class TerminalBase:
             {"name": "Analysis Final", "value": "analysis_final"},
             {"name": "Subset Rentals", "value": "rental_subset"},
             {"name": "Match Address & Boolean Identifiers", "value": "match_addr_cols"},
+            {"name": "Taxpayer Record String Matching", "value": "string_match"},
 
         ]
 

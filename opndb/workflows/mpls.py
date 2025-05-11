@@ -33,7 +33,7 @@ from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
 from opndb.schema.v0_1.process import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
     Corps, LLCs, FixingAddrs, FixingTaxNames, AddressAnalysis, FrequentTaxNames, TaxpayersFixed, \
     TaxpayersStringMatched, TaxpayersMerged, TaxpayersSubsetted, CorpsMerged, LLCsMerged, TaxpayersPrepped, \
-    TaxpayersNetworked, TaxpayerRecordsMN, PropertiesMN
+    TaxpayersNetworked, TaxpayerRecordsMN, PropertiesMN, TaxpayersPreppedMN
 from opndb.schema.v0_1.raw import (
     PropsTaxpayers,
     Corps as CorpsRaw,
@@ -53,6 +53,7 @@ from opndb.types.base import (
     NetworkMatchParams,
     CleaningColumnMap,
     BooleanColumnMap, WorkflowStage, GeocodioReturnObject, GeocodioResultProcessed, GeocodioResultFlat, CleanAddress,
+    StringMatchParamsMN,
 )
 
 # 5. Utils (these should only depend on constants and types)
@@ -216,6 +217,8 @@ class WorkflowBase(ABC):
             return WkflRentalSubset(config_manager)
         elif wkfl_id == "match_addr_cols":
             return WkflMatchAddressCols(config_manager)
+        elif wkfl_id == "string_match":
+            return WkflStringMatch(config_manager)
         return None
 
     @abstractmethod
@@ -2253,6 +2256,182 @@ class WkflMatchAddressCols(WorkflowStandardBase):
         save_map: dict[str, Path] = {
             "taxpayers_prepped": path_gen.processed_taxpayers_prepped(configs),
             "bus_names_addrs_subsetted": path_gen.processed_bus_names_addrs_subsetted(configs),
+        }
+        self.save_dfs(save_map)
+
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflStringMatch(WorkflowStandardBase):
+
+    WKFL_NAME: str = "TAXPAYER RECORD STRING-MATCHING WORKFLOW"
+    WKFL_DESC: str = "Executes string matching based on concatenation of taxpayer name and address."
+
+    DEFAULT_NMSLIB: NmslibOptions = {
+        "method": "hnsw",
+        "space": "cosinesimil_sparse_fast",
+        "data_type": nmslib.DataType.SPARSE_VECTOR
+    }
+    DEFAULT_QUERY_BATCH = {
+        "num_threads": 8,
+        "K": 3
+    }
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        self.params_matrix: list[StringMatchParamsMN] = []
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_param_builder(self) -> None:
+        t.print_with_dots("Building string matching params object")
+        # set options for params matrix
+        taxpayer_name_col: list[str] = ["clean_name"]
+        match_threshold_options: list[float] = [0.85]
+        unvalidated_options: list[bool] = [False, True]
+        unresearched_options: list[bool] = [False, True]
+        org_options: list[bool] = [False, True]
+        missing_suite_options: list[bool] = [False, True]
+        problem_suite_options: list[bool] = [False, True]
+        address: list[str] = ["v1", "v2", "v3", "v4"]
+        # loop through unique combinations of param matrix options
+        for i, params in enumerate(product(
+            taxpayer_name_col,
+            match_threshold_options,
+            unvalidated_options,
+            unresearched_options,
+            org_options,
+            missing_suite_options,
+            problem_suite_options,
+            address,
+        )):
+            self.params_matrix.append({
+                "name_col": params[0],
+                "match_threshold": params[1],
+                "include_unvalidated": params[2],
+                "include_unresearched": params[3],
+                "include_orgs": params[4],
+                "include_missing_suites": params[5],
+                "include_problem_suites": params[6],
+                "address": params[7],
+                "nmslib_opts": self.DEFAULT_NMSLIB,
+                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+            })
+
+    def execute_string_matching(self,df_taxpayers: pd.DataFrame) -> pd.DataFrame:
+        """Returns final dataset to be outputted"""
+        t.print_with_dots("Executing string matching")
+        for i, params in enumerate(self.params_matrix):
+            t.print_equals(f"Matching strings for STRING_MATCHED_NAME_{i+1}")
+            console.print("NAME COLUMN:", params["name_col"])
+            console.print("MATCH THRESHOLD:", params["match_threshold"])
+            console.print("INCLUDE ORGS:", params["include_orgs"])
+            console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
+            console.print("INCLUDE MISSING SUITES:", params["include_missing_suites"])
+            console.print("INCLUDE PROBLEMATIC SUITES:", params["include_problem_suites"])
+            console.print("ADDRESS COLUMN:", params["address"])
+            t.print_with_dots("Setting include_address")
+            df_taxpayers["include_address"] = df_taxpayers.apply(
+                lambda row: MatchBase.check_address_mpls(
+                    row["match_address_v1"],  # this is just used to test nan values in the address field
+                    row["is_validated"],
+                    row["is_researched"],
+                    row["exclude_address"],
+                    row["is_org_address"],
+                    row["is_missing_suite"],
+                    row["is_problem_suite"],
+                    params["include_unvalidated"],
+                    params["include_unresearched"],
+                    params["include_orgs"],
+                    params["include_missing_suites"],
+                    params["include_problem_suites"],
+                    params["address"]
+                ), axis=1
+            )
+            # filter out addresses
+            t.print_with_dots("Filtering out taxpayer records where include_address is False")
+            df_filtered: pd.DataFrame = df_taxpayers[df_taxpayers["include_address"] == True][[
+                "clean_name",
+                "core_name",
+                f"match_address_{params['address']}",
+                f"clean_name_address_{params['address']}",
+                f"core_name_address_{params['address']}"
+            ]]
+            # set ref & query docs
+            t.print_with_dots("Setting document objects for HNSW index")
+            ref_docs: list[str] = list(
+                df_filtered[f"{params['name_col']}_address_{params['address']}"].dropna().unique()
+            )
+            query_docs: list[str] = list(
+                df_filtered[f"{params['name_col']}_address_{params['address']}"].dropna().unique()
+            )
+            # get string matches
+            df_matches: pd.DataFrame = StringMatch.match_strings(
+                ref_docs=ref_docs,
+                query_docs=query_docs,
+                params=params
+            )
+            # generate network graph to associated matches
+            df_matches_networked: pd.DataFrame = NetworkMatchBase.string_match_network_graph(df_matches)
+            # t.print_with_dots("Merging string match results into taxpayer records dataset")
+            df_taxpayers = pd.merge(
+                df_taxpayers,
+                df_matches_networked[["original_doc", "fuzzy_match_combo"]],
+                how="left",
+                left_on=f"{params['name_col']}_address_{params['address']}",
+                right_on="original_doc"
+            )
+            gc.collect()
+            df_taxpayers.drop(columns="original_doc", inplace=True)
+            df_taxpayers.drop_duplicates(subset="raw_name_address", inplace=True)
+            df_taxpayers.rename(columns={"fuzzy_match_combo": f"string_matched_name_{i+1}"}, inplace=True)
+
+        return df_taxpayers
+
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_prepped": {
+                "path": path_gen.processed_taxpayers_prepped(configs),
+                "schema": TaxpayersPreppedMN,
+                "recursive_bools": True
+            },
+        }
+        self.load_dfs(load_map)
+
+    def process(self) -> None:
+        # copy df
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_prepped"].copy()
+        # validate
+        # self.run_validator(
+        #     "taxpayers_prepped",
+        #     df_taxpayers,
+        #     self.config_manager.configs,
+        #     self.WKFL_NAME,
+        #     TaxpayersPrepped
+        # )
+        # generate matrix parameters
+        self.execute_param_builder()
+        # run matching
+        df_taxpayers_matched = self.execute_string_matching(df_taxpayers)
+        # set out dfs
+        self.dfs_out["taxpayers_string_matched"] = df_taxpayers_matched
+
+    def summary_stats(self) -> None:
+        ss_obj = SSStringMatch(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out,
+            self.params_matrix
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_string_matched": path_gen.processed_taxpayers_string_matched(configs),
         }
         self.save_dfs(save_map)
 

@@ -458,6 +458,9 @@ class SSStringMatch(SummaryStatsBase):
                 "include_unvalidated?": params["include_unvalidated"],
                 "include_unresearched?": params["include_unresearched"],
                 "include_orgs?": params["include_orgs"],
+                "include_missing_suites?": params["include_missing_suites"],
+                "include_problem_suites?": params["include_problem_suites"],
+                "address_column": params["address"],
                 "string_match_name": string_match_name,
                 "matched_taxpayers": matched_taxpayers,
                 "unique_matches": unique_matches,
@@ -468,10 +471,10 @@ class SSStringMatch(SummaryStatsBase):
 
     def print(self) -> None:
         table = Table(title=f"Summary Stats: {self.wkfl_name}")
-        for col, val in self.data[0].items():
+        for col in self.data[0].keys():
             table.add_column(col, justify="right", style="green")
         for row in self.data:
-            table.add_row(*row.values())
+            table.add_row(*[str(val) for val in row.values()])
         console.print("\n")
         console.print(table)
         console.print("\n")
