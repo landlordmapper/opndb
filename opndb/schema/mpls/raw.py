@@ -784,7 +784,14 @@ class BusinessFilings(BusinessRecordsBase):
         "uid",
         "status",
         "raw_name",
-        "clean_name"
+        "clean_name",
+        "filing_date",
+        "expiration_date",
+        "home_jurisdiction",
+        "home_business_name",
+        "is_llc_non_profit",
+        "is_lllp",
+        "is_professional",
     ]
 
     @classmethod
@@ -966,9 +973,10 @@ class BusinessNamesAddrs(BusinessRecordsBase):
         description="Party name classification according to the MN Secretary of State",
     )
     address_type: str = pa.Field(
+        nullable=True,
         unique=False,
-        title="Address classification according to the MN Secretary of State",
-        description="",
+        title="Address Type",
+        description="Address classification according to the MN Secretary of State",
     )
     party_name: str = pa.Field(
         nullable=True,

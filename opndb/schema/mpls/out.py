@@ -57,6 +57,8 @@ class BusinessNamesAddrs(OPNDFModel):
     pass
 
 
+
+
 class Networks(OPNDFModel):
     name: str = pa.Field()
     short_name: str = pa.Field()

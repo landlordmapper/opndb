@@ -608,7 +608,6 @@ class TaxpayersPrepped(TaxpayersSubsetted):
         unique=False,
         title="Merge Address 1 (Validated)",
     )
-
     entity_address_2: str = pa.Field(
         nullable=True,
         unique=False,
