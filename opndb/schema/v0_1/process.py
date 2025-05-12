@@ -376,6 +376,44 @@ class LLCs(OPNDFModel):
     )
 
 
+class BusinessNamesAddrsSubsetted(OPNDFModel):
+    is_validated: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Validated Address? (Taxpayer)",
+    )
+    exclude_address: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Exclude Address (Taxpayer Mailing)",
+    )
+    is_researched: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Researched? (Taxpayer Mailing)",
+    )
+    is_org_address: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Landlord Org Address? (Taxpayer Mailing)",
+    )
+    is_missing_suite: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Missing Suite?",
+    )
+    is_problem_suite: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Problem Suite?",
+    )
+    is_realtor: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Realtor?",
+    )
+
+
 class LLCsMerged(LLCs):
     raw_office_address_v: str = pa.Field(
         nullable=True,

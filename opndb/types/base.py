@@ -186,7 +186,7 @@ class StringMatchParamsMN(TypedDict):
     include_orgs: bool
     include_missing_suites: bool
     include_problem_suites: bool
-    address: str
+    address_suffix: str
     nmslib_opts: NmslibOptions
     query_batch_opts: QueryBatchOptions
 
@@ -195,4 +195,14 @@ class NetworkMatchParams(TypedDict):
     include_unvalidated: bool
     include_unresearched: bool
     include_orgs: bool
+    string_match_name: str
+
+class NetworkMatchParamsMN(TypedDict):
+    taxpayer_name_col: str
+    include_unvalidated: bool
+    include_unresearched: bool
+    include_orgs: bool
+    include_missing_suites: bool
+    include_problem_suites: bool
+    address_suffix: str
     string_match_name: str

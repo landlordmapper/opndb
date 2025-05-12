@@ -6,6 +6,7 @@ from collections import Counter
 import json
 from typing import List
 import Levenshtein as lev
+from pandas.core.groupby import DataFrameGroupBy
 
 import networkx as nx
 import numpy as np
@@ -22,7 +23,7 @@ from rich.progress import (
 from rich.console import Console
 from opndb.constants.columns import AddressAnalysis
 from opndb.services.terminal_printers import TerminalBase as t
-from opndb.types.base import StringMatchParams, NetworkMatchParams
+from opndb.types.base import StringMatchParams, NetworkMatchParams, NetworkMatchParamsMN
 from opndb.services.dataframe.base import DataFrameOpsBase as df_ops
 from opndb.utils import UtilsBase as utils
 
@@ -287,7 +288,7 @@ class NetworkMatchBase(MatchBase):
         params: NetworkMatchParams,
     ) -> None:
         """
-        Addes nodes and edges for string match results. Adds string match name to name and address depending on whether
+        Adds nodes and edges for string match results. Adds string match name to name and address depending on whether
         add_name and add_address evaluate to True.
         """
 
@@ -618,6 +619,235 @@ class NetworkMatchBase(MatchBase):
         df_matches["fuzzy_match_combo"] = df_matches["original_doc"].apply(lambda x: component_map_names[x])
         df_matches = df_ops.combine_columns_parallel(df_matches)
         return df_matches
+
+    @classmethod
+    def process_row_network_mpls(
+        cls,
+        g: nx.Graph,
+        row: pd.Series,
+        params: NetworkMatchParamsMN,
+    ) -> None:
+        """
+        Adds nodes and edges for taxpayer name and taxpayer address. If both add_name and add_address evaluate to true,
+        add them as an edge. If address
+        """
+        name: str = row[params["taxpayer_name_col"]]
+        address: str = row[f"match_address_{params['address_suffix']}"]
+        add_name: bool = (not row.get("exclude_name", False)) and name != "UNKNOWN"
+        add_address: bool = cls.check_address_mpls(
+            address,
+            row["is_validated"],
+            row["is_researched"],
+            row["exclude_address"],
+            row["is_org_address"],
+            row["is_missing_suite"],
+            row["is_problem_suite"],
+            params["include_unvalidated"],
+            params["include_unresearched"],
+            params["include_orgs"],
+            params["include_missing_suites"],
+            params["include_problem_suites"],
+            params["address_suffix"]
+        )
+
+        if add_name and add_address:
+            g.add_edge(name, address)
+        elif add_name:
+            g.add_node(name)
+        elif add_address:
+            g.add_node(address)
+        else:
+            return
+
+    @classmethod
+    def process_row_network_string_match_mpls(
+        cls,
+        g: nx.Graph,
+        row: pd.Series,
+        params: NetworkMatchParamsMN,
+    ) -> None:
+        """
+        Adds nodes and edges for string match results. Adds string match name to name and address depending on whether
+        add_name and add_address evaluate to True.
+        """
+
+        name: str = row[params["taxpayer_name_col"]]
+        address: str = row[f"match_address_{params['address_suffix']}"]
+        string_match: str = row[params["string_match_name"]]
+
+        add_name: bool = (not row.get("exclude_name", False)) and name != "UNKNOWN"
+        add_address: bool = cls.check_address_mpls(
+            address,
+            row["is_validated"],
+            row["is_researched"],
+            row["exclude_address"],
+            row["is_org_address"],
+            row["is_missing_suite"],
+            row["is_problem_suite"],
+            params["include_unvalidated"],
+            params["include_unresearched"],
+            params["include_orgs"],
+            params["include_missing_suites"],
+            params["include_problem_suites"],
+            params["address_suffix"]
+        )
+
+        if add_name:
+            g.add_edge(name, string_match)
+        if add_address:
+            g.add_edge(address, string_match)
+
+    @classmethod
+    def process_row_network_entity_mpls(
+        cls,
+        g: nx.Graph,
+        row: pd.Series,
+        df_bus_uid: pd.DataFrame,
+        params: NetworkMatchParamsMN
+    ) -> None:
+        """
+        Processes nodes and edges for entity addresses.
+        """
+
+        # todo: deal with this elsewhere
+        entities_to_ignore: List[str] = []
+
+        # add_name boolean not necessary - entities will NEVER be exclude_name == True
+        entity_name: str = row[params["taxpayer_name_col"]]
+        entity_addresses = list(df_bus_uid[f"match_address_{params['address_suffix']}"].dropna().unique())
+
+        for i, address in enumerate(entity_addresses):
+            add_address: bool = cls.check_address_mpls(
+                address,
+                row["is_validated"],
+                row["is_researched"],
+                row["exclude_address"],
+                row["is_org_address"],
+                row["is_missing_suite"],
+                row["is_problem_suite"],
+                params["include_unvalidated"],
+                params["include_unresearched"],
+                params["include_orgs"],
+                params["include_missing_suites"],
+                params["include_problem_suites"],
+                params["address_suffix"]
+            )
+            if add_address and entity_name not in entities_to_ignore:
+                g.add_edge(entity_name, address)
+
+    @classmethod
+    def taxpayers_network_mpls(
+        cls,
+        df_taxpayers: pd.DataFrame,
+        df_bus: pd.DataFrame,
+        params: NetworkMatchParamsMN
+    ) -> nx.Graph:
+        bus_grouped: DataFrameGroupBy = df_bus.groupby("uid")
+        # initialize network graph object
+        gMatches = nx.Graph()
+        t.print_with_dots("Adding taxpayer names and addresses to network graph object")
+        with t.create_progress_bar(
+            "[yellow]Processing taxpayer records...", len(df_taxpayers)
+        )[0] as progress:
+            task = progress.tasks[0]
+            processed_count = 0
+            for i, row in df_taxpayers.iterrows():
+                # 1. add taxpayer name and address
+                cls.process_row_network_mpls(gMatches, row, params)
+                # 2. add string match (if exists)
+                if pd.notnull(row[params["string_match_name"]]):
+                    cls.process_row_network_string_match_mpls(gMatches, row, params)
+                # 3. add business filings records (if exists)
+                if pd.notnull(row["entity_clean_name"]) and row["uid"] in bus_grouped.groups:
+                    df_bus_uid: pd.DataFrame = bus_grouped.get_group(row["uid"])
+                    cls.process_row_network_entity_mpls(gMatches, row, df_bus_uid, params)
+                processed_count += 1
+                progress.update(
+                    task.id,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing taxpayer record {processed_count}/{len(df_taxpayers)}",
+                )
+        # log progress
+        console.print(
+            {
+                "CONNECTED COMPONENT COUNT (ENTITIES):": nx.number_connected_components(gMatches),
+                "NODE COUNT:": nx.number_of_nodes(gMatches),
+                "EDGE COUNT:": nx.number_of_edges(gMatches),
+            }
+        )
+        return gMatches
+
+    @classmethod
+    def set_taxpayer_component_mpls(
+        cls,
+        network_id: int,
+        df_taxpayers: pd.DataFrame,
+        df_bus: pd.DataFrame,
+        gMatches: nx.Graph,
+        params: NetworkMatchParamsMN
+    ) -> pd.DataFrame:
+        """
+        Assigns an ID value to each taxpayer record representing the associated connected component from the network
+        graph object generated from the taxpayers_network() function.
+        """
+        df_bus_taxpayers: pd.DataFrame = df_bus[df_bus["uid"].isin(
+            list(df_taxpayers["uid"].dropna().unique())
+        )]
+        # get unique values for each column used to generate nodes and edges
+        taxpayer_names_set = list(set(df_taxpayers[params["taxpayer_name_col"]].dropna().unique()))
+        fuzzy_matches_set = list(set(df_taxpayers[params["string_match_name"]].dropna().unique()))
+        clean_addresses_set = list(set(
+            list(df_taxpayers[f"match_address_{params['address_suffix']}"].dropna()) +
+            list(df_bus_taxpayers[f"match_address_{params['address_suffix']}"].dropna())
+        ))
+        # loop through connected to components to associate component IDs
+        # assign components to unique values from each column used to generate nodes and edges
+        component_map: dict[str, int] = {}
+        for i, connections in enumerate(list(nx.connected_components(gMatches))):
+            for component in connections:
+                if component in taxpayer_names_set:
+                    component_map[component] = i
+                elif component in fuzzy_matches_set:
+                    component_map[component] = i
+                elif component in clean_addresses_set:
+                    component_map[component] = i
+        df_taxpayers[f"final_component_{network_id}"] = df_taxpayers.apply(
+            lambda row: cls.set_component_mpls(row, component_map, df_bus_taxpayers, params), axis=1
+        )
+        return df_taxpayers
+
+    @classmethod
+    def set_component_mpls(
+        cls,
+        row: pd.Series,
+        component_map: dict,
+        df_bus_taxpayers: pd.DataFrame,
+        params: NetworkMatchParamsMN
+    ):
+        """
+        Assigns connected component to rental property row. Uses connected component map generated by
+        build_connected_component_map() to associate a property with a network based on the association of taxpayer
+        names, entity names, and mailing addresses.
+        """
+        keys_to_check = [
+            row[params["taxpayer_name_col"]],
+            row[f"match_address_{params['address_suffix']}"],
+            row[params["string_match_name"]],
+        ]
+        if pd.notnull(row["entity_clean_name"]):
+            addresses: list[str] = list(
+                df_bus_taxpayers[
+                    df_bus_taxpayers["uid"] == row["uid"]
+                ][f"match_address_{params['address_suffix']}"].dropna().unique()
+            )
+            keys_to_check.extend(addresses)
+        for key in keys_to_check:
+            if key in component_map.keys():
+                return component_map[key]
+        # If no match is found, print debug info and return np.nan
+        # print(f"KeyError for CleanName: {row['CLEAN_NAME']} and ADDRESS: {row['CLEAN_ADDRESS']}")
+        return np.nan
 
 
 class NetworkMatchGraph(NetworkMatchBase):

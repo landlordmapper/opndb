@@ -120,7 +120,7 @@ class TerminalBase:
             {"name": "Subset Rentals", "value": "rental_subset"},
             {"name": "Match Address & Boolean Identifiers", "value": "match_addr_cols"},
             {"name": "Taxpayer Record String Matching", "value": "string_match"},
-
+            {"name": "Taxpayer Record Network Graph Generator", "value": "network_graph"},
         ]
 
         # Let user select a workflow
