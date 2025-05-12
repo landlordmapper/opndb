@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Optional, Tuple, Type
 import nmslib
 import numpy as np
-from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
+from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
 import pandera as pa
 from itertools import product
 import warnings
@@ -386,6 +386,13 @@ class WkflRawDataPrep(WorkflowStandardBase):
             "master_id",
             "minnesota_business_name",
             "business_filing_status",
+            "filing_date",
+            "expiration_date",
+            "home_jurisdiction",
+            "home_business_name",
+            "is_llc_non_profit",
+            "is_lllp",
+            "is_professional",
         ]]
         df_bus1.rename(columns={
             "master_id": "uid",
@@ -418,6 +425,9 @@ class WkflRawDataPrep(WorkflowStandardBase):
             "country_name": "country",
         }, inplace=True)
 
+        t.print_with_dots("Setting zeros and ones to booleans")
+        for col in ["is_llc_non_profit", "is_lllp", "is_professional"]:
+            df_bus1[col] = df_bus1[col].apply(lambda val: val.strip() == "1")
         t.print_with_dots("Trimming whitespace")
         df_bus3 = clean_df_base.trim_whitespace(df_bus3)
         t.print_with_dots("Replacing empty strings with np.nan")

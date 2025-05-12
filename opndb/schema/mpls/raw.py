@@ -70,6 +70,83 @@ class PropsTaxpayers(OPNDFModel):
     def address_clean(cls) -> dict[str, Any]:
         return cls._ADDRESS_CLEAN
 
+    pin: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="PIN",
+        description="Unique tax identifier for property",
+    )
+    tax_name: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Tax Name",
+        description="Taxpayer name",
+    )
+    tax_name_2: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Tax Name 2",
+        description="Secondary taxpayer name",
+    )
+    tax_street: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Tax Street",
+        description="Taxpayer street address (street name, number, secondary unit and pre/post directionals)",
+    )
+    tax_city_state_zip: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Tax City State Zip",
+        description="City, state and zip code of taxpayer mailing address",
+    )
+    municipality: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Municipality",
+        description="Name of municipality in Hennepin county where the property is located",
+    )
+    tax_address: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Tax Address",
+        description="Concatenated raw taxpayer address",
+    )
+    land_use: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Land Use",
+        description="Land use categorization assigned by Hennepin county authorities",
+    )
+    building_use: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Building Use",
+        description="Building use categorization assigned by Hennepin county authorities",
+    )
+    prop_type: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Property Type",
+        description="Property type assigned by the city of Minneapolis",
+    )
+    is_exempt: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Exempt?",
+    )
+    is_homestead: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Is Homestead?",
+    )
+    num_units: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Number of Units",
+        description="Number of units associated with the property",
+    )
+
 
 class BusinessRecordsBase(OPNDFModel):
 
@@ -747,6 +824,42 @@ class BusinessFilings(BusinessRecordsBase):
         title="Name",
         description="Name of business entity as registered with the state of Minnesota.",
     )
+    filing_date: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Filing Date",
+    )
+    expiration_date: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Expiration Date",
+        description="",
+    )
+    home_jurisdiction: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Home Jurisdiction",
+        description="State in which the business entity is based",
+    )
+    home_business_name: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Home Business Name",
+        description="Name of the business as registered in its home jurisdiction",
+    )
+    is_llc_non_profit: bool = pa.Field(
+        nullable=False,
+        title="Is LLC Non-Profit?",
+    )
+    is_lllp: bool = pa.Field(
+        nullable=False,
+        title="Is LLLP?",
+    )
+    is_professional: bool = pa.Field(
+        nullable=False,
+        title="Is Professional?",
+        description="",
+    )
 
 
 class BusinessNamesAddrs(BusinessRecordsBase):
@@ -842,19 +955,73 @@ class BusinessNamesAddrs(BusinessRecordsBase):
 
     uid: str = pa.Field(
         nullable=False,
-        unique=True,
+        unique=False,
         title="UID",
         description="Unique identifier for MNSOS business records.",
     )
-    name_type: str = pa.Field()
-    address_type: str = pa.Field()
-    party_name: str = pa.Field()
-    street_1: str = pa.Field()
-    street_2: str = pa.Field()
-    city: str = pa.Field()
-    state: str = pa.Field()
-    zip_code: str = pa.Field()
-    zip_code_ext: str = pa.Field()
-    country: str = pa.Field()
-    raw_address: str = pa.Field()
-    is_incomplete_address: bool = pa.Field()
+    name_type: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Name Type",
+        description="Party name classification according to the MN Secretary of State",
+    )
+    address_type: str = pa.Field(
+        unique=False,
+        title="Address classification according to the MN Secretary of State",
+        description="",
+    )
+    party_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Party Name",
+        description="Name of the party to the business filing",
+    )
+    street_1: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street 1",
+        description="Street address (line 2)",
+    )
+    street_2: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street 2",
+        description="Street address (line 2)",
+    )
+    city: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="City",
+    )
+    state: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="State",
+    )
+    zip_code: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Zip Code",
+    )
+    zip_code_ext: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Zip Code Extension",
+    )
+    country: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Country",
+    )
+    raw_address: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Raw Address",
+        description="Concatenation of raw address components",
+    )
+    is_incomplete_address: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Incomplete Address?",
+        description="Boolean indicating whether or not the address is missing key components (street & zip code)",
+    )
