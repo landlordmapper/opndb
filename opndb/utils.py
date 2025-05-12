@@ -643,6 +643,22 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
+    def output_business_filings(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.BUSINESS_FILINGS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_business_names_addrs(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.BUSINESS_NAMES_ADDRS,
+            configs["load_ext"]
+        )
+    @classmethod
     def output_networks(cls, configs: WorkflowConfigs) -> Path:
         return cls.generate_path(
             configs["data_root"],

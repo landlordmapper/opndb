@@ -222,6 +222,8 @@ class WorkflowBase(ABC):
             return WkflStringMatch(config_manager)
         elif wkfl_id == "network_graph":
             return WkflNetworkGraph(config_manager)
+        elif wkfl_id == "final_output":
+            return WkflFinalOutput(config_manager)
         return None
 
     @abstractmethod
@@ -2635,14 +2637,266 @@ class WkflFinalOutput(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    def execute_network_calcs(self) -> pd.DataFrame:
+        # todo: tbd, whatever Tony decides
+        rows_network_calcs: list[dict[str, Any]] = [
+            {
+                "network_id": "",
+                "taxpayer_name": "",
+                "entity_name": "",
+                "string_match": "",
+                "include_orgs": False,
+                "include_orgs_string": False,
+                "include_unresearched": False,
+                "include_unresearched_string": False
+            },
+        ]
+        return pd.DataFrame(rows_network_calcs)
+
+    def execute_entity_types(self) -> pd.DataFrame:
+        rows_entity_types: list[dict[str, Any]] = [
+            {
+                "name": "Landlord Organization",
+                "description": "Property management company, real estate developer, real estate investment firm, or any other organization type that deals with property ownership, management, investment or development. Note that given the nature of these organizations, their direct ownership of properties cannot be definitively established, however their responsibility as the taxpayer does mean they can be held accountable for living conditions and treatment of tenants."
+            },
+            {
+                "name": "Realtor",
+                "description": "Realty company or individual realtor associated with taxpayer address.",
+            },
+            {
+                "name": "Healthcare / Senior Care Organization",
+                "description": "Healthcare company or senior care company associated with taxpayer address."
+            },
+            {
+                "name": "Religious Institution",
+                "description": "Church, mosque or other religious institution associated with taxpayer address.",
+            },
+            {
+                "name": "Government Agency",
+                "description": "Government agency at any level (local, state or federal)."
+            },
+            {
+                "name": "Law Firm",
+                "description": "Legal services firm whose office address has been confirmed and submitted to the state as the legal property taxpayer."
+            },
+            {
+                "name": "Financial Services Company",
+                "description": "Financial firm whose office address has been confirmed and submitted to the state as the legal property taxpayer. These firms offer a wide range of services, including mortgage services, tax services, accounting services, or any other financial service."
+            },
+            {
+                "name": "Associated Business",
+                "description": "Any business unrelated to property ownership, management or development but that shares the same mailing address as the property taxpayer."
+            },
+            {
+                "name": "Virtual Office / Registered Agent",
+                "description": "Virtual office or registered agent service. These services allow landlords to submit the virtual office or registered agent's mailing address as the property taxpayer instead of themselves."
+            },
+            {
+                "name": "Nonprofit Organization",
+                "description": "501(c)(3) tax-exempt not-for-profit organization."
+            },
+            {
+                "name": "Other / Unknown",
+                "description": ""
+            }
+        ]
+        return pd.DataFrame(rows_entity_types)
+
+    def execute_entities(self, df_researched: pd.DataFrame) -> pd.DataFrame:
+        rows_entities: list[dict[str, Any]] = []
+        for _, row in df_researched.iterrows():
+            out_row = {
+                "name": row["name"],
+                "urls": row["urls"],
+                "yelp_urls": row["yelp_urls"],
+                "google_urls": row["google_urls"],
+                "google_place_id": row["google_place_id"],
+            }
+            if row["is_landlord_org"] == True:
+                out_row["entity_type"] = "Landlord Organization"
+            elif row["is_govt_agency"] == True:
+                out_row["entity_type"] = "Government Agency"
+            elif row["is_lawfirm"] == True:
+                out_row["entity_type"] = "Law Firm"
+            elif row["is_financial_services"] == True:
+                out_row["entity_type"] = "Financial Services Company"
+            elif row["is_assoc_bus"] == True:
+                out_row["entity_type"] = "Associated Business"
+            elif row["is_virtual_office_agent"] == True:
+                out_row["entity_type"] = "Virtual Office / Registered Agent"
+            elif row["is_nonprofit"] == True:
+                out_row["entity_type"] = "Nonprofit Organization"
+            elif row["is_religious"] == True:
+                out_row["entity_type"] = "Religious Institution"
+            elif row["is_healthcare_senior"] == True:
+                out_row["entity_type"] = "Healthcare / Senior Care Organization"
+            elif row["is_realtor"] == True:
+                out_row["entity_type"] = "Realtor"
+            else:
+                out_row["entity_type"] = "Other / Unknown"
+            rows_entities.append(out_row)
+        return pd.DataFrame(rows_entities)
+
+    def execute_validated_addresses(self, df_researched: pd.DataFrame) -> pd.DataFrame:
+        df_validated_addresses: pd.DataFrame = self.dfs_in["gcd_validated"][[
+            "number",
+            "predirectional",
+            "prefix",
+            "street",
+            "suffix",
+            "postdirectional",
+            "secondaryunit",
+            "secondarynumber",
+            "city",
+            "county",
+            "state",
+            "zip",
+            "country",
+            "lng",
+            "lat",
+            "accuracy",
+            "formatted_address",
+            "formatted_address_v"
+        ]]
+        df_validated_addresses.drop_duplicates(subset=["formatted_address"], inplace=True)
+        df_validated_addresses["landlord_entity"] = None
+        with t.create_progress_bar(
+            "[yellow]Setting landlord_entity names for validated addresses...", len(df_researched)
+        )[0] as progress:
+            task = progress.tasks[0]
+            processed_count = 0
+            for _, row in df_researched.iterrows():
+                mask = df_validated_addresses["formatted_address_v"] == row["value"]  # todo: fix this so that it uses "formatted_address_v"
+                df_validated_addresses.loc[mask, "landlord_entity"] = row["name"]
+                processed_count += 1
+                progress.update(
+                    task.id,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing entity {processed_count}/{len(df_researched)}",
+                )
+        return df_validated_addresses
+
+    def execute_business_filings(self) -> pd.DataFrame:
+        df_bus_filings: pd.DataFrame = self.dfs_in["business_filings"]
+        return df_bus_filings
+
+    def execute_business_names_addrs(self) -> pd.DataFrame:
+        df_bus_names_addrs: pd.DataFrame = self.dfs_in["business_names_addrs"][[
+            "uid",
+            "name_type",
+            "address_type",
+            "raw_party_name",
+            "raw_address",
+            "clean_party_name",
+            "clean_address",
+            "clean_address_v1",
+        ]]
+        return df_bus_names_addrs
+
+    def execute_networks(self) -> pd.DataFrame:
+        df_networks_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
+            "network_1",
+            "network_1_short",
+            "network_1_text",
+            "network_2",
+            "network_2_short",
+            "network_2_text",
+            "network_3",
+            "network_3_short",
+            "network_3_text",
+            "network_4",
+            "network_4_short",
+            "network_4_text",
+            "network_5",
+            "network_5_short",
+            "network_5_text",
+            "network_6",
+            "network_6_short",
+            "network_6_text"
+        ]]
+        rows_networks: list[dict[str, Any]] = []
+        network_ids: list[str] = ["network_1", "network_2", "network_3", "network_4", "network_5", "network_6"]
+        for ntwk in network_ids:
+            df_network: pd.DataFrame = df_networks_taxpayers[[
+                ntwk,
+                f"{ntwk}_short",
+                f"{ntwk}_text"
+            ]]
+            df_network.dropna(subset=[ntwk], inplace=True)
+            df_network.drop_duplicates(subset=[ntwk], inplace=True)
+            for _, row in df_network.iterrows():
+                row = {
+                    "name": row[ntwk],
+                    "short_name": row[f"{ntwk}_short"],
+                    "network_calc": ntwk,
+                    "nodes_edges": row[f"{ntwk}_text"]
+                }
+                rows_networks.append(row)
+        return pd.DataFrame(rows_networks)
+
+    def execute_taxpayer_records(self) -> pd.DataFrame:
+        # taxpayer_records
+        df_taxpayer_records: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
+            "raw_name",
+            "raw_name_2",
+            "raw_address",
+            "clean_name",
+            "clean_name_2",
+            "clean_address",
+            "uid",
+            "network_1",
+            "network_2",
+            "network_3",
+            "network_4",
+            "network_5",
+            "network_6"
+        ]]
+        df_taxpayer_records.rename(columns={
+            "uid": "entity_uid",
+        })
+        return df_taxpayer_records
+
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_networked": {
+                "path": path_gen.processed_taxpayers_networked(configs),
+                "schema": None,
+            },
+            "business_filings": {
+                "path": path_gen.processed_bus_filings(configs),
+                "schema": None,
+            },
+            "business_names_addrs": {
+                "path": path_gen.processed_bus_names_addrs_subsetted(configs),
+                "schema": None,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+                "recursive_bools": True
+            },
+            "gcd_validated": {
+                "path": path_gen.geocodio_gcd_validated(configs),
+                "schema": Geocodio,
+            },
         }
         self.load_dfs(load_map)
 
     def process(self) -> None:
-        pass
+        df_researched: pd.DataFrame = self.dfs_in["address_analysis"][
+            self.dfs_in["address_analysis"]["is_researched"] == True
+        ]
+        df_researched.dropna(subset=["name"], inplace=True)
+        self.dfs_out["network_calcs"] = self.execute_network_calcs()
+        self.dfs_out["entity_types"] = self.execute_entity_types()
+        self.dfs_out["entities"] = self.execute_entities(df_researched)
+        self.dfs_out["validated_addresses"] = self.execute_validated_addresses(df_researched)
+        self.dfs_out["business_filings"] = self.execute_business_filings()
+        self.dfs_out["business_names_addrs"] = self.execute_business_names_addrs()
+        self.dfs_out["networks"] = self.execute_networks()
+        self.dfs_out["taxpayer_records"] = self.execute_taxpayer_records()
 
     def summary_stats(self) -> None:
         pass
@@ -2650,6 +2904,14 @@ class WkflFinalOutput(WorkflowStandardBase):
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
+            "network_calcs": path_gen.output_network_calcs(configs),
+            "entity_types": path_gen.output_entity_types(configs),
+            "entities": path_gen.output_entities(configs),
+            "validated_addresses": path_gen.output_validated_addresses(configs),
+            "business_filings": path_gen.output_business_filings(configs),
+            "business_names_addrs": path_gen.output_business_names_addrs(configs),
+            "networks": path_gen.output_networks(configs),
+            "taxpayer_records": path_gen.output_taxpayer_records(configs),
         }
         self.save_dfs(save_map)
 
