@@ -1,14 +1,9 @@
 # 1. Standard library imports
 import csv
 import gc
-import shutil
-import sys
 from abc import ABC, abstractmethod
-from enum import IntEnum
 from pathlib import Path
-from pprint import pprint
-from typing import Any, ClassVar, Optional, Tuple, List, Type
-import networkx as nx
+from typing import Any, Optional, Tuple, Type
 import nmslib
 import numpy as np
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
@@ -19,21 +14,17 @@ from itertools import product
 import pandas as pd
 
 # 3. Constants (these should have no dependencies on other local modules)
-from opndb.constants.columns import (
-    ValidatedAddrs as va,
-    UnvalidatedAddrs as ua,
+from opndb.constants.columns import (  # todo: remove these
     TaxpayerRecords as tr,
     Corps as c,
     LLCs as l,
-    Properties as p,
-    PropsTaxpayers as pt, ValidatedAddrs
 )
-from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.schema.v0_1.process import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
-    Corps, LLCs, FixingAddrs, FixingTaxNames, AddressAnalysis, FrequentTaxNames, TaxpayersFixed, \
+from opndb.schema.base.process import UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, FixingAddrs, FixingTaxNames, AddressAnalysis, FrequentTaxNames
+from opndb.schema.chi.process import TaxpayerRecords, Properties, \
+    Corps, LLCs, TaxpayersFixed, \
     TaxpayersStringMatched, TaxpayersMerged, TaxpayersSubsetted, CorpsMerged, LLCsMerged, TaxpayersPrepped, \
     TaxpayersNetworked
-from opndb.schema.v0_1.raw import (
+from opndb.schema.chi.raw import (
     PropsTaxpayers,
     Corps as CorpsRaw,
     LLCs as LLCsRaw,
@@ -50,12 +41,11 @@ from opndb.types.base import (
     NmslibOptions,
     StringMatchParams,
     NetworkMatchParams,
-    CleaningColumnMap,
-    BooleanColumnMap, WorkflowStage, GeocodioReturnObject,
+    GeocodioReturnObject,
 )
 
 # 5. Utils (these should only depend on constants and types)
-from opndb.utils import UtilsBase as utils, PathGenerators as path_gen
+from opndb.utils import PathGenerators as path_gen
 
 # 6. Services (these can depend on everything else)
 from opndb.services.match import StringMatch, NetworkMatchBase, MatchBase
@@ -66,14 +56,12 @@ from opndb.services.dataframe.base import (
     DataFrameBaseCleaners as clean_df_base,
     DataFrameNameCleaners as clean_df_name,
     DataFrameAddressCleaners as clean_df_addr,
-    DataFrameCleanersAccuracy as clean_df_acc, DataFrameOpsBase,
 )
 from opndb.services.dataframe.ops import (
     DataFrameMergers as merge_df,
     DataFrameSubsetters as subset_df,
     DataFrameColumnGenerators as cols_df,
     DataFrameColumnManipulators as colm_df,
-    DataFrameDeduplicators as dedup_df,
     DataFrameConcatenators as concat_df,
 )
 from rich.console import Console

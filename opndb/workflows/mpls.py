@@ -31,16 +31,12 @@ from opndb.constants.columns import (
     PropsTaxpayers as pt, ValidatedAddrs
 )
 from opndb.constants.files import Raw as r, Dirs as d, Geocodio as g
-from opndb.schema.v0_1.process import TaxpayerRecords, Properties, UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, \
-    Corps, LLCs, FixingAddrs, FixingTaxNames, AddressAnalysis, FrequentTaxNames, TaxpayersFixed, \
-    TaxpayersStringMatched, TaxpayersMerged, TaxpayersSubsetted, CorpsMerged, LLCsMerged, TaxpayersPrepped, \
-    TaxpayersNetworked, TaxpayerRecordsMN, PropertiesMN, TaxpayersPreppedMN, BusinessNamesAddrsSubsetted
-from opndb.schema.v0_1.raw import (
-    PropsTaxpayers,
-    Corps as CorpsRaw,
-    LLCs as LLCsRaw,
-    ClassCodes, BusinessRecordsBase, PropsTaxpayersMN, BusinessFilings, BusinessNamesAddrs
-)
+from opndb.schema.base.process import UnvalidatedAddrs, Geocodio, UnvalidatedAddrsClean, FixingAddrs, FixingTaxNames, \
+    AddressAnalysis, FrequentTaxNames, GeocodioFormatted
+from opndb.schema.mpls.process import TaxpayerRecords, Properties, \
+    TaxpayersStringMatched, TaxpayersSubsetted, TaxpayersPrepped, TaxpayersNetworked, TaxpayersBusMerged, \
+    TaxpayersAddrMerged, BusinessNamesAddrsMerged, TaxpayersFixed, BusinessNamesAddrsSubsetted
+from opndb.schema.mpls.raw import PropsTaxpayers, BusinessFilings, BusinessNamesAddrs, BusinessRecordsBase
 from opndb.services.summary_stats import SummaryStatsBase as ss, SSDataClean, SSAddressClean, SSAddressGeocodio, \
     SSFixUnitsInitial, SSFixUnitsFinal, SSAddressMerge, SSNameAnalysisInitial, SSAddressAnalysisInitial, \
     SSAnalysisFinal, SSRentalSubset, SSCleanMerge, SSStringMatch, SSNetworkGraph, SSFinalOutput
@@ -237,6 +233,7 @@ class WorkflowStandardBase(WorkflowBase):
         """Template method implementation"""
         try:
             self.load()
+            self.validate()
             self.process()
             self.summary_stats()
             self.save()
@@ -247,6 +244,11 @@ class WorkflowStandardBase(WorkflowBase):
     @abstractmethod
     def load(self) -> None:
         """Loads data files into dataframes. Returns dictionary mapping dataframes to IDs."""
+        pass
+
+    @abstractmethod
+    def validate(self):
+        """Runs validators on each loaded dataframe based on schema map set in the function itself."""
         pass
 
     @abstractmethod
@@ -285,28 +287,6 @@ class WkflRawDataPrep(WorkflowStandardBase):
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "taxpayers_city": {
-                "path": path_gen.pre_process_taxpayers_city(configs),
-                "schema": None  # TaxpayersCity
-            },
-            "taxpayers_county": {
-                "path": path_gen.pre_process_taxpayers_county(configs),
-                "schema": None  # TaxpayersCounty
-            },
-            # "mnsos_type1": {
-            #     "path": path_gen.pre_process_business_filings_1(configs),
-            #     "schema": None  # BusinessFilings
-            # },
-            # "mnsos_type3": {
-            #     "path": path_gen.pre_process_business_filings_3(configs),
-            #     "schema": None  # BusinessNamesAddrs
-            # }
-        }
-        self.load_dfs(load_map)
 
     def execute_taxpayer_pre_processing(self, df_city: pd.DataFrame, df_county: pd.DataFrame) -> pd.DataFrame:
         # extract relevant columns from both datasets
@@ -474,6 +454,34 @@ class WkflRawDataPrep(WorkflowStandardBase):
 
         return df_bus1, df_bus3
 
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_city": {
+                "path": path_gen.pre_process_taxpayers_city(configs),
+                "schema": None  # TaxpayersCity
+            },
+            "taxpayers_county": {
+                "path": path_gen.pre_process_taxpayers_county(configs),
+                "schema": None  # TaxpayersCounty
+            },
+            "mnsos_type1": {
+                "path": path_gen.pre_process_business_filings_1(configs),
+                "schema": None  # BusinessFilings
+            },
+            "mnsos_type3": {
+                "path": path_gen.pre_process_business_filings_3(configs),
+                "schema": None  # BusinessNamesAddrs
+            }
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
 
         df_city: pd.DataFrame = self.dfs_in["taxpayers_city"].copy()
@@ -487,9 +495,15 @@ class WkflRawDataPrep(WorkflowStandardBase):
         self.dfs_out["bus_filings"] = df_bus_1_out
         self.dfs_out["bus_names_addrs"] = df_bus_3_out
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -499,6 +513,9 @@ class WkflRawDataPrep(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -515,25 +532,22 @@ class WkflDataClean(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
-    def execute_taxpayer_cleaning(self, df: pd.DataFrame, schema_map) -> Tuple[pd.DataFrame, pd.DataFrame]:
-
+    def execute_taxpayer_cleaning(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # pre-cleaning
         t.print_equals("Executing pre-cleaning operations")
         # generate raw_prefixed columns
         t.print_with_dots(f"Setting raw columns for \"{id}\"")
-        df: pd.DataFrame = cols_df.set_raw_columns(df, schema_map["props_taxpayers"].raw())
+        df: pd.DataFrame = cols_df.set_raw_columns(df, PropsTaxpayers.raw())
         console.print(f"Raw columns generated ✅")
         # rename columns to prepare for cleaning
-        df.rename(columns=schema_map["props_taxpayers"].clean_rename_map(), inplace=True)
+        df.rename(columns=PropsTaxpayers.clean_rename_map(), inplace=True)
         t.print_with_dots(f"Concatenating raw name and address fields")
-        df: pd.DataFrame = cols_df.set_name_address_concat(
-            df, schema_map["props_taxpayers"].name_address_concat_map()["raw"]
-        )
+        df: pd.DataFrame = cols_df.set_name_address_concat(df, PropsTaxpayers.name_address_concat_map()["raw"])
         console.print(f"\"name_address\" field generated ✅")
 
         # basic cleaning
         t.print_equals(f"Executing basic operations (all data columns)")
-        cols: list[str] = schema_map["props_taxpayers"].basic_clean()
+        cols: list[str] = PropsTaxpayers.basic_clean()
         t.print_with_dots("Removing symbols and punctuation")
         df = clean_df_base.remove_symbols_punctuation(df, cols)
         t.print_with_dots("Handling LLCs")
@@ -548,7 +562,7 @@ class WkflDataClean(WorkflowStandardBase):
 
         # name cleaning only
         t.print_equals(f"Executing cleaning operations (name columns only)")
-        name_cols: list[str] = schema_map["props_taxpayers"].name_clean()
+        name_cols: list[str] = PropsTaxpayers.name_clean()
         t.print_with_dots("Replacing number ranges with first number in range")
         df = clean_df_base.take_first(df, name_cols)
         df = clean_df_name.switch_the(df, name_cols)
@@ -556,7 +570,7 @@ class WkflDataClean(WorkflowStandardBase):
 
         # address cleaning only
         t.print_equals(f"Executing cleaning operations (address columns only)")
-        for col in schema_map["props_taxpayers"].address_clean()["street"]:
+        for col in PropsTaxpayers.address_clean()["street"]:
             t.print_with_dots("Converting street suffixes")
             df = clean_df_addr.convert_street_suffixes(df, [col])
             t.print_with_dots("Converting directionals to their abbreviations")
@@ -572,29 +586,25 @@ class WkflDataClean(WorkflowStandardBase):
         # add clean full address fields
         t.print_with_dots("Setting clean full address fields")
         df["clean_address"] = df.apply(lambda row: cols_df.concatenate_addr_mpls(row), axis=1)
-        df = cols_df.set_name_address_concat(
-            df, schema_map["props_taxpayers"].name_address_concat_map()["clean"]
-        )
+        df = cols_df.set_name_address_concat(df, PropsTaxpayers.name_address_concat_map()["clean"])
         t.print_with_dots("Full clean address fields generated ✅")
 
         # split dataframe into properties and taxpayer_records
         t.print_with_dots(f"Splitting \"{id}\" into \"taxpayer_records\" and \"properties\"...")
-        df_props, df_taxpayers = subset_df.split_props_taxpayers(
-            df,
-            schema_map["properties"].out(),
-            schema_map["taxpayer_records"].out()
-        )
+        df_props, df_taxpayers = subset_df.split_props_taxpayers(df, Properties.out(), TaxpayerRecords.out())
         df_taxpayers.dropna(subset=["raw_name"], inplace=True)
         console.print(f"props_taxpayers successfully split into \"taxpayer_records\" and \"properties\" ✅")
 
         return df_props, df_taxpayers
 
     def execute_business_filings_cleaning(
-        self,
-        df_bus1: pd.DataFrame,
-        df_bus3: pd.DataFrame,
-        schema_map
+        self, df_bus1: pd.DataFrame, df_bus3: pd.DataFrame,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+        schema_map = {
+            "bus_filings": BusinessFilings,
+            "bus_names_addrs": BusinessNamesAddrs
+        }
 
         for id, df in {"bus_filings": df_bus1, "bus_names_addrs": df_bus3}.items():
 
@@ -652,12 +662,15 @@ class WkflDataClean(WorkflowStandardBase):
 
         return df_bus1, df_bus3
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "props_taxpayers": {
                 "path": path_gen.raw_props_taxpayers(configs),
-                "schema": PropsTaxpayersMN
+                "schema": PropsTaxpayers
             },
             "bus_filings": {
                 "path": path_gen.raw_bus_filings(configs),
@@ -671,29 +684,44 @@ class WkflDataClean(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
-    def process(self) -> None:
-
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
         schema_map = {
-            "props_taxpayers": PropsTaxpayersMN,
+            "props_taxpayers": PropsTaxpayers,
             "bus_filings": BusinessFilings,
             "bus_names_addrs": BusinessNamesAddrs,
-            "properties": PropertiesMN,
-            "taxpayer_records": TaxpayerRecordsMN,
         }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
 
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
         # taxpayer records
         df_taxpayers: pd.DataFrame = self.dfs_in["props_taxpayers"].copy()
-        df_properties, df_taxpayer_records = self.execute_taxpayer_cleaning(df_taxpayers, schema_map)
+        df_properties, df_taxpayer_records = self.execute_taxpayer_cleaning(df_taxpayers)
         self.dfs_out["taxpayer_records"] = df_taxpayer_records
         self.dfs_out["properties"] = df_properties
 
         # business filings
         df_bus1: pd.DataFrame = self.dfs_in["bus_filings"].copy()
         df_bus3: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
-        df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3, schema_map)
+        df_filings, df_names_addrs = self.execute_business_filings_cleaning(df_bus1, df_bus3)
         self.dfs_out["bus_filings"] = df_filings
         self.dfs_out["bus_names_addrs"] = df_names_addrs
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -704,9 +732,9 @@ class WkflDataClean(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
-    def summary_stats(self) -> None:
-        pass
-
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -845,12 +873,15 @@ class WkflBusinessMerge(WorkflowStandardBase):
         df_taxpayers = colm_df.set_business_names_taxpayers(df_taxpayers)
         return df_taxpayers
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "taxpayer_records": {
                 "path": path_gen.processed_taxpayer_records(configs),
-                "schema": TaxpayerRecordsMN,
+                "schema": TaxpayerRecords,
                 "recursive_bools": True
             },
             "bus_filings": {
@@ -860,15 +891,25 @@ class WkflBusinessMerge(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
-    def process(self) -> None:
-
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
         schema_map = {
-            "taxpayer_records": TaxpayerRecordsMN,
+            "taxpayer_records": TaxpayerRecords,
             "bus_filings": BusinessFilings
         }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # get copies
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayer_records"].copy()
         df_bus: pd.DataFrame = self.dfs_in["bus_filings"].copy()
-
+        # execute logic
         df_taxpayers, df_bus = self.execute_column_generators(df_taxpayers, df_bus)
         df_clean_merge, df_taxpayers_remaining = self.execute_clean_merge(df_taxpayers, df_bus)
         df_core_merge, df_taxpayers_remaining = self.execute_core_merge(df_taxpayers_remaining, df_bus)
@@ -879,13 +920,18 @@ class WkflBusinessMerge(WorkflowStandardBase):
             df_string_merge
         ], ignore_index=True)
         df_taxpayers = self.execute_post_merge_column_ops(df_taxpayers)
-
+        # set out dfs
         self.dfs_out["taxpayers_bus_merged"] = df_taxpayers
 
-
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -893,6 +939,9 @@ class WkflBusinessMerge(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -906,12 +955,15 @@ class WkflUnvalidatedAddrs(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "taxpayers_bus_merged": {
                 "path": path_gen.processed_taxpayers_bus_merged(configs),
-                "schema": None  # TaxpayersBusMergedMN,
+                "schema": TaxpayersBusMerged,
             },
             "bus_names_addrs": {
                 "path": path_gen.processed_bus_names_addrs(configs),
@@ -920,35 +972,51 @@ class WkflUnvalidatedAddrs(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
-    def process(self) -> None:
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_bus_merged": TaxpayersBusMerged,
+            "bus_names_addrs": BusinessNamesAddrs
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
 
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # get copies
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
         df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
-
+        # execute logic
         unique_entities: list[str] = list(df_taxpayers["uid"].dropna().unique())
-
         t.print_with_dots("Fetching unique addresses from taxpayer records")
         df_tax_u: pd.DataFrame = df_taxpayers[["clean_street", "clean_city", "clean_state", "clean_zip_code", "clean_address"]]
         df_tax_u.drop_duplicates(subset=["clean_address"], inplace=True)
         df_tax_u.rename(columns={"clean_street": "clean_street_1"}, inplace=True)
-
         # fetch all unique clean addresses from business records for matching orgs
         t.print_with_dots("Fetching unique addresses from business records")
         df_bus_u: pd.DataFrame = df_bus_names_addrs[df_bus_names_addrs["uid"].isin(unique_entities)]
         df_bus_u = df_bus_u[["clean_street_1", "clean_street_2", "clean_city", "clean_state", "clean_zip_code", "clean_country", "clean_address"]]
         df_bus_u.dropna(subset=["clean_address"], inplace=True)
         df_bus_u.drop_duplicates(subset=["clean_address"], inplace=True)
-
         # generate final unvalidated address file
         t.print_with_dots("Generating master unvalidated dataset")
         df_unvalidated: pd.DataFrame = pd.concat([df_tax_u, df_bus_u], ignore_index=True)
         df_unvalidated.drop_duplicates(subset=["clean_address"], inplace=True)
         self.dfs_out["unvalidated_addrs"] = df_unvalidated
 
-
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -956,6 +1024,9 @@ class WkflUnvalidatedAddrs(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1065,6 +1136,9 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
@@ -1083,10 +1157,23 @@ class WkflAddressGeocodio(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "unvalidated_addrs": UnvalidatedAddrs
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
-
+        # get copy
         df_unvalidated_master: pd.DataFrame = self.dfs_in["unvalidated_addrs"].copy()
-
+        # execute logic
         while True:
             # fetch addresses to be geocoded
             df_addrs: pd.DataFrame = self.execute_gcd_address_subset(df_unvalidated_master)
@@ -1101,12 +1188,21 @@ class WkflAddressGeocodio(WorkflowStandardBase):
             # execute post-processor
             self.execute_geocodio_postprocessor(gcd_results_obj)
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         pass
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1130,22 +1226,37 @@ class WkflGeocodioFix(WorkflowStandardBase):
         df_results = pd.concat(dfs, ignore_index=True)
         return df_results
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "unvalidated_addrs": {
                 "path": path_gen.processed_unvalidated_addrs(configs),
-                "schema": UnvalidatedAddrs,
+                "schema": UnvalidatedAddrsClean,
             },
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "unvalidated_addrs": UnvalidatedAddrsClean
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
 
         df_results: pd.DataFrame = self.execute_geocodio_partial_concatenator()
         clean_addrs: list[str] = list(df_results["clean_address"].unique())
         grouped: DataFrameGroupBy = df_results.groupby("clean_address")
-
         gcd_results_obj: GeocodioReturnObject = {  # object to be used to create/update dataframes in workflow process
             "validated": [],
             "unvalidated": [],
@@ -1212,9 +1323,15 @@ class WkflGeocodioFix(WorkflowStandardBase):
         self.dfs_out["gcd_validated"] = df_gcd_validated
         self.dfs_out["gcd_unvalidated"] = df_gcd_unvalidated
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -1223,6 +1340,9 @@ class WkflGeocodioFix(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1236,6 +1356,9 @@ class WkflGeocodioStringMatch(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
@@ -1250,6 +1373,20 @@ class WkflGeocodioStringMatch(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated": Geocodio,
+            "gcd_unvalidated": Geocodio,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         # copy df for processing
         df_gcd_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
@@ -1322,9 +1459,15 @@ class WkflGeocodioStringMatch(WorkflowStandardBase):
         self.dfs_out["gcd_validated"] = df_valid_new
         self.dfs_out["gcd_unvalidated"] = df_unvalid_new
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -1333,6 +1476,9 @@ class WkflGeocodioStringMatch(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1364,9 +1510,20 @@ class WkflFixUnitsInitial(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated": Geocodio,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
+        # set copy
         df_unit: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         df_unit = cols_df.set_is_pobox(df_unit, "clean_address")
         # subset validated addresses for only ones which do not have a secondary number
@@ -1441,14 +1598,24 @@ class WkflFixUnitsFinal(WorkflowStandardBase):
         self.load_dfs(load_map)
 
     # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated": Geocodio,
+            "fixing_addrs": FixingAddrs,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
+        # get copies
         df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         df_fix: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
-        # run validator
-        # self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
-        # self.run_validator("fixing_addrs", df_fix, self.config_manager.configs, self.WKFL_NAME, FixingAddrs)
+        # execute logic
         t.print_equals("Adding missing unit numbers to validated addresses")
         total_addresses = len(df_fix["clean_address"])
         # Set up Rich progress display
@@ -1529,6 +1696,9 @@ class WkflFixAddrsInitial(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
@@ -1544,6 +1714,20 @@ class WkflFixAddrsInitial(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated": Geocodio,
+            "address_analysis": AddressAnalysis,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         # set copies
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
@@ -1555,9 +1739,15 @@ class WkflFixAddrsInitial(WorkflowStandardBase):
         # set out df
         self.dfs_out["fixing_addrs_analysis"] = df_out
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -1565,6 +1755,9 @@ class WkflFixAddrsInitial(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1578,13 +1771,15 @@ class WkflFixAddrsFinal(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
-
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "fixing_addrs_analysis": {
                 "path": path_gen.analysis_fixing_addrs_analysis(configs),
-                "schema": None,
+                "schema": Geocodio,
             },
             "gcd_validated": {
                 "path": path_gen.geocodio_gcd_validated(configs),
@@ -1593,6 +1788,20 @@ class WkflFixAddrsFinal(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "fixing_addrs_analysis": Geocodio,
+            "gcd_validated": Geocodio,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         # set copies
         df_fixed: pd.DataFrame = self.dfs_in["fixing_addrs_analysis"].copy()
@@ -1606,9 +1815,15 @@ class WkflFixAddrsFinal(WorkflowStandardBase):
         # set out dfs
         self.dfs_out["gcd_validated_fixed"] = df_valid_out
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -1616,6 +1831,9 @@ class WkflFixAddrsFinal(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1629,6 +1847,9 @@ class WkflSetAddressColumns(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
@@ -1639,6 +1860,19 @@ class WkflSetAddressColumns(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated": Geocodio,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
         t.print_with_dots("Setting formatted_address_v1")
@@ -1649,18 +1883,27 @@ class WkflSetAddressColumns(WorkflowStandardBase):
         df_valid = cols_df.set_formatted_address_v3(df_valid)
         t.print_with_dots("Setting formatted_address_v4")
         df_valid = cols_df.set_formatted_address_v4(df_valid)
-        self.dfs_out["gcd_validated_fixed"] = df_valid
+        self.dfs_out["gcd_validated_formatted"] = df_valid
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
-            "gcd_validated_fixed": path_gen.geocodio_gcd_validated(configs, "_fixed"),
+            "gcd_validated_formatted": path_gen.geocodio_gcd_validated(configs, "_formatted"),
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1680,27 +1923,39 @@ class WkflAddressMerge(WorkflowStandardBase):
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
-            "gcd_validated": {
-                "path": path_gen.geocodio_gcd_validated(configs, "_fixed"),
-                "schema": Geocodio,
+            "gcd_validated_formatted": {
+                "path": path_gen.geocodio_gcd_validated(configs, "_formatted"),
+                "schema": GeocodioFormatted,
             },
             "taxpayers_bus_merged": {
                 "path": path_gen.processed_taxpayers_bus_merged(configs),
-                "schema": TaxpayerRecordsMN,
+                "schema": TaxpayersBusMerged,
             },
             "bus_names_addrs": {
                 "path": path_gen.processed_bus_names_addrs(configs),
-                "schema": BusinessFilings
+                "schema": BusinessNamesAddrs
             }
         }
         self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated_formatted": GeocodioFormatted,
+            "taxpayers_bus_merged": TaxpayersBusMerged,
+            "bus_names_addrs": BusinessNamesAddrs,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
 
     # -----------------
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
         # set df copies
-        df_valid = self.dfs_in["gcd_validated"].copy()
+        df_valid = self.dfs_in["gcd_validated_formatted"].copy()
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
         df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
         # run validator on validated address dataset
@@ -1767,17 +2022,33 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "taxpayers_addrs_merged": {
                 "path": path_gen.processed_taxpayers_addr_merged(configs),
-                "schema": TaxpayersMerged,
+                "schema": TaxpayersAddrMerged,
                 "recursive_bools": True
             },
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_addrs_merged": TaxpayersAddrMerged,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         df = self.dfs_in["taxpayers_addrs_merged"].copy()
         # run validator
@@ -1805,6 +2076,9 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
             ]
         )
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         ss_obj = SSNameAnalysisInitial(
             self.config_manager.configs,
@@ -1815,6 +2089,9 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
         ss_obj.print()
         ss_obj.save()
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -1823,6 +2100,9 @@ class WkflNameAnalysisInitial(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1850,6 +2130,9 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
         "is_govt_agency",
         "is_lawfirm",
         "is_missing_suite",
+        "is_problematic_suite",
+        "is_religious",
+        "is_realtor",
         "is_financial_services",
         "is_assoc_bus",
         "fix_address",
@@ -1866,25 +2149,43 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
-            "gcd_validated": {
-                "path": path_gen.geocodio_gcd_validated(configs),
-                "schema": Geocodio,
+            "gcd_validated_formatted": {
+                "path": path_gen.geocodio_gcd_validated(configs, suffix="_formatted"),
+                "schema": GeocodioFormatted,
             },
             "taxpayers_addrs_merged": {
                 "path": path_gen.processed_taxpayers_addr_merged(configs),
-                "schema": TaxpayersMerged,
+                "schema": TaxpayersAddrMerged,
                 "recursive_bools": True
             },
             "bus_names_addrs_merged": {
                 "path": path_gen.processed_bus_names_addrs_merged(configs),
-                "schema": None,
+                "schema": BusinessNamesAddrsMerged,
             }
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated_formatted": GeocodioFormatted,
+            "taxpayers_addrs_merged": TaxpayersAddrMerged,
+            "bus_names_addrs_merged": BusinessNamesAddrsMerged,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         addrs = []
         for id, df in self.dfs_in.items():
@@ -1905,6 +2206,9 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
         df_freq["is_researched"] = "f"
         self.dfs_out["address_analysis"] = df_freq
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         ss_obj = SSAddressAnalysisInitial(
             self.config_manager.configs,
@@ -1915,6 +2219,9 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
         ss_obj.print()
         ss_obj.save()
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -1922,6 +2229,9 @@ class WkflAddressAnalysisInitial(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -1947,38 +2257,48 @@ class WkflAnalysisFinal(WorkflowStandardBase):
                 banks[raw_name] = standard_name
         return banks
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "fixing_tax_names": {
                 "path": path_gen.analysis_fixing_tax_names(configs),
-                "schema": FixingTaxNames,  # <- swap with actual schema if needed
+                "schema": FixingTaxNames,
             },
             "frequent_tax_names": {
                 "path": path_gen.analysis_frequent_tax_names(configs),
                 "schema": FrequentTaxNames,
             },
-            "taxpayers_merged": {
+            "taxpayers_addr_merged": {
                 "path": path_gen.processed_taxpayers_addr_merged(configs),
-                "schema": TaxpayersMerged,
+                "schema": TaxpayersAddrMerged,
                 "recursive_bools": True
             },
         }
         self.load_dfs(load_map)
 
-    def process(self) -> None:
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
         schema_map = {
             "fixing_tax_names": FixingTaxNames,
             "frequent_tax_names": FrequentTaxNames,
-            "taxpayers_merged": TaxpayersMerged,
+            "taxpayers_addr_merged": TaxpayersAddrMerged,
         }
-        # run validators
-        # for id, df in self.dfs_in.items():
-            # self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
         # copy dfs
         df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
         df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_merged"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_addr_merged"].copy()
 
         df_taxpayers.dropna(subset=["raw_name"], inplace=True)
         # create banks dict
@@ -2002,6 +2322,9 @@ class WkflAnalysisFinal(WorkflowStandardBase):
         )
         self.dfs_out["taxpayers_fixed"] = df_taxpayers
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         ss_obj = SSAnalysisFinal(
             self.config_manager.configs,
@@ -2012,6 +2335,9 @@ class WkflAnalysisFinal(WorkflowStandardBase):
         ss_obj.print()
         ss_obj.save()
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -2019,6 +2345,9 @@ class WkflAnalysisFinal(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -2065,17 +2394,20 @@ class WkflRentalSubset(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "taxpayers_fixed": {
                 "path": path_gen.processed_taxpayers_fixed(configs),
-                "schema": None,
+                "schema": TaxpayersFixed,
                 "recursive_bools": True
             },
             "properties": {
                 "path": path_gen.processed_properties(configs),
-                "schema": None,
+                "schema": Properties,
             },
             "rental_licenses": {
                 "path": path_gen.pre_process_rental_licenses(configs),
@@ -2083,11 +2415,28 @@ class WkflRentalSubset(WorkflowStandardBase):
             },
             "address_analysis": {
                 "path": path_gen.analysis_address_analysis(configs),
-                "schema": None,
+                "schema": AddressAnalysis,
             }
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_fixed": TaxpayersFixed,
+            "properties": Properties,
+            "address_analysis": AddressAnalysis,
+        }
+        for id, df in self.dfs_in.items():
+            if id == "rental_licenses":
+                continue
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         # copy dfs
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_fixed"].copy()
@@ -2131,9 +2480,15 @@ class WkflRentalSubset(WorkflowStandardBase):
         self.dfs_out["properties_rentals"] = df_rentals
         self.dfs_out["taxpayers_subsetted"] = df_subset_final
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -2142,6 +2497,9 @@ class WkflRentalSubset(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -2155,6 +2513,9 @@ class WkflMatchAddressCols(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
@@ -2165,27 +2526,42 @@ class WkflMatchAddressCols(WorkflowStandardBase):
             },
             "bus_names_addrs_merged": {
                 "path": path_gen.processed_bus_names_addrs_merged(configs),
-                "schema": None,
+                "schema": BusinessNamesAddrsMerged,
             },
             "address_analysis": {
                 "path": path_gen.analysis_address_analysis(configs),
                 "schema": AddressAnalysis,
                 "recursive_bools": True
             },
-            "gcd_validated": {
-                "path": path_gen.geocodio_gcd_validated(configs, "_fixed"),
-                "schema": Geocodio
+            "gcd_validated_formatted": {
+                "path": path_gen.geocodio_gcd_validated(configs, "_formatted"),
+                "schema": GeocodioFormatted,
             }
         }
         self.load_dfs(load_map)
 
-    def process(self) -> None:
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_subsetted": TaxpayersSubsetted,
+            "bus_names_addrs_merged": BusinessNamesAddrsMerged,
+            "address_analysis": AddressAnalysis,
+            "gcd_validated_formatted": GeocodioFormatted
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
 
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
         # copy dfs
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_subsetted"].copy()
         df_bus: pd.DataFrame = self.dfs_in["bus_names_addrs_merged"].copy()
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
-        df_valid: pd.DataFrame = self.dfs_in["gcd_validated"].copy()
+        df_valid: pd.DataFrame = self.dfs_in["gcd_validated_formatted"].copy()
 
         # subset business filings
         t.print_with_dots("Subsetting business filings data")
@@ -2253,9 +2629,15 @@ class WkflMatchAddressCols(WorkflowStandardBase):
         self.dfs_out["taxpayers_prepped"] = df_taxpayers
         self.dfs_out["bus_names_addrs_subsetted"] = df_bus_subset
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -2264,6 +2646,9 @@ class WkflMatchAddressCols(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -2393,28 +2778,36 @@ class WkflStringMatch(WorkflowStandardBase):
 
         return df_taxpayers
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "taxpayers_prepped": {
                 "path": path_gen.processed_taxpayers_prepped(configs),
-                "schema": TaxpayersPreppedMN,
+                "schema": TaxpayersPrepped,
                 "recursive_bools": True
             },
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_prepped": TaxpayersPrepped,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         # copy df
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_prepped"].copy()
-        # validate
-        # self.run_validator(
-        #     "taxpayers_prepped",
-        #     df_taxpayers,
-        #     self.config_manager.configs,
-        #     self.WKFL_NAME,
-        #     TaxpayersPrepped
-        # )
         # generate matrix parameters
         self.execute_param_builder()
         # run matching
@@ -2422,6 +2815,9 @@ class WkflStringMatch(WorkflowStandardBase):
         # set out dfs
         self.dfs_out["taxpayers_string_matched"] = df_taxpayers_matched
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         ss_obj = SSStringMatch(
             self.config_manager.configs,
@@ -2433,6 +2829,9 @@ class WkflStringMatch(WorkflowStandardBase):
         ss_obj.print()
         ss_obj.save()
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -2440,6 +2839,9 @@ class WkflStringMatch(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -2457,101 +2859,106 @@ class WkflNetworkGraph(WorkflowStandardBase):
     def execute_param_builder(self) -> None:
         t.print_with_dots("Building network graph params object")
         # set options for params matrix
-        taxpayer_name_col: list[str] = ["clean_name", "core_name"]
+        taxpayer_name_col: list[str] = ["clean_name"]
         unvalidated_options: list[bool] = [False, True]
         unresearched_options: list[bool] = [False, True]
         org_options: list[bool] = [False, True]
         missing_suite_options: list[bool] = [False, True]
         problem_suite_options: list[bool] = [False, True]
         address_suffix: list[str] = ["v1", "v2", "v3", "v4"]
-        string_match_names: list[str] = ["string_matched_name_1", "string_matched_name_2", "string_matched_name_3"]
-        # loop through unique combinations of param matrix options
-        # for i, params in enumerate(product(
-        #     taxpayer_name_col,
-        #     unvalidated_options,
-        #     unresearched_options,
-        #     org_options,
-        #     missing_suite_options,
-        #     problem_suite_options,
-        #     address_suffix,
-        #     string_match_names
-        # )):
-        #     self.params_matrix.append({
-        #         "taxpayer_name_col": params[0],
-        #         "include_unvalidated": params[1],
-        #         "include_unresearched": params[2],
-        #         "include_orgs": params[3],
-        #         "include_missing_suites": params[4],
-        #         "include_problem_suites": params[5],
-        #         "address_suffix": params[6],
-        #         "string_match_name": params[7],
-        #     })
-        #     if i > 2:
-        #         console.print("PARAMS MATRIX GENERATED")
-        #         console.print(self.params_matrix)
-        #         break
-        self.params_matrix = [
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v1",
-                "string_match_name": "string_matched_name_4",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v2",
-                "string_match_name": "string_matched_name_4",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v4",
-                "string_match_name": "string_matched_name_4",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v1",
-                "string_match_name": "string_matched_name_4",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v2",
-                "string_match_name": "string_matched_name_4",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v4",
-                "string_match_name": "string_matched_name_4",
-            },
+        string_match_names: list[str] = [
+            "string_matched_name_4",
+            "string_matched_name_23",
+            "string_matched_name_40",
+            "string_matched_name_106"
         ]
+        # loop through unique combinations of param matrix options
+        for i, params in enumerate(product(
+            taxpayer_name_col,
+            unvalidated_options,
+            unresearched_options,
+            org_options,
+            missing_suite_options,
+            problem_suite_options,
+            address_suffix,
+            string_match_names
+        )):
+            if params[6] == "v2" and params[4] == False:
+                continue
+            if params[6] == "v4" and params[4] == False:
+                continue
+            self.params_matrix.append({
+                "taxpayer_name_col": params[0],
+                "include_unvalidated": params[1],
+                "include_unresearched": params[2],
+                "include_orgs": params[3],
+                "include_missing_suites": params[4],
+                "include_problem_suites": params[5],
+                "address_suffix": params[6],
+                "string_match_name": params[7],
+            })
+        # self.params_matrix = [
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v1",
+        #         "string_match_name": "string_matched_name_4",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v2",
+        #         "string_match_name": "string_matched_name_4",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v4",
+        #         "string_match_name": "string_matched_name_4",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": True,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v1",
+        #         "string_match_name": "string_matched_name_4",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": True,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v2",
+        #         "string_match_name": "string_matched_name_4",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": True,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v4",
+        #         "string_match_name": "string_matched_name_4",
+        #     },
+        # ]
 
     def execute_network_graph_generator(self, df_taxpayers: pd.DataFrame, df_bus: pd.DataFrame) -> pd.DataFrame:
         for i, params in enumerate(self.params_matrix):
@@ -2573,12 +2980,15 @@ class WkflNetworkGraph(WorkflowStandardBase):
             # df_taxpayers = NetworkMatchBase.set_network_text(i+1, gMatches, df_taxpayers)
         return df_taxpayers
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self):
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
             "taxpayers_string_matched": {
                 "path": path_gen.processed_taxpayers_string_matched(configs),
-                "schema": TaxpayersPreppedMN,
+                "schema": TaxpayersPrepped,
                 "recursive_bools": True
             },
             "bus_names_addrs_subsetted": {
@@ -2589,14 +2999,21 @@ class WkflNetworkGraph(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
-    def process(self) -> None:
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
         schema_map = {
             "taxpayers_string_matched": TaxpayersStringMatched,
-            "address_analysis": AddressAnalysis,
+            "bus_names_addrs_subsetted": BusinessNamesAddrsSubsetted,
         }
-        # run validators
-        # for id, df in self.dfs_in.items():
-        #     self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
         # copy dfs
         df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_string_matched"].copy()
         df_bus: pd.DataFrame = self.dfs_in["bus_names_addrs_subsetted"].copy()
@@ -2606,6 +3023,9 @@ class WkflNetworkGraph(WorkflowStandardBase):
         df_networked: pd.DataFrame = self.execute_network_graph_generator(df_taxpayers, df_bus)
         self.dfs_out["taxpayers_networked"] = df_networked
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         ss_obj = SSNetworkGraph(
             self.config_manager.configs,
@@ -2617,6 +3037,9 @@ class WkflNetworkGraph(WorkflowStandardBase):
         ss_obj.print()
         ss_obj.save()
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -2624,6 +3047,9 @@ class WkflNetworkGraph(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass
 
@@ -2857,6 +3283,9 @@ class WkflFinalOutput(WorkflowStandardBase):
         })
         return df_taxpayer_records
 
+    # --------------
+    # ----LOADER----
+    # --------------
     def load(self) -> None:
         configs = self.config_manager.configs
         load_map: dict[str, dict[str, Any]] = {
@@ -2877,13 +3306,30 @@ class WkflFinalOutput(WorkflowStandardBase):
                 "schema": AddressAnalysis,
                 "recursive_bools": True
             },
-            "gcd_validated": {
-                "path": path_gen.geocodio_gcd_validated(configs),
-                "schema": Geocodio,
+            "gcd_validated_formatted": {
+                "path": path_gen.geocodio_gcd_validated(configs, suffix="_formatted"),
+                "schema": GeocodioFormatted,
             },
         }
         self.load_dfs(load_map)
 
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_networked": TaxpayersNetworked,
+            "business_filings": BusinessFilings,
+            "business_names_addrs": BusinessNamesAddrs,
+            "address_analysis": AddressAnalysis,
+            "gcd_validated_formatted": GeocodioFormatted,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
     def process(self) -> None:
         df_researched: pd.DataFrame = self.dfs_in["address_analysis"][
             self.dfs_in["address_analysis"]["is_researched"] == True
@@ -2898,9 +3344,15 @@ class WkflFinalOutput(WorkflowStandardBase):
         self.dfs_out["networks"] = self.execute_networks()
         self.dfs_out["taxpayer_records"] = self.execute_taxpayer_records()
 
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
     def summary_stats(self) -> None:
         pass
 
+    # -------------
+    # ----SAVER----
+    # -------------
     def save(self) -> None:
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
@@ -2915,5 +3367,8 @@ class WkflFinalOutput(WorkflowStandardBase):
         }
         self.save_dfs(save_map)
 
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
     def update_configs(self) -> None:
         pass

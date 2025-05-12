@@ -7,9 +7,9 @@ import pytest
 
 from opndb.schema_utils.export.model_export import create_report_for_schema
 
-EXAMPLE_SCHEMA: Final[str] = "v0_1"
+EXAMPLE_SCHEMA: Final[str] = "chi"
 
-VALID_SCHEMA__VALID_SCHEMA_STRINGS: Final[dict[str, list[str]]]  = {"v0_1": ["V0_1", "v0.1"]}
+VALID_SCHEMA__VALID_SCHEMA_STRINGS: Final[dict[str, list[str]]]  = {"chi": ["V0_1", "v0.1"]}
 
 class TestSchema:
     class TestCreateReport:
