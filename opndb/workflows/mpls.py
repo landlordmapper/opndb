@@ -3064,7 +3064,13 @@ class WkflFinalOutput(WorkflowStandardBase):
                 "include_orgs": False,
                 "include_orgs_string": False,
                 "include_unresearched": False,
-                "include_unresearched_string": False
+                "include_missing_suite": False,
+                "include_problem_suite": False,
+                "address_suffix": "v1",
+                "include_unresearched_string": False,
+                "include_missing_suite_string": False,
+                "include_problem_suite_string": False,
+                "address_suffix_string": "v1",
             },
         ]
         return pd.DataFrame(rows_network_calcs)
@@ -3172,7 +3178,7 @@ class WkflFinalOutput(WorkflowStandardBase):
             "lat",
             "accuracy",
             "formatted_address",
-            "formatted_address_v"
+            "formatted_address_v1"
         ]]
         df_validated_addresses.drop_duplicates(subset=["formatted_address"], inplace=True)
         df_validated_addresses["landlord_entity"] = None
@@ -3182,7 +3188,7 @@ class WkflFinalOutput(WorkflowStandardBase):
             task = progress.tasks[0]
             processed_count = 0
             for _, row in df_researched.iterrows():
-                mask = df_validated_addresses["formatted_address_v"] == row["value"]  # todo: fix this so that it uses "formatted_address_v"
+                mask = df_validated_addresses["formatted_address_v1"] == row["value"]
                 df_validated_addresses.loc[mask, "landlord_entity"] = row["name"]
                 processed_count += 1
                 progress.update(
@@ -3203,11 +3209,16 @@ class WkflFinalOutput(WorkflowStandardBase):
             "name_type",
             "address_type",
             "raw_party_name",
-            "raw_address",
             "clean_party_name",
             "clean_address",
             "clean_address_v1",
         ]]
+        df_bus_names_addrs.rename(columns={
+            "raw_party_name": "raw_name",
+            "clean_party_name": "clean_name",
+            "clean_address": "address",
+            "clean_address_v1": "address_v",
+        })
         return df_bus_names_addrs
 
     def execute_networks(self) -> pd.DataFrame:
@@ -3256,10 +3267,10 @@ class WkflFinalOutput(WorkflowStandardBase):
         df_taxpayer_records: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
             "raw_name",
             "raw_name_2",
-            "raw_address",
             "clean_name",
             "clean_name_2",
             "clean_address",
+            "clean_address_v1",
             "uid",
             "network_1",
             "network_2",
@@ -3270,6 +3281,8 @@ class WkflFinalOutput(WorkflowStandardBase):
         ]]
         df_taxpayer_records.rename(columns={
             "uid": "entity_uid",
+            "clean_address": "address",
+            "clean_address_v1": "address_v",
         })
         return df_taxpayer_records
 

@@ -10,7 +10,13 @@ class NetworkCalcs(OPNDFModel):
     include_orgs: bool = pa.Field()
     include_orgs_string: bool = pa.Field()
     include_unresearched: bool = pa.Field()
+    include_missing_suite: bool = pa.Field()
+    include_problem_suite: bool = pa.Field()
+    address_suffix: str = pa.Field()
     include_unresearched_string: bool = pa.Field()
+    include_missing_suite_string: bool = pa.Field()
+    include_problem_suite_string: bool = pa.Field()
+    address_suffix_string: str = pa.Field()
 
 
 class EntityTypes(OPNDFModel):
@@ -45,18 +51,114 @@ class ValidatedAddresses(OPNDFModel):
     lat: str = pa.Field()
     accuracy: str = pa.Field()
     formatted_address: str = pa.Field()
-    formatted_address_v: str = pa.Field()
     landlord_entity: str = pa.Field()
 
 
 class BusinessFilings(OPNDFModel):
-    pass
+    uid: str = pa.Field(
+        nullable=False,
+        unique=True,
+        title="UID",
+        description="Unique identifier for MNSOS business records.",
+    )
+    status: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Status",
+    )
+    raw_name: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Raw Name",
+        description="Name of business entity as registered with the state of Minnesota before cleaning",
+    )
+    clean_name: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Clean Name",
+        description="Name of business entity as registered with the state of Minnesota after cleaning",
+    )
+    filing_date: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Filing Date",
+    )
+    expiration_date: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Expiration Date",
+        description="",
+    )
+    home_jurisdiction: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Home Jurisdiction",
+        description="State in which the business entity is based",
+    )
+    home_business_name: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Home Business Name",
+        description="Name of the business as registered in its home jurisdiction",
+    )
+    is_llc_non_profit: bool = pa.Field(
+        nullable=False,
+        title="Is LLC Non-Profit?",
+    )
+    is_lllp: bool = pa.Field(
+        nullable=False,
+        title="Is LLLP?",
+    )
+    is_professional: bool = pa.Field(
+        nullable=False,
+        title="Is Professional?",
+        description="",
+    )
 
 
 class BusinessNamesAddrs(OPNDFModel):
-    pass
-
-
+    uid: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="UID",
+        description="Unique identifier for MNSOS business records.",
+    )
+    name_type: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Name Type",
+        description="Party name classification according to the MN Secretary of State",
+    )
+    address_type: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Address Type",
+        description="Address classification according to the MN Secretary of State",
+    )
+    raw_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Party Name (Raw)",
+        description=""
+    )
+    clean_name: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Party Name (Clean)",
+        description=""
+    )
+    address: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Full Address",
+        description=""
+    )
+    address_v: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Full Address (Validated)",
+        description=""
+    )
 
 
 class Networks(OPNDFModel):
@@ -68,10 +170,12 @@ class Networks(OPNDFModel):
 
 class TaxpayerRecords(OPNDFModel):
     raw_name: str = pa.Field()
+    raw_name_2: str = pa.Field()
     clean_name: str = pa.Field()
+    clean_name_2: str = pa.Field()
     address: str = pa.Field()
     address_v: str = pa.Field()
-    corp_llc_name: str = pa.Field()
+    entity_uid: str = pa.Field()
     network_1: str = pa.Field()
     network_2: str = pa.Field()
     network_3: str = pa.Field()
