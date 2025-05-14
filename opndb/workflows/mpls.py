@@ -223,7 +223,12 @@ class WorkflowStandardBase(WorkflowBase):
 
     @abstractmethod
     def load(self) -> None:
-        """Loads data files into dataframes. Returns dictionary mapping dataframes to IDs."""
+        """Loads data from file system into dataframes. Returns dictionary mapping dataframes to IDs."""
+        pass
+
+    @abstractmethod
+    def load_from_dfs(self, load_map: dict[str, dict[str, Any]]) -> None:
+        """Loads data from load map passed as an argument directly"""
         pass
 
     @abstractmethod
@@ -468,6 +473,15 @@ class WkflRawDataPrep(WorkflowStandardBase):
             }
         }
         self.load_dfs(load_map)
+
+    def load_from_dfs(self, load_map: dict[str, dict[str, Any]]) -> None:
+        self.dfs_in = load_map
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        return None
 
     # -----------------
     # ----PROCESSOR----

@@ -849,7 +849,7 @@ class BusinessFilings(BusinessRecordsBase):
         description="State in which the business entity is based",
     )
     home_business_name: str = pa.Field(
-        nullable=False,
+        nullable=True,
         unique=False,
         title="Home Business Name",
         description="Name of the business as registered in its home jurisdiction",
@@ -1020,12 +1020,6 @@ class BusinessNamesAddrs(BusinessRecordsBase):
         nullable=True,
         unique=False,
         title="Country",
-    )
-    raw_address: str = pa.Field(
-        nullable=True,
-        unique=False,
-        title="Raw Address",
-        description="Concatenation of raw address components",
     )
     is_incomplete_address: bool = pa.Field(
         nullable=False,
