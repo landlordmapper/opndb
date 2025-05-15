@@ -2456,6 +2456,7 @@ class WkflFinalOutput(WorkflowStandardBase):
 
 
 # class WkflTemplate(WorkflowStandardBase):
+#
 #     WKFL_NAME: str = ""
 #     WKFL_DESC: str = ""
 #
@@ -2463,23 +2464,38 @@ class WkflFinalOutput(WorkflowStandardBase):
 #         super().__init__(config_manager)
 #         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 #
+#     # --------------
+#     # ----LOADER----
+#     # --------------
 #     def load(self) -> None:
-#         configs = self.config_manager.configs
-#         load_map: dict[str, dict[str, Any]] = {
-#         }
-#         self.load_dfs(load_map)
+#         pass
 #
+#     # -----------------
+#     # ----VALIDATOR----
+#     # -----------------
+#     def validate(self) -> None:
+#         pass
+#
+#     # -----------------
+#     # ----PROCESSOR----
+#     # -----------------
 #     def process(self) -> None:
 #         pass
 #
+#     # -------------------------------
+#     # ----SUMMARY STATS GENERATOR----
+#     # -------------------------------
 #     def summary_stats(self) -> None:
 #         pass
 #
+#     # -------------
+#     # ----SAVER----
+#     # -------------
 #     def save(self) -> None:
-#         configs = self.config_manager.configs
-#         save_map: dict[str, Path] = {
-#         }
-#         self.save_dfs(save_map)
+#         pass
 #
+#     # -----------------------
+#     # ----CONFIGS UPDATER----
+#     # -----------------------
 #     def update_configs(self) -> None:
 #         pass

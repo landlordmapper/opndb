@@ -259,6 +259,9 @@ class WorkflowStandardBase(WorkflowBase):
         pass
 
 
+# ---------------------------
+# ----AUTOMATED WORKFLOWS----
+# ---------------------------
 class WkflRawDataPrep(WorkflowStandardBase):
     """Prepares raw data for further processing."""
     WKFL_NAME: str = "RAW DATA PREPARATION WORKFLOW"
@@ -932,6 +935,1762 @@ class WkflBusinessMerge(WorkflowStandardBase):
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
             "taxpayers_bus_merged": path_gen.processed_taxpayers_bus_merged(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAddressValidation(WorkflowStandardBase):
+
+    WKFL_NAME: str = "ADDRESS VALIDATION WORKFLOW"
+    WKFL_DESC: str = "Pulls master list of addresses from taxpayer records and taxpayer-linked business filings, checks them against addresses already passed into geocodio, filters out addresses already validated and runs remaining addresses through geocodio"
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_unique_address_generator(
+        self,
+        df_taxpayers: pd.DataFrame,
+        df_bus_names_addrs: pd.DataFrame
+    ) -> pd.DataFrame:
+        # fetch unique business entities matched with taxpayer records
+        unique_entities: list[str] = list(df_taxpayers["uid"].dropna().unique())
+        t.print_with_dots("Fetching unique addresses from taxpayer records")
+        df_tax_u: pd.DataFrame = df_taxpayers[
+            ["clean_street", "clean_city", "clean_state", "clean_zip_code", "clean_address"]]
+        df_tax_u.drop_duplicates(subset=["clean_address"], inplace=True)
+        df_tax_u.rename(columns={"clean_street": "clean_street_1"}, inplace=True)
+        # fetch all unique clean addresses from business records for matching orgs
+        t.print_with_dots("Fetching unique addresses from business records")
+        df_bus_u: pd.DataFrame = df_bus_names_addrs[df_bus_names_addrs["uid"].isin(unique_entities)]
+        df_bus_u = df_bus_u[
+            ["clean_street_1", "clean_street_2", "clean_city", "clean_state", "clean_zip_code", "clean_country",
+             "clean_address"]]
+        df_bus_u.dropna(subset=["clean_address"], inplace=True)
+        df_bus_u.drop_duplicates(subset=["clean_address"], inplace=True)
+        # generate final unvalidated address file
+        t.print_with_dots("Generating master unvalidated dataset")
+        df_unique: pd.DataFrame = pd.concat([df_tax_u, df_bus_u], ignore_index=True)
+        df_unique.drop_duplicates(subset=["clean_address"], inplace=True)
+        return df_unique
+
+    def execute_unprocessed_addrs(self, df_unique: pd.DataFrame) -> pd.DataFrame:
+        # fetch all partials from files & concatenate
+        t.print_with_dots("Fetching addresses already processed")
+        data_root = Path(self.config_manager.configs.get("data_root"))
+        partials_path: Path = data_root / "geocodio" / "partials"
+        dfs = []
+        for file in partials_path.iterdir():
+            if file.is_file() and file.suffix == ".csv":
+                df = pd.read_csv(file, dtype=str)
+                dfs.append(df)
+        df_results = pd.concat(dfs, ignore_index=True)
+        # extract unique list of values from clean_address column
+        processed_addrs: list[str] = list(df_results["clean_address"].unique())
+        t.print_with_dots("Setting dataframe of addresses to be processed")
+        df_unprocessed: pd.DataFrame = df_unique[~df_unique["clean_address"].isin(processed_addrs)]
+        return df_unprocessed
+
+    def execute_gcd_subset(self, df_unprocessed: pd.DataFrame) -> pd.DataFrame:
+        """
+        Subsets unvalidated master address file by filtering out addresses that have already been run through the
+        validator. Returns dataframe slice containing only columns required for processing Geocodio API calls.
+        """
+        # fetch addresses already processed
+        addrs: list[str] = []
+        if self.dfs_in["gcd_validated"] is not None:
+            addrs.extend(list(self.dfs_in["gcd_validated"]["clean_address"].unique()))
+        if self.dfs_in["gcd_unvalidated"] is not None:
+            addrs.extend(list(self.dfs_in["gcd_unvalidated"]["clean_address"].unique()))
+        # filter out addresses already processed
+        if len(addrs) > 0:
+            df_addrs: pd.DataFrame = df_unprocessed[~df_unprocessed["clean_address"].isin(set(addrs))]
+        else:
+            df_addrs: pd.DataFrame = df_unprocessed
+        # get number of addresses to run through geocodio
+        num_addrs_to_geocodio: int = ti.prompt_geocode_count(len(df_addrs))
+        return df_addrs[[
+            "clean_street_1",
+            "clean_street_2",
+            "clean_city",
+            "clean_state",
+            "clean_zip_code",
+            "clean_country",
+            "clean_address",
+        ]].head(num_addrs_to_geocodio)
+
+    def execute_api_key_handler_warning(self, df_addrs: pd.DataFrame) -> bool:
+        """
+        Prompts user to enter geocodio API key if not already found in configs.json. Prints out warning telling user
+        how many addresses are set to be geocoded and how much id could cost them, and aborts workflow if user quits.
+        """
+        if "geocodio_api_key" not in self.config_manager.configs.keys():
+            while True:
+                console.print("\n")
+                api_key: str = Prompt.ask(
+                    "[bold cyan]Copy & paste your geocodio API key for address validation[/bold cyan]"
+                )
+                if len(api_key) > 0:
+                    self.config_manager.set("geocodio_api_key", api_key)
+                else:
+                    console.print("You must enter an API key to continue.")
+        t.print_geocodio_warning(df_addrs)
+        cont: bool = t.press_enter_to_continue("execute geocodio API calls ")
+        if not cont:
+            console.print("Aborted!")
+        return cont
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_bus_merged": {
+                "path": path_gen.processed_taxpayers_bus_merged(configs),
+                "schema": TaxpayersBusMerged,
+            },
+            "bus_names_addrs": {
+                "path": path_gen.processed_bus_names_addrs(configs),
+                "schema": BusinessNamesAddrs
+            }
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_bus_merged": TaxpayersBusMerged,
+            "bus_names_addrs": BusinessNamesAddrs
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # get copies
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
+        df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
+        # execute logic
+        df_unique: pd.DataFrame = self.execute_unique_address_generator(df_taxpayers, df_bus_names_addrs)
+        df_unprocessed: pd.DataFrame = self.execute_unprocessed_addrs(df_unique)
+        df_to_validate: pd.DataFrame = self.execute_gcd_subset(df_unprocessed)
+        # execute geocodio calls
+        while True:
+            cont: bool = self.execute_api_key_handler_warning(df_to_validate)
+            if not cont:
+                return
+            addr.run_geocodio_new(df_to_validate, self.config_manager.configs)
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        # todo: add stats for new addresses geocoded
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        pass
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflValidatedAddrs(WorkflowStandardBase):
+
+    WKFL_NAME: str = "VALIDATED ADDRESS DATASET GENERATOR WORKFLOW"
+    WKFL_DESC: str = "Generates validated address master file, adds formatted addresses v1 through v4"
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "fixing_addrs": {
+                "path": path_gen.analysis_fixing_addrs(configs),
+                "schema": FixingAddrs,
+            },
+            "fixing_addrs_analysis": {
+                "path": path_gen.analysis_fixing_addrs_analysis(configs),
+                "schema": Geocodio,
+            },
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "fixing_addrs": FixingAddrs,
+            "fixing_addrs_analysis": Geocodio,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # run all geocodio partials through filters
+        # run all non-filtered addresses through string matcher
+        # add fixes to addresses from fixing_addrs and fixing_addrs_analysis
+        # generate formatted address columns v1-v4
+        # set output df
+        pass
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "validated_addrs": path_gen.processed_validated_addrs(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAddressMerge(WorkflowStandardBase):
+
+    WKFL_NAME: str = "ADDRESS MERGE WORKFLOW"
+    WKFL_DESC: str = "Merges validated addresses to address fields in taxpayer and business filing records."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "validated_addrs": {
+                "path": path_gen.processed_validated_addrs(configs),
+                "schema": GeocodioFormatted,
+            },
+            "taxpayers_bus_merged": {
+                "path": path_gen.processed_taxpayers_bus_merged(configs),
+                "schema": TaxpayersBusMerged,
+            },
+            "bus_names_addrs": {
+                "path": path_gen.processed_bus_names_addrs(configs),
+                "schema": BusinessNamesAddrs
+            }
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated_formatted": GeocodioFormatted,
+            "taxpayers_bus_merged": TaxpayersBusMerged,
+            "bus_names_addrs": BusinessNamesAddrs,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # set df copies
+        df_valid = self.dfs_in["validated_addrs"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
+        df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
+        t.print_dataset_name("taxpayers_bus_merged")
+        t.print_with_dots("Merging validated addresses into taxpayers_bus_merged")
+        df_tax_merge = merge_df.merge_validated_address(df_taxpayers, df_valid, "clean_address")
+        df_tax_merge = clean_df_base.combine_columns_parallel(df_tax_merge)
+        df_tax_merge.drop_duplicates(subset=["raw_name_address"], inplace=True)
+        t.print_dataset_name("bus_names_addrs")
+        t.print_with_dots("Merging validated addresses into bus_names_addrs")
+        df_bus_merge = merge_df.merge_validated_address(df_bus_names_addrs, df_valid, "clean_address")
+        df_bus_merge = clean_df_base.combine_columns_parallel(df_bus_merge)
+
+        console.print("Validated addresses merged ✅ 🗺️ 📍")
+
+        self.dfs_out["taxpayers_addr_merged"] = df_tax_merge
+        self.dfs_out["bus_names_addrs_merged"] = df_bus_merge
+
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSAddressMerge(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_addr_merged": path_gen.processed_taxpayers_addr_merged(configs),
+            "bus_names_addrs_merged": path_gen.processed_bus_names_addrs_merged(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAnalysisFinal(WorkflowStandardBase):
+    """
+    Fixes taxpayer names based on standardized spellings manually specified in the fixing_tax_names dataset. Adds
+    boolean columns to taxpayer records for exclude_name, based on manual input in
+    fixing_tax_names dataset.
+    """
+    WKFL_NAME: str = "FIX NAMES ADDRESSES WORKFLOW"
+    WKFL_DESC: str = "Changes taxpayer names and validated addresses based on manual input."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def get_banks_dict(self, df: pd.DataFrame) -> dict:
+        banks = {}
+        for standard_name in list(df["standardized_value"].unique()):
+            df_name: pd.DataFrame = df[df["standardized_value"] == standard_name]
+            for raw_name in list(df_name["raw_value"].unique()):
+                banks[raw_name] = standard_name
+        return banks
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "fixing_tax_names": {
+                "path": path_gen.analysis_fixing_tax_names(configs),
+                "schema": FixingTaxNames,
+            },
+            "frequent_tax_names": {
+                "path": path_gen.analysis_frequent_tax_names(configs),
+                "schema": FrequentTaxNames,
+            },
+            "taxpayers_addr_merged": {
+                "path": path_gen.processed_taxpayers_addr_merged(configs),
+                "schema": TaxpayersAddrMerged,
+                "recursive_bools": True
+            },
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "fixing_tax_names": FixingTaxNames,
+            "frequent_tax_names": FrequentTaxNames,
+            "taxpayers_addr_merged": TaxpayersAddrMerged,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # copy dfs
+        df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
+        df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_addr_merged"].copy()
+
+        df_taxpayers.dropna(subset=["raw_name"], inplace=True)
+        # create banks dict
+        t.print_with_dots("Setting standardized name dictionary")
+        banks: dict[str, str] = self.get_banks_dict(df_fix_names)
+        t.print_with_dots("Fixing taxpayer names")
+        df_taxpayers = colm_df.fix_tax_names(df_taxpayers, banks)
+        t.print_with_dots("Setting exclude_name boolean column")
+        df_taxpayers = cols_df.set_exclude_name(df_taxpayers, df_freq_names)
+        # t.print_with_dots("Setting is_landlord_org boolean column")
+        # df_taxpayers = cols_df.set_is_landlord_org(df_taxpayers, df_analysis)
+        t.print_with_dots("Setting clean_name_address field with fixed names")
+        df_taxpayers = cols_df.set_name_address_concat_fix(
+            df_taxpayers,
+            {
+                "name_addr": "clean_name_address",
+                "name": "clean_name",
+                "name_2": "clean_name_2",
+                "addr": "clean_address"
+            }
+        )
+        self.dfs_out["taxpayers_fixed"] = df_taxpayers
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSAnalysisFinal(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_fixed": path_gen.processed_taxpayers_fixed(configs)
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflRentalSubset(WorkflowStandardBase):
+
+    WKFL_NAME: str = "RENTAL SUBSET WORKFLOW"
+    WKFL_DESC: str = "Subsets property and taxpayer record datasets for rental properties only."
+
+    PROP_TYPES: list[str] = [  # todo: move to schema class
+        "2 UNIT RESIDENTIAL",
+        "3 UNIT RESIDENTIAL",
+        "APARTMENT",
+        "COMMERCIAL",
+        "VACANT LAND - RESIDENTIAL"
+    ]
+    LAND_USES: list[str] = [
+        "2 UNIT RESIDENTIAL - DUPLEX",
+        "2 UNIT RESIDENTIAL - SF HOUSE AND ADU",
+        "2 UNIT RESIDENTIAL - SF HOUSE AND CARRIAGE HOUSE",
+        "2 UNIT RESIDENTIAL - TWO HOUSES",
+        "3 UNIT RESIDENTIAL - DUPLEX AND ADU",
+        "3 UNIT RESIDENTIAL - DUPLEX AND SF HOUSE",
+        "3 UNIT RESIDENTIAL - TRIPLEX",
+        "MIXED OFFICE, RETAIL, RESIDENTIAL, ETC",
+        "MULTI - FAMILY APARTMENT",
+        "MULTI - FAMILY RESIDENTIAL",
+        "OFFICE STRUCTURE",
+        "VACANT"
+    ]
+    BUILDING_USES: list[str] = [
+        "APARTMENT 4 OR 5 UNIT",
+        "APARTMENT CONVERTED",
+        "BAR / FOOD / REST.W RES",
+        "BOARDING OR LODGING",
+        "COMMERCIAL",
+        "DUPLEX",
+        "DUPLEX W / ADU",
+        "GROUP HOME",
+        "TRIPLEX"
+    ]
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_fixed": {
+                "path": path_gen.processed_taxpayers_fixed(configs),
+                "schema": TaxpayersFixed,
+                "recursive_bools": True
+            },
+            "properties": {
+                "path": path_gen.processed_properties(configs),
+                "schema": Properties,
+            },
+            "rental_licenses": {
+                "path": path_gen.pre_process_rental_licenses(configs),
+                "schema": None,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+            }
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_fixed": TaxpayersFixed,
+            "properties": Properties,
+            "address_analysis": AddressAnalysis,
+        }
+        for id, df in self.dfs_in.items():
+            if id == "rental_licenses":
+                continue
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # copy dfs
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_fixed"].copy()
+        df_props: pd.DataFrame = self.dfs_in["properties"].copy()
+        df_lic: pd.DataFrame = self.dfs_in["rental_licenses"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        t.print_with_dots("Fetching property pins for rental property subset of taxpayer data")
+        # 1. subset by rental licenses
+        license_pins: list[str] = list(df_lic["apn"].dropna().unique())
+        # 2. subset by non-homesteaded
+        is_homestead_pins: list[str] = list(df_props[df_props["is_homestead"] == "NON-HOMESTEADED"]["pin"])
+        # 3. subset by prop_type
+        type_pins: list[str] = list(df_props[df_props["prop_type"].isin(self.PROP_TYPES)]["pin"])
+        # 4. subset by land_use
+        land_use_pins: list[str] = list(df_props[df_props["land_use"].isin(self.LAND_USES)]["pin"])
+        # 5. subset by building_use
+        bldg_use_pins: list[str] = list(df_props[df_props["building_use"].isin(self.BUILDING_USES)]["pin"])
+        # 6. subset by num_units
+        df_props = cols_df.set_is_unit_gte_1(df_props)
+        num_units_pins: list[str] = list(df_props[df_props["is_unit_gte_1"] == True]["pin"])
+        # use set of pins to subset original props df
+        rental_pins: set[str] = set(license_pins + is_homestead_pins + type_pins + land_use_pins + bldg_use_pins + num_units_pins)
+        df_rentals: pd.DataFrame = df_props[df_props["pin"].isin(rental_pins)]
+        # 7. subset by rental addresses - pull in remaining properties based on matching addresses from rental subset
+        # 7a. get taxpayer addresses
+        rental_taxpayers: list[str] = list(df_rentals["raw_name_address"].unique())
+        t.print_with_dots("Executing sub-subset on properties excluded from initial subset")
+        # get addrs to exclude
+        registered_agent_addrs: list[str] = list(df_analysis[df_analysis["is_virtual_office_agent"] == True]["value"])
+        financial_services_addrs: list[str] = list(df_analysis[df_analysis["is_financial_services"] == True]["value"])
+        law_firm_addrs: list[str] = list(df_analysis[df_analysis["is_lawfirm"] == True]["value"])
+        exclude_addrs: set[str] = set(registered_agent_addrs + financial_services_addrs + law_firm_addrs)
+        # subset taxpayers for rentals only
+        df_taxpayers_r: pd.DataFrame = df_taxpayers[df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
+        df_taxpayers_nr: pd.DataFrame = df_taxpayers[~df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
+        # fetch taxpayer addresses to execute final subset
+        addrs_to_subset: list[str] = list(df_taxpayers_r[~df_taxpayers_r["clean_address_v1"].isin(exclude_addrs)])
+        df_nonrentals_r: pd.DataFrame = df_taxpayers_nr[df_taxpayers_nr["clean_address_v1"].isin(addrs_to_subset)]
+        df_subset_final: pd.DataFrame = pd.concat([df_taxpayers_r, df_nonrentals_r], ignore_index=True)
+
+        self.dfs_out["properties_rentals"] = df_rentals
+        self.dfs_out["taxpayers_subsetted"] = df_subset_final
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "properties_rentals": path_gen.processed_properties_rentals(configs),
+            "taxpayers_subsetted": path_gen.processed_taxpayers_subsetted(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflMatchAddressCols(WorkflowStandardBase):
+
+    WKFL_NAME: str = "MATCH ADDRESS & BOOLEAN IDENTIFIER GENERATORS WORKFLOW"
+    WKFL_DESC: str = "Assigns boolean identifiers for various address analysis categories. Subsets business filings data by presence of validated addresses from initial subset. Generates name + address concatenated columns for string matching."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_subsetted": {
+                "path": path_gen.processed_taxpayers_subsetted(configs),
+                "schema": TaxpayersSubsetted,
+                "recursive_bools": True
+            },
+            "bus_names_addrs_merged": {
+                "path": path_gen.processed_bus_names_addrs_merged(configs),
+                "schema": BusinessNamesAddrsMerged,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+                "recursive_bools": True
+            },
+            "validated_addrs": {
+                "path": path_gen.processed_validated_addrs(configs),
+                "schema": GeocodioFormatted,
+            }
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_subsetted": TaxpayersSubsetted,
+            "bus_names_addrs_merged": BusinessNamesAddrsMerged,
+            "address_analysis": AddressAnalysis,
+            "gcd_validated_formatted": GeocodioFormatted
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # copy dfs
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_subsetted"].copy()
+        df_bus: pd.DataFrame = self.dfs_in["bus_names_addrs_merged"].copy()
+        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        df_valid: pd.DataFrame = self.dfs_in["validated_addrs"].copy()
+
+        # subset business filings
+        t.print_with_dots("Subsetting business filings data")
+        # fetch all uids merged into taxpayer records via name matching
+        uids: list[str] = list(df_taxpayers["uid"].dropna().unique())
+        # subset business name and address records for ONLY records associated with matched uids
+        df_uids: pd.DataFrame = df_bus[df_bus["uid"].isin(uids)]
+        # fetch unique validated addresses for matched entities
+        addrs_for_uids: list[str] = list(df_uids["clean_address_v1"].dropna().unique())
+
+        # subset entire dataset for ALL records associated with validated addresses
+        uids_sub: set[str] = set(list(df_bus[df_bus["clean_address_v1"].isin(addrs_for_uids)]["uid"].unique()) + uids)
+        df_bus_subset: pd.DataFrame = df_bus[df_bus["uid"].isin(uids_sub)]
+
+        # set address lists for bool col generators
+        t.print_with_dots("Fetching researched address lists to be used in boolean column generators")
+        df_exclude: pd.DataFrame = df_analysis[
+            (df_analysis["is_lawfirm"] == True) |
+            (df_analysis["is_financial_services"] == True) |
+            (df_analysis["is_virtual_office_agent"] == True)
+        ]
+        exclude_addrs: list[str] = list(df_exclude["value"])
+        pobox_addrs: list[str] = list(df_valid[df_valid["street"] == "PO BOX"]["formatted_address_v1"].unique())
+        researched_addrs: list[str] = list(df_analysis[df_analysis["is_researched"] == True]["value"])
+        org_addrs: list[str] = list(df_analysis[df_analysis["is_landlord_org"] == True]["value"])
+        missing_suite_addrs: list[str] = list(df_analysis[df_analysis["is_missing_suite"] == True]["value"])
+        problem_suite_addrs: list[str] = list(df_analysis[df_analysis["is_problematic_suite"] == True]["value"])
+        realtor_addrs: list[str] = list(df_analysis[df_analysis["is_realtor"] == True]["value"])
+
+        for id, df in {"taxpayers": df_taxpayers, "business_filings": df_bus_subset}.items():
+            t.print_dataset_name(id)
+            t.print_with_dots(f"Setting match_address_v1 for {id}")
+            df = cols_df.set_match_address(df, "clean_address_v1", "_v1")
+            t.print_with_dots(f"Setting match_address_v2 for {id}")
+            df = cols_df.set_match_address(df, "clean_address_v2", "_v2")
+            t.print_with_dots(f"Setting match_address_v3 for {id}")
+            df = cols_df.set_match_address(df, "clean_address_v3", "_v3")
+            t.print_with_dots(f"Setting match_address_v4 for {id}")
+            df = cols_df.set_match_address(df, "clean_address_v4", "_v4")
+            t.print_with_dots(f"Setting is_validated for {id}")
+            df = cols_df.set_is_validated(df, "clean_address_v1")
+            t.print_with_dots(f"Setting exclude_address for {id}")
+            df = cols_df.set_exclude_address(exclude_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_researched for {id}")
+            df = cols_df.set_is_researched(researched_addrs + pobox_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_org_address for {id}")
+            df = cols_df.set_is_org_address(org_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_missing_suite for {id}")
+            df = cols_df.set_is_missing_suite(missing_suite_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_problem_suite for {id}")
+            df = cols_df.set_is_problem_suite(problem_suite_addrs, df, "clean_address_v1")
+            t.print_with_dots(f"Setting is_realtor for {id}")
+            df = cols_df.set_is_realtor(realtor_addrs, df, "clean_address_v1")
+
+        # add name+address concatenated columns to use for matching
+        t.print_with_dots("Adding name + address concatenation columns")
+        for suffix in ["_v1", "_v2", "_v3", "_v4"]:
+            df_taxpayers = cols_df.concatenate_name_addr(
+                df_taxpayers, "clean_name", f"match_address{suffix}", suffix
+            )
+            df_taxpayers = cols_df.concatenate_name_addr(
+                df_taxpayers, "core_name", f"match_address{suffix}", suffix
+            )
+
+        self.dfs_out["taxpayers_prepped"] = df_taxpayers
+        self.dfs_out["bus_names_addrs_subsetted"] = df_bus_subset
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_prepped": path_gen.processed_taxpayers_prepped(configs),
+            "bus_names_addrs_subsetted": path_gen.processed_bus_names_addrs_subsetted(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflStringMatch(WorkflowStandardBase):
+
+    WKFL_NAME: str = "TAXPAYER RECORD STRING-MATCHING WORKFLOW"
+    WKFL_DESC: str = "Executes string matching based on concatenation of taxpayer name and address."
+
+    DEFAULT_NMSLIB: NmslibOptions = {
+        "method": "hnsw",
+        "space": "cosinesimil_sparse_fast",
+        "data_type": nmslib.DataType.SPARSE_VECTOR
+    }
+    DEFAULT_QUERY_BATCH = {
+        "num_threads": 8,
+        "K": 3
+    }
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        self.params_matrix: list[StringMatchParamsMN] = []
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_param_builder(self) -> None:
+        t.print_with_dots("Building string matching params object")
+        # set options for params matrix
+        taxpayer_name_col: list[str] = ["clean_name"]
+        match_threshold_options: list[float] = [0.85]
+        unvalidated_options: list[bool] = [False, True]
+        unresearched_options: list[bool] = [False, True]
+        org_options: list[bool] = [False, True]
+        missing_suite_options: list[bool] = [False, True]
+        problem_suite_options: list[bool] = [False, True]
+        address_suffix: list[str] = ["v1", "v2", "v3", "v4"]
+        # loop through unique combinations of param matrix options
+        # for i, params in enumerate(product(
+        #     taxpayer_name_col,
+        #     match_threshold_options,
+        #     unvalidated_options,
+        #     unresearched_options,
+        #     org_options,
+        #     missing_suite_options,
+        #     problem_suite_options,
+        #     address_suffix,
+        # )):
+        #     self.params_matrix.append({
+        #         "name_col": params[0],
+        #         "match_threshold": params[1],
+        #         "include_unvalidated": params[2],
+        #         "include_unresearched": params[3],
+        #         "include_orgs": params[4],
+        #         "include_missing_suites": params[5],
+        #         "include_problem_suites": params[6],
+        #         "address_suffix": params[7],
+        #         "nmslib_opts": self.DEFAULT_NMSLIB,
+        #         "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+        #     })
+        self.params_matrix = [
+            {
+                "name_col": "clean_name",
+                "match_threshold": 0.85,
+                "include_unvalidated": False,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v1",
+                "nmslib_opts": self.DEFAULT_NMSLIB,
+                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+            },
+            {
+                "name_col": "clean_name",
+                "match_threshold": 0.85,
+                "include_unvalidated": True,
+                "include_unresearched": True,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v2",
+                "nmslib_opts": self.DEFAULT_NMSLIB,
+                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+            },
+            {
+                "name_col": "clean_name",
+                "match_threshold": 0.85,
+                "include_unvalidated": True,
+                "include_unresearched": True,
+                "include_orgs": True,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v4",
+                "nmslib_opts": self.DEFAULT_NMSLIB,
+                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+            },
+        ]
+
+    def execute_string_matching(self,df_taxpayers: pd.DataFrame) -> pd.DataFrame:
+        """Returns final dataset to be outputted"""
+        t.print_with_dots("Executing string matching")
+        for i, params in enumerate(self.params_matrix):
+            t.print_equals(f"Matching strings for STRING_MATCHED_NAME_{i+1}")
+            console.print("NAME COLUMN:", params["name_col"])
+            console.print("MATCH THRESHOLD:", params["match_threshold"])
+            console.print("INCLUDE ORGS:", params["include_orgs"])
+            console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
+            console.print("INCLUDE MISSING SUITES:", params["include_missing_suites"])
+            console.print("INCLUDE PROBLEMATIC SUITES:", params["include_problem_suites"])
+            console.print("ADDRESS COLUMN:", params["address_suffix"])
+            t.print_with_dots("Setting include_address")
+            df_taxpayers["include_address"] = df_taxpayers.apply(
+                lambda row: MatchBase.check_address_mpls(
+                    row["match_address_v1"],  # this is just used to test nan values in the address field
+                    row["is_validated"],
+                    row["is_researched"],
+                    row["exclude_address"],
+                    row["is_org_address"],
+                    row["is_missing_suite"],
+                    row["is_problem_suite"],
+                    params["include_unvalidated"],
+                    params["include_unresearched"],
+                    params["include_orgs"],
+                    params["include_missing_suites"],
+                    params["include_problem_suites"],
+                    params["address_suffix"]
+                ), axis=1
+            )
+            # filter out addresses
+            t.print_with_dots("Filtering out taxpayer records where include_address is False")
+            df_filtered: pd.DataFrame = df_taxpayers[df_taxpayers["include_address"] == True][[
+                "clean_name",
+                "core_name",
+                f"match_address_{params['address_suffix']}",
+                f"clean_name_address_{params['address_suffix']}",
+                f"core_name_address_{params['address_suffix']}"
+            ]]
+            # set ref & query docs
+            t.print_with_dots("Setting document objects for HNSW index")
+            ref_docs: list[str] = list(
+                df_filtered[f"{params['name_col']}_address_{params['address_suffix']}"].dropna().unique()
+            )
+            query_docs: list[str] = list(
+                df_filtered[f"{params['name_col']}_address_{params['address_suffix']}"].dropna().unique()
+            )
+            # get string matches
+            df_matches: pd.DataFrame = StringMatch.match_strings(
+                ref_docs=ref_docs,
+                query_docs=query_docs,
+                params=params
+            )
+            # generate network graph to associated matches
+            df_matches_networked: pd.DataFrame = NetworkMatchBase.string_match_network_graph(df_matches)
+            # t.print_with_dots("Merging string match results into taxpayer records dataset")
+            df_taxpayers = pd.merge(
+                df_taxpayers,
+                df_matches_networked[["original_doc", "fuzzy_match_combo"]],
+                how="left",
+                left_on=f"{params['name_col']}_address_{params['address_suffix']}",
+                right_on="original_doc"
+            )
+            gc.collect()
+            df_taxpayers.drop(columns="original_doc", inplace=True)
+            df_taxpayers.drop_duplicates(subset="raw_name_address", inplace=True)
+            df_taxpayers.rename(columns={"fuzzy_match_combo": f"string_matched_name_{i+1}"}, inplace=True)
+
+        return df_taxpayers
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_prepped": {
+                "path": path_gen.processed_taxpayers_prepped(configs),
+                "schema": TaxpayersPrepped,
+                "recursive_bools": True
+            },
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_prepped": TaxpayersPrepped,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # copy df
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_prepped"].copy()
+        # generate matrix parameters
+        self.execute_param_builder()
+        # run matching
+        df_taxpayers_matched = self.execute_string_matching(df_taxpayers)
+        # set out dfs
+        self.dfs_out["taxpayers_string_matched"] = df_taxpayers_matched
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSStringMatch(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out,
+            self.params_matrix
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_string_matched": path_gen.processed_taxpayers_string_matched(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflNetworkGraph(WorkflowStandardBase):
+
+    WKFL_NAME: str = "NETWORK GRAPH WORKFLOW"
+    WKFL_DESC: str = "Executes network graph generation linking taxpayer, corporate and LLC records."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        self.params_matrix: list[NetworkMatchParams] = []
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_param_builder(self) -> None:
+        t.print_with_dots("Building network graph params object")
+        # set options for params matrix
+        taxpayer_name_col: list[str] = ["clean_name"]
+        unvalidated_options: list[bool] = [False, True]
+        unresearched_options: list[bool] = [False, True]
+        org_options: list[bool] = [False, True]
+        missing_suite_options: list[bool] = [False, True]
+        problem_suite_options: list[bool] = [False, True]
+        address_suffix: list[str] = ["v1", "v2", "v3", "v4"]
+        string_match_names: list[str] = [
+            "string_matched_name_4",
+            "string_matched_name_23",
+            "string_matched_name_40",
+            "string_matched_name_106"
+        ]
+        # loop through unique combinations of param matrix options
+        # for i, params in enumerate(product(
+        #     taxpayer_name_col,
+        #     unvalidated_options,
+        #     unresearched_options,
+        #     org_options,
+        #     missing_suite_options,
+        #     problem_suite_options,
+        #     address_suffix,
+        #     string_match_names
+        # )):
+            # if params[6] == "v2" and params[4] == False:
+            #     continue
+            # if params[6] == "v4" and params[4] == False:
+            #     continue
+            # self.params_matrix.append({
+            #     "taxpayer_name_col": params[0],
+            #     "include_unvalidated": params[1],
+            #     "include_unresearched": params[2],
+            #     "include_orgs": params[3],
+            #     "include_missing_suites": params[4],
+            #     "include_problem_suites": params[5],
+            #     "address_suffix": params[6],
+            #     "string_match_name": params[7],
+            # })
+        self.params_matrix = [
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v1",
+                "string_match_name": "string_matched_name_1",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v2",
+                "string_match_name": "string_matched_name_1",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v4",
+                "string_match_name": "string_matched_name_2",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": True,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v1",
+                "string_match_name": "string_matched_name_2",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": True,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v2",
+                "string_match_name": "string_matched_name_3",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": True,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v4",
+                "string_match_name": "string_matched_name_3",
+            },
+        ]
+
+    def execute_network_graph_generator(self, df_taxpayers: pd.DataFrame, df_bus: pd.DataFrame) -> pd.DataFrame:
+        for i, params in enumerate(self.params_matrix):
+            console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
+            console.print("INCLUDE UNVALIDATED ADDRESSES:", params["include_unvalidated"])
+            console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
+            console.print("INCLUDE ORGS:", params["include_orgs"])
+            console.print("INCLUDE MISSING SUITES:", params["include_missing_suites"])
+            console.print("INCLUDE PROBLEMATIC SUITES:", params["include_problem_suites"])
+            console.print("ADDRESS COLUMN:", params["address_suffix"])
+            console.print("STRING MATCH NAME:", params["string_match_name"])
+            # build network graph object
+            gMatches = NetworkMatchBase.taxpayers_network_mpls(df_taxpayers, df_bus, params)
+            # assign IDs to taxpayer records based on name/address presence in graph object
+            df_taxpayers = NetworkMatchBase.set_taxpayer_component_mpls(i+1, df_taxpayers, df_bus, gMatches, params)
+            # set network names for each taxpayer record (long AND short)
+            df_taxpayers = NetworkMatchBase.set_network_name(i+1, df_taxpayers)
+            # set text for node/edge data
+            # df_taxpayers = NetworkMatchBase.set_network_text(i+1, gMatches, df_taxpayers)
+        return df_taxpayers
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self):
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_string_matched": {
+                "path": path_gen.processed_taxpayers_string_matched(configs),
+                "schema": TaxpayersPrepped,
+                "recursive_bools": True
+            },
+            "bus_names_addrs_subsetted": {
+                "path": path_gen.processed_bus_names_addrs_subsetted(configs),
+                "schema": BusinessNamesAddrsSubsetted,
+                "recursive_bools": True
+            }
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_string_matched": TaxpayersStringMatched,
+            "bus_names_addrs_subsetted": BusinessNamesAddrsSubsetted,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        # copy dfs
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_string_matched"].copy()
+        df_bus: pd.DataFrame = self.dfs_in["bus_names_addrs_subsetted"].copy()
+        # generate matrix parameters
+        self.execute_param_builder()
+        # run network graph
+        df_networked: pd.DataFrame = self.execute_network_graph_generator(df_taxpayers, df_bus)
+        self.dfs_out["taxpayers_networked"] = df_networked
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSNetworkGraph(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out,
+            self.params_matrix
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "taxpayers_networked": path_gen.processed_taxpayers_networked(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflFinalOutput(WorkflowStandardBase):
+
+    WKFL_NAME: str = "FINAL OUTPUT WORKFLOW"
+    WKFL_DESC: str = "Generates final output datasets to be used for landlord database creation."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    def execute_network_calcs(self) -> pd.DataFrame:
+        # todo: tbd, whatever Tony decides
+        rows_network_calcs: list[dict[str, Any]] = [
+            {
+                "network_id": "",
+                "taxpayer_name": "",
+                "entity_name": "",
+                "string_match": "",
+                "include_orgs": False,
+                "include_orgs_string": False,
+                "include_unresearched": False,
+                "include_missing_suite": False,
+                "include_problem_suite": False,
+                "address_suffix": "v1",
+                "include_unresearched_string": False,
+                "include_missing_suite_string": False,
+                "include_problem_suite_string": False,
+                "address_suffix_string": "v1",
+            },
+        ]
+        return pd.DataFrame(rows_network_calcs)
+
+    def execute_entity_types(self) -> pd.DataFrame:
+        rows_entity_types: list[dict[str, Any]] = [
+            {
+                "name": "Landlord Organization",
+                "description": "Property management company, real estate developer, real estate investment firm, or any other organization type that deals with property ownership, management, investment or development. Note that given the nature of these organizations, their direct ownership of properties cannot be definitively established, however their responsibility as the taxpayer does mean they can be held accountable for living conditions and treatment of tenants."
+            },
+            {
+                "name": "Realtor",
+                "description": "Realty company or individual realtor associated with taxpayer address.",
+            },
+            {
+                "name": "Healthcare / Senior Care Organization",
+                "description": "Healthcare company or senior care company associated with taxpayer address."
+            },
+            {
+                "name": "Religious Institution",
+                "description": "Church, mosque or other religious institution associated with taxpayer address.",
+            },
+            {
+                "name": "Government Agency",
+                "description": "Government agency at any level (local, state or federal)."
+            },
+            {
+                "name": "Law Firm",
+                "description": "Legal services firm whose office address has been confirmed and submitted to the state as the legal property taxpayer."
+            },
+            {
+                "name": "Financial Services Company",
+                "description": "Financial firm whose office address has been confirmed and submitted to the state as the legal property taxpayer. These firms offer a wide range of services, including mortgage services, tax services, accounting services, or any other financial service."
+            },
+            {
+                "name": "Associated Business",
+                "description": "Any business unrelated to property ownership, management or development but that shares the same mailing address as the property taxpayer."
+            },
+            {
+                "name": "Virtual Office / Registered Agent",
+                "description": "Virtual office or registered agent service. These services allow landlords to submit the virtual office or registered agent's mailing address as the property taxpayer instead of themselves."
+            },
+            {
+                "name": "Nonprofit Organization",
+                "description": "501(c)(3) tax-exempt not-for-profit organization."
+            },
+            {
+                "name": "Other / Unknown",
+                "description": ""
+            }
+        ]
+        return pd.DataFrame(rows_entity_types)
+
+    def execute_entities(self, df_researched: pd.DataFrame) -> pd.DataFrame:
+        rows_entities: list[dict[str, Any]] = []
+        for _, row in df_researched.iterrows():
+            out_row = {
+                "name": row["name"],
+                "urls": row["urls"],
+                "yelp_urls": row["yelp_urls"],
+                "google_urls": row["google_urls"],
+                "google_place_id": row["google_place_id"],
+            }
+            if row["is_landlord_org"] == True:
+                out_row["entity_type"] = "Landlord Organization"
+            elif row["is_govt_agency"] == True:
+                out_row["entity_type"] = "Government Agency"
+            elif row["is_lawfirm"] == True:
+                out_row["entity_type"] = "Law Firm"
+            elif row["is_financial_services"] == True:
+                out_row["entity_type"] = "Financial Services Company"
+            elif row["is_assoc_bus"] == True:
+                out_row["entity_type"] = "Associated Business"
+            elif row["is_virtual_office_agent"] == True:
+                out_row["entity_type"] = "Virtual Office / Registered Agent"
+            elif row["is_nonprofit"] == True:
+                out_row["entity_type"] = "Nonprofit Organization"
+            elif row["is_religious"] == True:
+                out_row["entity_type"] = "Religious Institution"
+            elif row["is_healthcare_senior"] == True:
+                out_row["entity_type"] = "Healthcare / Senior Care Organization"
+            elif row["is_realtor"] == True:
+                out_row["entity_type"] = "Realtor"
+            else:
+                out_row["entity_type"] = "Other / Unknown"
+            rows_entities.append(out_row)
+        return pd.DataFrame(rows_entities)
+
+    def execute_validated_addresses(self, df_researched: pd.DataFrame) -> pd.DataFrame:
+        df_validated_addresses: pd.DataFrame = self.dfs_in["gcd_validated_formatted"][[
+            "number",
+            "predirectional",
+            "prefix",
+            "street",
+            "suffix",
+            "postdirectional",
+            "secondaryunit",
+            "secondarynumber",
+            "city",
+            "county",
+            "state",
+            "zip",
+            "country",
+            "lng",
+            "lat",
+            "accuracy",
+            "formatted_address",
+            "formatted_address_v1"
+        ]]
+        df_validated_addresses.drop_duplicates(subset=["formatted_address"], inplace=True)
+        df_validated_addresses["landlord_entity"] = None
+        with t.create_progress_bar(
+            "[yellow]Setting landlord_entity names for validated addresses...", len(df_researched)
+        )[0] as progress:
+            task = progress.tasks[0]
+            processed_count = 0
+            for _, row in df_researched.iterrows():
+                mask = df_validated_addresses["formatted_address_v1"] == row["value"]
+                df_validated_addresses.loc[mask, "landlord_entity"] = row["name"]
+                processed_count += 1
+                progress.update(
+                    task.id,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing entity {processed_count}/{len(df_researched)}",
+                )
+        return df_validated_addresses
+
+    def execute_business_filings(self) -> pd.DataFrame:
+        df_bus_filings: pd.DataFrame = self.dfs_in["bus_filings"]
+        return df_bus_filings
+
+    def execute_business_names_addrs(self) -> pd.DataFrame:
+        df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs_subsetted"][[
+            "uid",
+            "name_type",
+            "address_type",
+            "raw_party_name",
+            "clean_party_name",
+            "clean_address",
+            "clean_address_v1",
+        ]]
+        df_bus_names_addrs.rename(columns={
+            "raw_party_name": "raw_name",
+            "clean_party_name": "clean_name",
+            "clean_address": "address",
+            "clean_address_v1": "address_v",
+        })
+        return df_bus_names_addrs
+
+    def execute_networks(self) -> pd.DataFrame:
+        df_networks_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
+            "network_1",
+            "network_1_short",
+            # "network_1_text",
+            "network_2",
+            "network_2_short",
+            # "network_2_text",
+            "network_3",
+            "network_3_short",
+            # "network_3_text",
+            "network_4",
+            "network_4_short",
+            # "network_4_text",
+            "network_5",
+            "network_5_short",
+            # "network_5_text",
+            "network_6",
+            "network_6_short",
+            # "network_6_text"
+        ]]
+        rows_networks: list[dict[str, Any]] = []
+        network_ids: list[str] = ["network_1", "network_2", "network_3", "network_4", "network_5", "network_6"]
+        for ntwk in network_ids:
+            df_network: pd.DataFrame = df_networks_taxpayers[[
+                ntwk,
+                f"{ntwk}_short",
+                # f"{ntwk}_text"
+            ]]
+            df_network.dropna(subset=[ntwk], inplace=True)
+            df_network.drop_duplicates(subset=[ntwk], inplace=True)
+            for _, row in df_network.iterrows():
+                row = {
+                    "name": row[ntwk],
+                    "short_name": row[f"{ntwk}_short"],
+                    "network_calc": ntwk,
+                    # "nodes_edges": row[f"{ntwk}_text"]
+                }
+                rows_networks.append(row)
+        return pd.DataFrame(rows_networks)
+
+    def execute_taxpayer_records(self) -> pd.DataFrame:
+        # taxpayer_records
+        df_taxpayer_records: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
+            "raw_name",
+            "raw_name_2",
+            "clean_name",
+            "clean_name_2",
+            "clean_address",
+            "clean_address_v1",
+            "uid",
+            "network_1",
+            "network_2",
+            "network_3",
+            "network_4",
+            "network_5",
+            "network_6"
+        ]]
+        df_taxpayer_records.rename(columns={
+            "uid": "entity_uid",
+            "clean_address": "address",
+            "clean_address_v1": "address_v",
+        })
+        return df_taxpayer_records
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_networked": {
+                "path": path_gen.processed_taxpayers_networked(configs),
+                "schema": None,
+            },
+            "bus_filings": {
+                "path": path_gen.processed_bus_filings(configs),
+                "schema": None,
+            },
+            "bus_names_addrs_subsetted": {
+                "path": path_gen.processed_bus_names_addrs_subsetted(configs),
+                "schema": None,
+            },
+            "address_analysis": {
+                "path": path_gen.analysis_address_analysis(configs),
+                "schema": AddressAnalysis,
+                "recursive_bools": True
+            },
+            "gcd_validated_formatted": {
+                "path": path_gen.geocodio_gcd_validated(configs, suffix="_formatted"),
+                "schema": GeocodioFormatted,
+            },
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_networked": TaxpayersNetworked,
+            "bus_filings": BusinessFilings,
+            "bus_names_addrs_subsetted": BusinessNamesAddrsSubsetted,
+            "address_analysis": AddressAnalysis,
+            "gcd_validated_formatted": GeocodioFormatted,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        df_researched: pd.DataFrame = self.dfs_in["address_analysis"][
+            self.dfs_in["address_analysis"]["is_researched"] == True
+        ]
+        df_researched.dropna(subset=["name"], inplace=True)
+        self.dfs_out["network_calcs"] = self.execute_network_calcs()
+        self.dfs_out["entity_types"] = self.execute_entity_types()
+        self.dfs_out["entities"] = self.execute_entities(df_researched)
+        self.dfs_out["validated_addresses"] = self.execute_validated_addresses(df_researched)
+        self.dfs_out["bus_filings"] = self.execute_business_filings()
+        self.dfs_out["bus_names_addrs"] = self.execute_business_names_addrs()
+        self.dfs_out["networks"] = self.execute_networks()
+        self.dfs_out["taxpayer_records"] = self.execute_taxpayer_records()
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        pass
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "network_calcs": path_gen.output_network_calcs(configs),
+            "entity_types": path_gen.output_entity_types(configs),
+            "entities": path_gen.output_entities(configs),
+            "validated_addresses": path_gen.output_validated_addresses(configs),
+            "bus_filings": path_gen.output_bus_filings(configs),
+            "bus_names_addrs": path_gen.output_bus_names_addrs(configs),
+            "networks": path_gen.output_networks(configs),
+            "taxpayer_records": path_gen.output_taxpayer_records(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+# -------------------------------
+# ----MANUAL / MISC WORKFLOWS----
+# -------------------------------
+class WkflNameAnalysisInitial(WorkflowStandardBase):
+    """
+    Initial taxpayer name analysis workflow. Generates frequency and name analysis dataframes.
+
+    INPUTS:
+    OUTPUTS:
+    """
+
+    WKFL_NAME: str = "NAME ANALYSIS INITIAL WORKFLOW"
+    WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "taxpayers_addrs_merged": {
+                "path": path_gen.processed_taxpayers_addr_merged(configs),
+                "schema": TaxpayersAddrMerged,
+                "recursive_bools": True
+            },
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "taxpayers_addrs_merged": TaxpayersAddrMerged,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        df = self.dfs_in["taxpayers_addrs_merged"].copy()
+        # run validator
+        # self.run_validator("taxpayer_records", df, self.config_manager.configs, self.WKFL_NAME, TaxpayerRecords)
+        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
+        # frequent_tax_names
+        self.dfs_out["frequent_tax_names"] = df_freq
+        self.dfs_out["frequent_tax_names"]["exclude_name"] = ""
+        # fixing_tax_names
+        self.dfs_out["fixing_tax_names"] = pd.DataFrame(
+            columns=["raw_value", "standardized_value"],
+            data=[
+                [
+                    "Paste the EXACT string from the messy data to be standardized in this column",
+                    "Paste the fixed version in this column"
+                ],
+                ["EXAMPLES","EXAMPLES"],
+                ["COMMUNITY SAV BK LT", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BK TR", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BK", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY SAV BANK", "COMMUNITY SAVINGS BANK"],
+                ["COMMUNITY BK TR LT", "COMMUNITY SAVINGS BANK"],
+                ["COMM SAVINGS BK LT", "COMMUNITY SAVINGS BANK"],
+                ["COMM SAVGS BK LT", "COMMUNITY SAVINGS BANK"],
+            ]
+        )
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSNameAnalysisInitial(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
+            "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
+        }
+        self.save_dfs(save_map)
+
+    # -----------------------
+    # ----CONFIGS UPDATER----
+    # -----------------------
+    def update_configs(self) -> None:
+        pass
+
+
+class WkflAddressAnalysisInitial(WorkflowStandardBase):
+    """
+    Address analysis
+
+    INPUTS:
+        - Master validated address file
+            - 'ROOT/processed/validated_addrs[FileExt]'
+        - User inputs manual address research data
+    OUTPUTS:
+        - Address analysis dataset
+            - 'ROOT/analysis/address_freq[FileExt]'
+    """
+    WKFL_NAME: str = "ADDRESS ANALYSIS INITIAL WORKFLOW"
+    WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
+
+    ANALYSIS_FIELDS: list[str] = [
+        "name",
+        "urls",
+        "notes",
+        "is_landlord_org",
+        "is_govt_agency",
+        "is_lawfirm",
+        "is_missing_suite",
+        "is_problematic_suite",
+        "is_religious",
+        "is_realtor",
+        "is_financial_services",
+        "is_assoc_bus",
+        "fix_address",
+        "is_virtual_office_agent",
+        "yelp_urls",
+        "is_nonprofit",
+        "google_urls",
+        "is_ignore_misc",
+        "google_place_id",
+        "is_researched"
+    ]
+
+    def __init__(self, config_manager: ConfigManager):
+        super().__init__(config_manager)
+        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
+
+    # --------------
+    # ----LOADER----
+    # --------------
+    def load(self) -> None:
+        configs = self.config_manager.configs
+        load_map: dict[str, dict[str, Any]] = {
+            "gcd_validated_formatted": {
+                "path": path_gen.geocodio_gcd_validated(configs, suffix="_formatted"),
+                "schema": GeocodioFormatted,
+            },
+            "taxpayers_addrs_merged": {
+                "path": path_gen.processed_taxpayers_addr_merged(configs),
+                "schema": TaxpayersAddrMerged,
+                "recursive_bools": True
+            },
+            "bus_names_addrs_merged": {
+                "path": path_gen.processed_bus_names_addrs_merged(configs),
+                "schema": BusinessNamesAddrsMerged,
+            }
+        }
+        self.load_dfs(load_map)
+
+    # -----------------
+    # ----VALIDATOR----
+    # -----------------
+    def validate(self) -> None:
+        schema_map = {
+            "gcd_validated_formatted": GeocodioFormatted,
+            "taxpayers_addrs_merged": TaxpayersAddrMerged,
+            "bus_names_addrs_merged": BusinessNamesAddrsMerged,
+        }
+        for id, df in self.dfs_in.items():
+            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+
+    # -----------------
+    # ----PROCESSOR----
+    # -----------------
+    def process(self) -> None:
+        addrs = []
+        for id, df in self.dfs_in.items():
+            # self.run_validator(id, df_in, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
+            if id == "gcd_validated":
+                continue
+            addrs.extend(
+                [
+                    addr
+                    for addr in df["clean_address_v"]
+                    if pd.notnull(addr) and addr != ""
+                ]
+            )
+        df_addrs: pd.DataFrame = pd.DataFrame(columns=["address"], data=addrs)
+        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df_addrs, "address")
+        for field in self.ANALYSIS_FIELDS:
+            df_freq[field] = ""
+        df_freq["is_researched"] = "f"
+        self.dfs_out["address_analysis"] = df_freq
+
+    # -------------------------------
+    # ----SUMMARY STATS GENERATOR----
+    # -------------------------------
+    def summary_stats(self) -> None:
+        ss_obj = SSAddressAnalysisInitial(
+            self.config_manager.configs,
+            self.WKFL_NAME,
+            self.dfs_out
+        )
+        ss_obj.calculate()
+        ss_obj.print()
+        ss_obj.save()
+
+    # -------------
+    # ----SAVER----
+    # -------------
+    def save(self) -> None:
+        configs = self.config_manager.configs
+        save_map: dict[str, Path] = {
+            "address_analysis": path_gen.analysis_address_analysis(configs),
         }
         self.save_dfs(save_map)
 
@@ -1894,1523 +3653,6 @@ class WkflSetAddressColumns(WorkflowStandardBase):
         configs = self.config_manager.configs
         save_map: dict[str, Path] = {
             "gcd_validated_formatted": path_gen.geocodio_gcd_validated(configs, "_formatted"),
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflAddressMerge(WorkflowStandardBase):
-
-    WKFL_NAME: str = "ADDRESS MERGE WORKFLOW"
-    WKFL_DESC: str = "Merges validated addresses to address fields in taxpayer and business filing records."
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "gcd_validated_formatted": {
-                "path": path_gen.geocodio_gcd_validated(configs, "_formatted"),
-                "schema": GeocodioFormatted,
-            },
-            "taxpayers_bus_merged": {
-                "path": path_gen.processed_taxpayers_bus_merged(configs),
-                "schema": TaxpayersBusMerged,
-            },
-            "bus_names_addrs": {
-                "path": path_gen.processed_bus_names_addrs(configs),
-                "schema": BusinessNamesAddrs
-            }
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "gcd_validated_formatted": GeocodioFormatted,
-            "taxpayers_bus_merged": TaxpayersBusMerged,
-            "bus_names_addrs": BusinessNamesAddrs,
-        }
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        # set df copies
-        df_valid = self.dfs_in["gcd_validated_formatted"].copy()
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
-        df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
-        # run validator on validated address dataset
-        # self.run_validator("gcd_validated", df_valid, self.config_manager.configs, self.WKFL_NAME, Geocodio)
-        t.print_dataset_name("taxpayers_bus_merged")
-        t.print_with_dots("Merging validated addresses into taxpayers_bus_merged")
-        df_tax_merge = merge_df.merge_validated_address(df_taxpayers, df_valid, "clean_address")
-        df_tax_merge = clean_df_base.combine_columns_parallel(df_tax_merge)
-        df_tax_merge.drop_duplicates(subset=["raw_name_address"], inplace=True)
-        t.print_dataset_name("bus_names_addrs")
-        t.print_with_dots("Merging validated addresses into bus_names_addrs")
-        df_bus_merge = merge_df.merge_validated_address(df_bus_names_addrs, df_valid, "clean_address")
-        df_bus_merge = clean_df_base.combine_columns_parallel(df_bus_merge)
-
-        console.print("Validated addresses merged ✅ 🗺️ 📍")
-
-        self.dfs_out["taxpayers_addr_merged"] = df_tax_merge
-        self.dfs_out["bus_names_addrs_merged"] = df_bus_merge
-
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        ss_obj = SSAddressMerge(
-            self.config_manager.configs,
-            self.WKFL_NAME,
-            self.dfs_out
-        )
-        ss_obj.calculate()
-        ss_obj.print()
-        ss_obj.save()
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "taxpayers_addr_merged": path_gen.processed_taxpayers_addr_merged(configs),
-            "bus_names_addrs_merged": path_gen.processed_bus_names_addrs_merged(configs),
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflNameAnalysisInitial(WorkflowStandardBase):
-    """
-    Initial taxpayer name analysis workflow. Generates frequency and name analysis dataframes.
-
-    INPUTS:
-    OUTPUTS:
-    """
-
-    WKFL_NAME: str = "NAME ANALYSIS INITIAL WORKFLOW"
-    WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "taxpayers_addrs_merged": {
-                "path": path_gen.processed_taxpayers_addr_merged(configs),
-                "schema": TaxpayersAddrMerged,
-                "recursive_bools": True
-            },
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "taxpayers_addrs_merged": TaxpayersAddrMerged,
-        }
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        df = self.dfs_in["taxpayers_addrs_merged"].copy()
-        # run validator
-        # self.run_validator("taxpayer_records", df, self.config_manager.configs, self.WKFL_NAME, TaxpayerRecords)
-        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df, "clean_name")
-        # frequent_tax_names
-        self.dfs_out["frequent_tax_names"] = df_freq
-        self.dfs_out["frequent_tax_names"]["exclude_name"] = ""
-        # fixing_tax_names
-        self.dfs_out["fixing_tax_names"] = pd.DataFrame(
-            columns=["raw_value", "standardized_value"],
-            data=[
-                [
-                    "Paste the EXACT string from the messy data to be standardized in this column",
-                    "Paste the fixed version in this column"
-                ],
-                ["EXAMPLES","EXAMPLES"],
-                ["COMMUNITY SAV BK LT", "COMMUNITY SAVINGS BANK"],
-                ["COMMUNITY SAV BK TR", "COMMUNITY SAVINGS BANK"],
-                ["COMMUNITY SAV BK", "COMMUNITY SAVINGS BANK"],
-                ["COMMUNITY SAV BANK", "COMMUNITY SAVINGS BANK"],
-                ["COMMUNITY BK TR LT", "COMMUNITY SAVINGS BANK"],
-                ["COMM SAVINGS BK LT", "COMMUNITY SAVINGS BANK"],
-                ["COMM SAVGS BK LT", "COMMUNITY SAVINGS BANK"],
-            ]
-        )
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        ss_obj = SSNameAnalysisInitial(
-            self.config_manager.configs,
-            self.WKFL_NAME,
-            self.dfs_out
-        )
-        ss_obj.calculate()
-        ss_obj.print()
-        ss_obj.save()
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "frequent_tax_names": path_gen.analysis_frequent_tax_names(configs),
-            "fixing_tax_names": path_gen.analysis_fixing_tax_names(configs),
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflAddressAnalysisInitial(WorkflowStandardBase):
-    """
-    Address analysis
-
-    INPUTS:
-        - Master validated address file
-            - 'ROOT/processed/validated_addrs[FileExt]'
-        - User inputs manual address research data
-    OUTPUTS:
-        - Address analysis dataset
-            - 'ROOT/analysis/address_freq[FileExt]'
-    """
-    WKFL_NAME: str = "ADDRESS ANALYSIS INITIAL WORKFLOW"
-    WKFL_DESC: str = "Generates & saves dataframe with most commonly appearing names in taxpayer records."
-
-    ANALYSIS_FIELDS: list[str] = [
-        "name",
-        "urls",
-        "notes",
-        "is_landlord_org",
-        "is_govt_agency",
-        "is_lawfirm",
-        "is_missing_suite",
-        "is_problematic_suite",
-        "is_religious",
-        "is_realtor",
-        "is_financial_services",
-        "is_assoc_bus",
-        "fix_address",
-        "is_virtual_office_agent",
-        "yelp_urls",
-        "is_nonprofit",
-        "google_urls",
-        "is_ignore_misc",
-        "google_place_id",
-        "is_researched"
-    ]
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "gcd_validated_formatted": {
-                "path": path_gen.geocodio_gcd_validated(configs, suffix="_formatted"),
-                "schema": GeocodioFormatted,
-            },
-            "taxpayers_addrs_merged": {
-                "path": path_gen.processed_taxpayers_addr_merged(configs),
-                "schema": TaxpayersAddrMerged,
-                "recursive_bools": True
-            },
-            "bus_names_addrs_merged": {
-                "path": path_gen.processed_bus_names_addrs_merged(configs),
-                "schema": BusinessNamesAddrsMerged,
-            }
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "gcd_validated_formatted": GeocodioFormatted,
-            "taxpayers_addrs_merged": TaxpayersAddrMerged,
-            "bus_names_addrs_merged": BusinessNamesAddrsMerged,
-        }
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        addrs = []
-        for id, df in self.dfs_in.items():
-            # self.run_validator(id, df_in, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-            if id == "gcd_validated":
-                continue
-            addrs.extend(
-                [
-                    addr
-                    for addr in df["clean_address_v"]
-                    if pd.notnull(addr) and addr != ""
-                ]
-            )
-        df_addrs: pd.DataFrame = pd.DataFrame(columns=["address"], data=addrs)
-        df_freq: pd.DataFrame = subset_df.generate_frequency_df(df_addrs, "address")
-        for field in self.ANALYSIS_FIELDS:
-            df_freq[field] = ""
-        df_freq["is_researched"] = "f"
-        self.dfs_out["address_analysis"] = df_freq
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        ss_obj = SSAddressAnalysisInitial(
-            self.config_manager.configs,
-            self.WKFL_NAME,
-            self.dfs_out
-        )
-        ss_obj.calculate()
-        ss_obj.print()
-        ss_obj.save()
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "address_analysis": path_gen.analysis_address_analysis(configs),
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflAnalysisFinal(WorkflowStandardBase):
-    """
-    Fixes taxpayer names based on standardized spellings manually specified in the fixing_tax_names dataset. Adds
-    boolean columns to taxpayer records for exclude_name, based on manual input in
-    fixing_tax_names dataset.
-    """
-    WKFL_NAME: str = "FIX NAMES ADDRESSES WORKFLOW"
-    WKFL_DESC: str = "Changes taxpayer names and validated addresses based on manual input."
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    def get_banks_dict(self, df: pd.DataFrame) -> dict:
-        banks = {}
-        for standard_name in list(df["standardized_value"].unique()):
-            df_name: pd.DataFrame = df[df["standardized_value"] == standard_name]
-            for raw_name in list(df_name["raw_value"].unique()):
-                banks[raw_name] = standard_name
-        return banks
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "fixing_tax_names": {
-                "path": path_gen.analysis_fixing_tax_names(configs),
-                "schema": FixingTaxNames,
-            },
-            "frequent_tax_names": {
-                "path": path_gen.analysis_frequent_tax_names(configs),
-                "schema": FrequentTaxNames,
-            },
-            "taxpayers_addr_merged": {
-                "path": path_gen.processed_taxpayers_addr_merged(configs),
-                "schema": TaxpayersAddrMerged,
-                "recursive_bools": True
-            },
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "fixing_tax_names": FixingTaxNames,
-            "frequent_tax_names": FrequentTaxNames,
-            "taxpayers_addr_merged": TaxpayersAddrMerged,
-        }
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        # copy dfs
-        df_fix_names: pd.DataFrame = self.dfs_in["fixing_tax_names"].copy()
-        df_freq_names: pd.DataFrame = self.dfs_in["frequent_tax_names"].copy()
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_addr_merged"].copy()
-
-        df_taxpayers.dropna(subset=["raw_name"], inplace=True)
-        # create banks dict
-        t.print_with_dots("Setting standardized name dictionary")
-        banks: dict[str, str] = self.get_banks_dict(df_fix_names)
-        t.print_with_dots("Fixing taxpayer names")
-        df_taxpayers = colm_df.fix_tax_names(df_taxpayers, banks)
-        t.print_with_dots("Setting exclude_name boolean column")
-        df_taxpayers = cols_df.set_exclude_name(df_taxpayers, df_freq_names)
-        # t.print_with_dots("Setting is_landlord_org boolean column")
-        # df_taxpayers = cols_df.set_is_landlord_org(df_taxpayers, df_analysis)
-        t.print_with_dots("Setting clean_name_address field with fixed names")
-        df_taxpayers = cols_df.set_name_address_concat_fix(
-            df_taxpayers,
-            {
-                "name_addr": "clean_name_address",
-                "name": "clean_name",
-                "name_2": "clean_name_2",
-                "addr": "clean_address"
-            }
-        )
-        self.dfs_out["taxpayers_fixed"] = df_taxpayers
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        ss_obj = SSAnalysisFinal(
-            self.config_manager.configs,
-            self.WKFL_NAME,
-            self.dfs_out
-        )
-        ss_obj.calculate()
-        ss_obj.print()
-        ss_obj.save()
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "taxpayers_fixed": path_gen.processed_taxpayers_fixed(configs)
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflRentalSubset(WorkflowStandardBase):
-
-    WKFL_NAME: str = "RENTAL SUBSET WORKFLOW"
-    WKFL_DESC: str = "Subsets property and taxpayer record datasets for rental properties only."
-
-    PROP_TYPES: list[str] = [  # todo: move to schema class
-        "2 UNIT RESIDENTIAL",
-        "3 UNIT RESIDENTIAL",
-        "APARTMENT",
-        "COMMERCIAL",
-        "VACANT LAND - RESIDENTIAL"
-    ]
-    LAND_USES: list[str] = [
-        "2 UNIT RESIDENTIAL - DUPLEX",
-        "2 UNIT RESIDENTIAL - SF HOUSE AND ADU",
-        "2 UNIT RESIDENTIAL - SF HOUSE AND CARRIAGE HOUSE",
-        "2 UNIT RESIDENTIAL - TWO HOUSES",
-        "3 UNIT RESIDENTIAL - DUPLEX AND ADU",
-        "3 UNIT RESIDENTIAL - DUPLEX AND SF HOUSE",
-        "3 UNIT RESIDENTIAL - TRIPLEX",
-        "MIXED OFFICE, RETAIL, RESIDENTIAL, ETC",
-        "MULTI - FAMILY APARTMENT",
-        "MULTI - FAMILY RESIDENTIAL",
-        "OFFICE STRUCTURE",
-        "VACANT"
-    ]
-    BUILDING_USES: list[str] = [
-        "APARTMENT 4 OR 5 UNIT",
-        "APARTMENT CONVERTED",
-        "BAR / FOOD / REST.W RES",
-        "BOARDING OR LODGING",
-        "COMMERCIAL",
-        "DUPLEX",
-        "DUPLEX W / ADU",
-        "GROUP HOME",
-        "TRIPLEX"
-    ]
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "taxpayers_fixed": {
-                "path": path_gen.processed_taxpayers_fixed(configs),
-                "schema": TaxpayersFixed,
-                "recursive_bools": True
-            },
-            "properties": {
-                "path": path_gen.processed_properties(configs),
-                "schema": Properties,
-            },
-            "rental_licenses": {
-                "path": path_gen.pre_process_rental_licenses(configs),
-                "schema": None,
-            },
-            "address_analysis": {
-                "path": path_gen.analysis_address_analysis(configs),
-                "schema": AddressAnalysis,
-            }
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "taxpayers_fixed": TaxpayersFixed,
-            "properties": Properties,
-            "address_analysis": AddressAnalysis,
-        }
-        for id, df in self.dfs_in.items():
-            if id == "rental_licenses":
-                continue
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        # copy dfs
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_fixed"].copy()
-        df_props: pd.DataFrame = self.dfs_in["properties"].copy()
-        df_lic: pd.DataFrame = self.dfs_in["rental_licenses"].copy()
-        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
-        t.print_with_dots("Fetching property pins for rental property subset of taxpayer data")
-        # 1. subset by rental licenses
-        license_pins: list[str] = list(df_lic["apn"].dropna().unique())
-        # 2. subset by non-homesteaded
-        is_homestead_pins: list[str] = list(df_props[df_props["is_homestead"] == "NON-HOMESTEADED"]["pin"])
-        # 3. subset by prop_type
-        type_pins: list[str] = list(df_props[df_props["prop_type"].isin(self.PROP_TYPES)]["pin"])
-        # 4. subset by land_use
-        land_use_pins: list[str] = list(df_props[df_props["land_use"].isin(self.LAND_USES)]["pin"])
-        # 5. subset by building_use
-        bldg_use_pins: list[str] = list(df_props[df_props["building_use"].isin(self.BUILDING_USES)]["pin"])
-        # 6. subset by num_units
-        df_props = cols_df.set_is_unit_gte_1(df_props)
-        num_units_pins: list[str] = list(df_props[df_props["is_unit_gte_1"] == True]["pin"])
-        # use set of pins to subset original props df
-        rental_pins: set[str] = set(license_pins + is_homestead_pins + type_pins + land_use_pins + bldg_use_pins + num_units_pins)
-        df_rentals: pd.DataFrame = df_props[df_props["pin"].isin(rental_pins)]
-        # 7. subset by rental addresses - pull in remaining properties based on matching addresses from rental subset
-        # 7a. get taxpayer addresses
-        rental_taxpayers: list[str] = list(df_rentals["raw_name_address"].unique())
-        t.print_with_dots("Executing sub-subset on properties excluded from initial subset")
-        # get addrs to exclude
-        registered_agent_addrs: list[str] = list(df_analysis[df_analysis["is_virtual_office_agent"] == True]["value"])
-        financial_services_addrs: list[str] = list(df_analysis[df_analysis["is_financial_services"] == True]["value"])
-        law_firm_addrs: list[str] = list(df_analysis[df_analysis["is_lawfirm"] == True]["value"])
-        exclude_addrs: set[str] = set(registered_agent_addrs + financial_services_addrs + law_firm_addrs)
-        # subset taxpayers for rentals only
-        df_taxpayers_r: pd.DataFrame = df_taxpayers[df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
-        df_taxpayers_nr: pd.DataFrame = df_taxpayers[~df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
-        # fetch taxpayer addresses to execute final subset
-        addrs_to_subset: list[str] = list(df_taxpayers_r[~df_taxpayers_r["clean_address_v1"].isin(exclude_addrs)])
-        df_nonrentals_r: pd.DataFrame = df_taxpayers_nr[df_taxpayers_nr["clean_address_v1"].isin(addrs_to_subset)]
-        df_subset_final: pd.DataFrame = pd.concat([df_taxpayers_r, df_nonrentals_r], ignore_index=True)
-
-        self.dfs_out["properties_rentals"] = df_rentals
-        self.dfs_out["taxpayers_subsetted"] = df_subset_final
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        pass
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "properties_rentals": path_gen.processed_properties_rentals(configs),
-            "taxpayers_subsetted": path_gen.processed_taxpayers_subsetted(configs),
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflMatchAddressCols(WorkflowStandardBase):
-
-    WKFL_NAME: str = "MATCH ADDRESS & BOOLEAN IDENTIFIER GENERATORS WORKFLOW"
-    WKFL_DESC: str = "Assigns boolean identifiers for various address analysis categories. Subsets business filings data by presence of validated addresses from initial subset. Generates name + address concatenated columns for string matching."
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "taxpayers_subsetted": {
-                "path": path_gen.processed_taxpayers_subsetted(configs),
-                "schema": TaxpayersSubsetted,
-                "recursive_bools": True
-            },
-            "bus_names_addrs_merged": {
-                "path": path_gen.processed_bus_names_addrs_merged(configs),
-                "schema": BusinessNamesAddrsMerged,
-            },
-            "address_analysis": {
-                "path": path_gen.analysis_address_analysis(configs),
-                "schema": AddressAnalysis,
-                "recursive_bools": True
-            },
-            "gcd_validated_formatted": {
-                "path": path_gen.geocodio_gcd_validated(configs, "_formatted"),
-                "schema": GeocodioFormatted,
-            }
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "taxpayers_subsetted": TaxpayersSubsetted,
-            "bus_names_addrs_merged": BusinessNamesAddrsMerged,
-            "address_analysis": AddressAnalysis,
-            "gcd_validated_formatted": GeocodioFormatted
-        }
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        # copy dfs
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_subsetted"].copy()
-        df_bus: pd.DataFrame = self.dfs_in["bus_names_addrs_merged"].copy()
-        df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
-        df_valid: pd.DataFrame = self.dfs_in["gcd_validated_formatted"].copy()
-
-        # subset business filings
-        t.print_with_dots("Subsetting business filings data")
-        # fetch all uids merged into taxpayer records via name matching
-        uids: list[str] = list(df_taxpayers["uid"].dropna().unique())
-        # subset business name and address records for ONLY records associated with matched uids
-        df_uids: pd.DataFrame = df_bus[df_bus["uid"].isin(uids)]
-        # fetch unique validated addresses for matched entities
-        addrs_for_uids: list[str] = list(df_uids["clean_address_v1"].dropna().unique())
-
-        # subset entire dataset for ALL records associated with validated addresses
-        uids_sub: set[str] = set(list(df_bus[df_bus["clean_address_v1"].isin(addrs_for_uids)]["uid"].unique()) + uids)
-        df_bus_subset: pd.DataFrame = df_bus[df_bus["uid"].isin(uids_sub)]
-
-        # set address lists for bool col generators
-        t.print_with_dots("Fetching researched address lists to be used in boolean column generators")
-        df_exclude: pd.DataFrame = df_analysis[
-            (df_analysis["is_lawfirm"] == True) |
-            (df_analysis["is_financial_services"] == True) |
-            (df_analysis["is_virtual_office_agent"] == True)
-        ]
-        exclude_addrs: list[str] = list(df_exclude["value"])
-        pobox_addrs: list[str] = list(df_valid[df_valid["street"] == "PO BOX"]["formatted_address_v1"].unique())
-        researched_addrs: list[str] = list(df_analysis[df_analysis["is_researched"] == True]["value"])
-        org_addrs: list[str] = list(df_analysis[df_analysis["is_landlord_org"] == True]["value"])
-        missing_suite_addrs: list[str] = list(df_analysis[df_analysis["is_missing_suite"] == True]["value"])
-        problem_suite_addrs: list[str] = list(df_analysis[df_analysis["is_problematic_suite"] == True]["value"])
-        realtor_addrs: list[str] = list(df_analysis[df_analysis["is_realtor"] == True]["value"])
-
-        for id, df in {"taxpayers": df_taxpayers, "business_filings": df_bus_subset}.items():
-            t.print_dataset_name(id)
-            t.print_with_dots(f"Setting match_address_v1 for {id}")
-            df = cols_df.set_match_address(df, "clean_address_v1", "_v1")
-            t.print_with_dots(f"Setting match_address_v2 for {id}")
-            df = cols_df.set_match_address(df, "clean_address_v2", "_v2")
-            t.print_with_dots(f"Setting match_address_v3 for {id}")
-            df = cols_df.set_match_address(df, "clean_address_v3", "_v3")
-            t.print_with_dots(f"Setting match_address_v4 for {id}")
-            df = cols_df.set_match_address(df, "clean_address_v4", "_v4")
-            t.print_with_dots(f"Setting is_validated for {id}")
-            df = cols_df.set_is_validated(df, "clean_address_v1")
-            t.print_with_dots(f"Setting exclude_address for {id}")
-            df = cols_df.set_exclude_address(exclude_addrs, df, "clean_address_v1")
-            t.print_with_dots(f"Setting is_researched for {id}")
-            df = cols_df.set_is_researched(researched_addrs + pobox_addrs, df, "clean_address_v1")
-            t.print_with_dots(f"Setting is_org_address for {id}")
-            df = cols_df.set_is_org_address(org_addrs, df, "clean_address_v1")
-            t.print_with_dots(f"Setting is_missing_suite for {id}")
-            df = cols_df.set_is_missing_suite(missing_suite_addrs, df, "clean_address_v1")
-            t.print_with_dots(f"Setting is_problem_suite for {id}")
-            df = cols_df.set_is_problem_suite(problem_suite_addrs, df, "clean_address_v1")
-            t.print_with_dots(f"Setting is_realtor for {id}")
-            df = cols_df.set_is_realtor(realtor_addrs, df, "clean_address_v1")
-
-        # add name+address concatenated columns to use for matching
-        t.print_with_dots("Adding name + address concatenation columns")
-        for suffix in ["_v1", "_v2", "_v3", "_v4"]:
-            df_taxpayers = cols_df.concatenate_name_addr(
-                df_taxpayers, "clean_name", f"match_address{suffix}", suffix
-            )
-            df_taxpayers = cols_df.concatenate_name_addr(
-                df_taxpayers, "core_name", f"match_address{suffix}", suffix
-            )
-
-        self.dfs_out["taxpayers_prepped"] = df_taxpayers
-        self.dfs_out["bus_names_addrs_subsetted"] = df_bus_subset
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        pass
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "taxpayers_prepped": path_gen.processed_taxpayers_prepped(configs),
-            "bus_names_addrs_subsetted": path_gen.processed_bus_names_addrs_subsetted(configs),
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflStringMatch(WorkflowStandardBase):
-
-    WKFL_NAME: str = "TAXPAYER RECORD STRING-MATCHING WORKFLOW"
-    WKFL_DESC: str = "Executes string matching based on concatenation of taxpayer name and address."
-
-    DEFAULT_NMSLIB: NmslibOptions = {
-        "method": "hnsw",
-        "space": "cosinesimil_sparse_fast",
-        "data_type": nmslib.DataType.SPARSE_VECTOR
-    }
-    DEFAULT_QUERY_BATCH = {
-        "num_threads": 8,
-        "K": 3
-    }
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        self.params_matrix: list[StringMatchParamsMN] = []
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    def execute_param_builder(self) -> None:
-        t.print_with_dots("Building string matching params object")
-        # set options for params matrix
-        taxpayer_name_col: list[str] = ["clean_name"]
-        match_threshold_options: list[float] = [0.85]
-        unvalidated_options: list[bool] = [False, True]
-        unresearched_options: list[bool] = [False, True]
-        org_options: list[bool] = [False, True]
-        missing_suite_options: list[bool] = [False, True]
-        problem_suite_options: list[bool] = [False, True]
-        address_suffix: list[str] = ["v1", "v2", "v3", "v4"]
-        # loop through unique combinations of param matrix options
-        # for i, params in enumerate(product(
-        #     taxpayer_name_col,
-        #     match_threshold_options,
-        #     unvalidated_options,
-        #     unresearched_options,
-        #     org_options,
-        #     missing_suite_options,
-        #     problem_suite_options,
-        #     address_suffix,
-        # )):
-        #     self.params_matrix.append({
-        #         "name_col": params[0],
-        #         "match_threshold": params[1],
-        #         "include_unvalidated": params[2],
-        #         "include_unresearched": params[3],
-        #         "include_orgs": params[4],
-        #         "include_missing_suites": params[5],
-        #         "include_problem_suites": params[6],
-        #         "address_suffix": params[7],
-        #         "nmslib_opts": self.DEFAULT_NMSLIB,
-        #         "query_batch_opts": self.DEFAULT_QUERY_BATCH,
-        #     })
-        self.params_matrix = [
-            {
-                "name_col": "clean_name",
-                "match_threshold": 0.85,
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v1",
-                "nmslib_opts": self.DEFAULT_NMSLIB,
-                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
-            },
-            {
-                "name_col": "clean_name",
-                "match_threshold": 0.85,
-                "include_unvalidated": True,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v2",
-                "nmslib_opts": self.DEFAULT_NMSLIB,
-                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
-            },
-            {
-                "name_col": "clean_name",
-                "match_threshold": 0.85,
-                "include_unvalidated": True,
-                "include_unresearched": True,
-                "include_orgs": True,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v4",
-                "nmslib_opts": self.DEFAULT_NMSLIB,
-                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
-            },
-        ]
-
-    def execute_string_matching(self,df_taxpayers: pd.DataFrame) -> pd.DataFrame:
-        """Returns final dataset to be outputted"""
-        t.print_with_dots("Executing string matching")
-        for i, params in enumerate(self.params_matrix):
-            t.print_equals(f"Matching strings for STRING_MATCHED_NAME_{i+1}")
-            console.print("NAME COLUMN:", params["name_col"])
-            console.print("MATCH THRESHOLD:", params["match_threshold"])
-            console.print("INCLUDE ORGS:", params["include_orgs"])
-            console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
-            console.print("INCLUDE MISSING SUITES:", params["include_missing_suites"])
-            console.print("INCLUDE PROBLEMATIC SUITES:", params["include_problem_suites"])
-            console.print("ADDRESS COLUMN:", params["address_suffix"])
-            t.print_with_dots("Setting include_address")
-            df_taxpayers["include_address"] = df_taxpayers.apply(
-                lambda row: MatchBase.check_address_mpls(
-                    row["match_address_v1"],  # this is just used to test nan values in the address field
-                    row["is_validated"],
-                    row["is_researched"],
-                    row["exclude_address"],
-                    row["is_org_address"],
-                    row["is_missing_suite"],
-                    row["is_problem_suite"],
-                    params["include_unvalidated"],
-                    params["include_unresearched"],
-                    params["include_orgs"],
-                    params["include_missing_suites"],
-                    params["include_problem_suites"],
-                    params["address_suffix"]
-                ), axis=1
-            )
-            # filter out addresses
-            t.print_with_dots("Filtering out taxpayer records where include_address is False")
-            df_filtered: pd.DataFrame = df_taxpayers[df_taxpayers["include_address"] == True][[
-                "clean_name",
-                "core_name",
-                f"match_address_{params['address_suffix']}",
-                f"clean_name_address_{params['address_suffix']}",
-                f"core_name_address_{params['address_suffix']}"
-            ]]
-            # set ref & query docs
-            t.print_with_dots("Setting document objects for HNSW index")
-            ref_docs: list[str] = list(
-                df_filtered[f"{params['name_col']}_address_{params['address_suffix']}"].dropna().unique()
-            )
-            query_docs: list[str] = list(
-                df_filtered[f"{params['name_col']}_address_{params['address_suffix']}"].dropna().unique()
-            )
-            # get string matches
-            df_matches: pd.DataFrame = StringMatch.match_strings(
-                ref_docs=ref_docs,
-                query_docs=query_docs,
-                params=params
-            )
-            # generate network graph to associated matches
-            df_matches_networked: pd.DataFrame = NetworkMatchBase.string_match_network_graph(df_matches)
-            # t.print_with_dots("Merging string match results into taxpayer records dataset")
-            df_taxpayers = pd.merge(
-                df_taxpayers,
-                df_matches_networked[["original_doc", "fuzzy_match_combo"]],
-                how="left",
-                left_on=f"{params['name_col']}_address_{params['address_suffix']}",
-                right_on="original_doc"
-            )
-            gc.collect()
-            df_taxpayers.drop(columns="original_doc", inplace=True)
-            df_taxpayers.drop_duplicates(subset="raw_name_address", inplace=True)
-            df_taxpayers.rename(columns={"fuzzy_match_combo": f"string_matched_name_{i+1}"}, inplace=True)
-
-        return df_taxpayers
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "taxpayers_prepped": {
-                "path": path_gen.processed_taxpayers_prepped(configs),
-                "schema": TaxpayersPrepped,
-                "recursive_bools": True
-            },
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "taxpayers_prepped": TaxpayersPrepped,
-        }
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        # copy df
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_prepped"].copy()
-        # generate matrix parameters
-        self.execute_param_builder()
-        # run matching
-        df_taxpayers_matched = self.execute_string_matching(df_taxpayers)
-        # set out dfs
-        self.dfs_out["taxpayers_string_matched"] = df_taxpayers_matched
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        ss_obj = SSStringMatch(
-            self.config_manager.configs,
-            self.WKFL_NAME,
-            self.dfs_out,
-            self.params_matrix
-        )
-        ss_obj.calculate()
-        ss_obj.print()
-        ss_obj.save()
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "taxpayers_string_matched": path_gen.processed_taxpayers_string_matched(configs),
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflNetworkGraph(WorkflowStandardBase):
-
-    WKFL_NAME: str = "NETWORK GRAPH WORKFLOW"
-    WKFL_DESC: str = "Executes network graph generation linking taxpayer, corporate and LLC records."
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        self.params_matrix: list[NetworkMatchParams] = []
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    def execute_param_builder(self) -> None:
-        t.print_with_dots("Building network graph params object")
-        # set options for params matrix
-        taxpayer_name_col: list[str] = ["clean_name"]
-        unvalidated_options: list[bool] = [False, True]
-        unresearched_options: list[bool] = [False, True]
-        org_options: list[bool] = [False, True]
-        missing_suite_options: list[bool] = [False, True]
-        problem_suite_options: list[bool] = [False, True]
-        address_suffix: list[str] = ["v1", "v2", "v3", "v4"]
-        string_match_names: list[str] = [
-            "string_matched_name_4",
-            "string_matched_name_23",
-            "string_matched_name_40",
-            "string_matched_name_106"
-        ]
-        # loop through unique combinations of param matrix options
-        # for i, params in enumerate(product(
-        #     taxpayer_name_col,
-        #     unvalidated_options,
-        #     unresearched_options,
-        #     org_options,
-        #     missing_suite_options,
-        #     problem_suite_options,
-        #     address_suffix,
-        #     string_match_names
-        # )):
-            # if params[6] == "v2" and params[4] == False:
-            #     continue
-            # if params[6] == "v4" and params[4] == False:
-            #     continue
-            # self.params_matrix.append({
-            #     "taxpayer_name_col": params[0],
-            #     "include_unvalidated": params[1],
-            #     "include_unresearched": params[2],
-            #     "include_orgs": params[3],
-            #     "include_missing_suites": params[4],
-            #     "include_problem_suites": params[5],
-            #     "address_suffix": params[6],
-            #     "string_match_name": params[7],
-            # })
-        self.params_matrix = [
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v1",
-                "string_match_name": "string_matched_name_1",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v2",
-                "string_match_name": "string_matched_name_1",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v4",
-                "string_match_name": "string_matched_name_2",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v1",
-                "string_match_name": "string_matched_name_2",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v2",
-                "string_match_name": "string_matched_name_3",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v4",
-                "string_match_name": "string_matched_name_3",
-            },
-        ]
-
-    def execute_network_graph_generator(self, df_taxpayers: pd.DataFrame, df_bus: pd.DataFrame) -> pd.DataFrame:
-        for i, params in enumerate(self.params_matrix):
-            console.print("TAXPAYER NAME COLUMN:", params["taxpayer_name_col"])
-            console.print("INCLUDE UNVALIDATED ADDRESSES:", params["include_unvalidated"])
-            console.print("INCLUDE UNRESEARCHED ADDRESSES:", params["include_unresearched"])
-            console.print("INCLUDE ORGS:", params["include_orgs"])
-            console.print("INCLUDE MISSING SUITES:", params["include_missing_suites"])
-            console.print("INCLUDE PROBLEMATIC SUITES:", params["include_problem_suites"])
-            console.print("ADDRESS COLUMN:", params["address_suffix"])
-            console.print("STRING MATCH NAME:", params["string_match_name"])
-            # build network graph object
-            gMatches = NetworkMatchBase.taxpayers_network_mpls(df_taxpayers, df_bus, params)
-            # assign IDs to taxpayer records based on name/address presence in graph object
-            df_taxpayers = NetworkMatchBase.set_taxpayer_component_mpls(i+1, df_taxpayers, df_bus, gMatches, params)
-            # set network names for each taxpayer record (long AND short)
-            df_taxpayers = NetworkMatchBase.set_network_name(i+1, df_taxpayers)
-            # set text for node/edge data
-            # df_taxpayers = NetworkMatchBase.set_network_text(i+1, gMatches, df_taxpayers)
-        return df_taxpayers
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self):
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "taxpayers_string_matched": {
-                "path": path_gen.processed_taxpayers_string_matched(configs),
-                "schema": TaxpayersPrepped,
-                "recursive_bools": True
-            },
-            "bus_names_addrs_subsetted": {
-                "path": path_gen.processed_bus_names_addrs_subsetted(configs),
-                "schema": BusinessNamesAddrsSubsetted,
-                "recursive_bools": True
-            }
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "taxpayers_string_matched": TaxpayersStringMatched,
-            "bus_names_addrs_subsetted": BusinessNamesAddrsSubsetted,
-        }
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        # copy dfs
-        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_string_matched"].copy()
-        df_bus: pd.DataFrame = self.dfs_in["bus_names_addrs_subsetted"].copy()
-        # generate matrix parameters
-        self.execute_param_builder()
-        # run network graph
-        df_networked: pd.DataFrame = self.execute_network_graph_generator(df_taxpayers, df_bus)
-        self.dfs_out["taxpayers_networked"] = df_networked
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        ss_obj = SSNetworkGraph(
-            self.config_manager.configs,
-            self.WKFL_NAME,
-            self.dfs_out,
-            self.params_matrix
-        )
-        ss_obj.calculate()
-        ss_obj.print()
-        ss_obj.save()
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "taxpayers_networked": path_gen.processed_taxpayers_networked(configs),
-        }
-        self.save_dfs(save_map)
-
-    # -----------------------
-    # ----CONFIGS UPDATER----
-    # -----------------------
-    def update_configs(self) -> None:
-        pass
-
-
-class WkflFinalOutput(WorkflowStandardBase):
-
-    WKFL_NAME: str = "FINAL OUTPUT WORKFLOW"
-    WKFL_DESC: str = "Generates final output datasets to be used for landlord database creation."
-
-    def __init__(self, config_manager: ConfigManager):
-        super().__init__(config_manager)
-        t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
-
-    def execute_network_calcs(self) -> pd.DataFrame:
-        # todo: tbd, whatever Tony decides
-        rows_network_calcs: list[dict[str, Any]] = [
-            {
-                "network_id": "",
-                "taxpayer_name": "",
-                "entity_name": "",
-                "string_match": "",
-                "include_orgs": False,
-                "include_orgs_string": False,
-                "include_unresearched": False,
-                "include_missing_suite": False,
-                "include_problem_suite": False,
-                "address_suffix": "v1",
-                "include_unresearched_string": False,
-                "include_missing_suite_string": False,
-                "include_problem_suite_string": False,
-                "address_suffix_string": "v1",
-            },
-        ]
-        return pd.DataFrame(rows_network_calcs)
-
-    def execute_entity_types(self) -> pd.DataFrame:
-        rows_entity_types: list[dict[str, Any]] = [
-            {
-                "name": "Landlord Organization",
-                "description": "Property management company, real estate developer, real estate investment firm, or any other organization type that deals with property ownership, management, investment or development. Note that given the nature of these organizations, their direct ownership of properties cannot be definitively established, however their responsibility as the taxpayer does mean they can be held accountable for living conditions and treatment of tenants."
-            },
-            {
-                "name": "Realtor",
-                "description": "Realty company or individual realtor associated with taxpayer address.",
-            },
-            {
-                "name": "Healthcare / Senior Care Organization",
-                "description": "Healthcare company or senior care company associated with taxpayer address."
-            },
-            {
-                "name": "Religious Institution",
-                "description": "Church, mosque or other religious institution associated with taxpayer address.",
-            },
-            {
-                "name": "Government Agency",
-                "description": "Government agency at any level (local, state or federal)."
-            },
-            {
-                "name": "Law Firm",
-                "description": "Legal services firm whose office address has been confirmed and submitted to the state as the legal property taxpayer."
-            },
-            {
-                "name": "Financial Services Company",
-                "description": "Financial firm whose office address has been confirmed and submitted to the state as the legal property taxpayer. These firms offer a wide range of services, including mortgage services, tax services, accounting services, or any other financial service."
-            },
-            {
-                "name": "Associated Business",
-                "description": "Any business unrelated to property ownership, management or development but that shares the same mailing address as the property taxpayer."
-            },
-            {
-                "name": "Virtual Office / Registered Agent",
-                "description": "Virtual office or registered agent service. These services allow landlords to submit the virtual office or registered agent's mailing address as the property taxpayer instead of themselves."
-            },
-            {
-                "name": "Nonprofit Organization",
-                "description": "501(c)(3) tax-exempt not-for-profit organization."
-            },
-            {
-                "name": "Other / Unknown",
-                "description": ""
-            }
-        ]
-        return pd.DataFrame(rows_entity_types)
-
-    def execute_entities(self, df_researched: pd.DataFrame) -> pd.DataFrame:
-        rows_entities: list[dict[str, Any]] = []
-        for _, row in df_researched.iterrows():
-            out_row = {
-                "name": row["name"],
-                "urls": row["urls"],
-                "yelp_urls": row["yelp_urls"],
-                "google_urls": row["google_urls"],
-                "google_place_id": row["google_place_id"],
-            }
-            if row["is_landlord_org"] == True:
-                out_row["entity_type"] = "Landlord Organization"
-            elif row["is_govt_agency"] == True:
-                out_row["entity_type"] = "Government Agency"
-            elif row["is_lawfirm"] == True:
-                out_row["entity_type"] = "Law Firm"
-            elif row["is_financial_services"] == True:
-                out_row["entity_type"] = "Financial Services Company"
-            elif row["is_assoc_bus"] == True:
-                out_row["entity_type"] = "Associated Business"
-            elif row["is_virtual_office_agent"] == True:
-                out_row["entity_type"] = "Virtual Office / Registered Agent"
-            elif row["is_nonprofit"] == True:
-                out_row["entity_type"] = "Nonprofit Organization"
-            elif row["is_religious"] == True:
-                out_row["entity_type"] = "Religious Institution"
-            elif row["is_healthcare_senior"] == True:
-                out_row["entity_type"] = "Healthcare / Senior Care Organization"
-            elif row["is_realtor"] == True:
-                out_row["entity_type"] = "Realtor"
-            else:
-                out_row["entity_type"] = "Other / Unknown"
-            rows_entities.append(out_row)
-        return pd.DataFrame(rows_entities)
-
-    def execute_validated_addresses(self, df_researched: pd.DataFrame) -> pd.DataFrame:
-        df_validated_addresses: pd.DataFrame = self.dfs_in["gcd_validated_formatted"][[
-            "number",
-            "predirectional",
-            "prefix",
-            "street",
-            "suffix",
-            "postdirectional",
-            "secondaryunit",
-            "secondarynumber",
-            "city",
-            "county",
-            "state",
-            "zip",
-            "country",
-            "lng",
-            "lat",
-            "accuracy",
-            "formatted_address",
-            "formatted_address_v1"
-        ]]
-        df_validated_addresses.drop_duplicates(subset=["formatted_address"], inplace=True)
-        df_validated_addresses["landlord_entity"] = None
-        with t.create_progress_bar(
-            "[yellow]Setting landlord_entity names for validated addresses...", len(df_researched)
-        )[0] as progress:
-            task = progress.tasks[0]
-            processed_count = 0
-            for _, row in df_researched.iterrows():
-                mask = df_validated_addresses["formatted_address_v1"] == row["value"]
-                df_validated_addresses.loc[mask, "landlord_entity"] = row["name"]
-                processed_count += 1
-                progress.update(
-                    task.id,
-                    advance=1,
-                    processed=processed_count,
-                    description=f"[yellow]Processing entity {processed_count}/{len(df_researched)}",
-                )
-        return df_validated_addresses
-
-    def execute_business_filings(self) -> pd.DataFrame:
-        df_bus_filings: pd.DataFrame = self.dfs_in["bus_filings"]
-        return df_bus_filings
-
-    def execute_business_names_addrs(self) -> pd.DataFrame:
-        df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs_subsetted"][[
-            "uid",
-            "name_type",
-            "address_type",
-            "raw_party_name",
-            "clean_party_name",
-            "clean_address",
-            "clean_address_v1",
-        ]]
-        df_bus_names_addrs.rename(columns={
-            "raw_party_name": "raw_name",
-            "clean_party_name": "clean_name",
-            "clean_address": "address",
-            "clean_address_v1": "address_v",
-        })
-        return df_bus_names_addrs
-
-    def execute_networks(self) -> pd.DataFrame:
-        df_networks_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
-            "network_1",
-            "network_1_short",
-            # "network_1_text",
-            "network_2",
-            "network_2_short",
-            # "network_2_text",
-            "network_3",
-            "network_3_short",
-            # "network_3_text",
-            "network_4",
-            "network_4_short",
-            # "network_4_text",
-            "network_5",
-            "network_5_short",
-            # "network_5_text",
-            "network_6",
-            "network_6_short",
-            # "network_6_text"
-        ]]
-        rows_networks: list[dict[str, Any]] = []
-        network_ids: list[str] = ["network_1", "network_2", "network_3", "network_4", "network_5", "network_6"]
-        for ntwk in network_ids:
-            df_network: pd.DataFrame = df_networks_taxpayers[[
-                ntwk,
-                f"{ntwk}_short",
-                # f"{ntwk}_text"
-            ]]
-            df_network.dropna(subset=[ntwk], inplace=True)
-            df_network.drop_duplicates(subset=[ntwk], inplace=True)
-            for _, row in df_network.iterrows():
-                row = {
-                    "name": row[ntwk],
-                    "short_name": row[f"{ntwk}_short"],
-                    "network_calc": ntwk,
-                    # "nodes_edges": row[f"{ntwk}_text"]
-                }
-                rows_networks.append(row)
-        return pd.DataFrame(rows_networks)
-
-    def execute_taxpayer_records(self) -> pd.DataFrame:
-        # taxpayer_records
-        df_taxpayer_records: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
-            "raw_name",
-            "raw_name_2",
-            "clean_name",
-            "clean_name_2",
-            "clean_address",
-            "clean_address_v1",
-            "uid",
-            "network_1",
-            "network_2",
-            "network_3",
-            "network_4",
-            "network_5",
-            "network_6"
-        ]]
-        df_taxpayer_records.rename(columns={
-            "uid": "entity_uid",
-            "clean_address": "address",
-            "clean_address_v1": "address_v",
-        })
-        return df_taxpayer_records
-
-    # --------------
-    # ----LOADER----
-    # --------------
-    def load(self) -> None:
-        configs = self.config_manager.configs
-        load_map: dict[str, dict[str, Any]] = {
-            "taxpayers_networked": {
-                "path": path_gen.processed_taxpayers_networked(configs),
-                "schema": None,
-            },
-            "bus_filings": {
-                "path": path_gen.processed_bus_filings(configs),
-                "schema": None,
-            },
-            "bus_names_addrs_subsetted": {
-                "path": path_gen.processed_bus_names_addrs_subsetted(configs),
-                "schema": None,
-            },
-            "address_analysis": {
-                "path": path_gen.analysis_address_analysis(configs),
-                "schema": AddressAnalysis,
-                "recursive_bools": True
-            },
-            "gcd_validated_formatted": {
-                "path": path_gen.geocodio_gcd_validated(configs, suffix="_formatted"),
-                "schema": GeocodioFormatted,
-            },
-        }
-        self.load_dfs(load_map)
-
-    # -----------------
-    # ----VALIDATOR----
-    # -----------------
-    def validate(self) -> None:
-        schema_map = {
-            "taxpayers_networked": TaxpayersNetworked,
-            "bus_filings": BusinessFilings,
-            "bus_names_addrs_subsetted": BusinessNamesAddrsSubsetted,
-            "address_analysis": AddressAnalysis,
-            "gcd_validated_formatted": GeocodioFormatted,
-        }
-        for id, df in self.dfs_in.items():
-            self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
-
-    # -----------------
-    # ----PROCESSOR----
-    # -----------------
-    def process(self) -> None:
-        df_researched: pd.DataFrame = self.dfs_in["address_analysis"][
-            self.dfs_in["address_analysis"]["is_researched"] == True
-        ]
-        df_researched.dropna(subset=["name"], inplace=True)
-        self.dfs_out["network_calcs"] = self.execute_network_calcs()
-        self.dfs_out["entity_types"] = self.execute_entity_types()
-        self.dfs_out["entities"] = self.execute_entities(df_researched)
-        self.dfs_out["validated_addresses"] = self.execute_validated_addresses(df_researched)
-        self.dfs_out["bus_filings"] = self.execute_business_filings()
-        self.dfs_out["bus_names_addrs"] = self.execute_business_names_addrs()
-        self.dfs_out["networks"] = self.execute_networks()
-        self.dfs_out["taxpayer_records"] = self.execute_taxpayer_records()
-
-    # -------------------------------
-    # ----SUMMARY STATS GENERATOR----
-    # -------------------------------
-    def summary_stats(self) -> None:
-        pass
-
-    # -------------
-    # ----SAVER----
-    # -------------
-    def save(self) -> None:
-        configs = self.config_manager.configs
-        save_map: dict[str, Path] = {
-            "network_calcs": path_gen.output_network_calcs(configs),
-            "entity_types": path_gen.output_entity_types(configs),
-            "entities": path_gen.output_entities(configs),
-            "validated_addresses": path_gen.output_validated_addresses(configs),
-            "bus_filings": path_gen.output_bus_filings(configs),
-            "bus_names_addrs": path_gen.output_bus_names_addrs(configs),
-            "networks": path_gen.output_networks(configs),
-            "taxpayer_records": path_gen.output_taxpayer_records(configs),
         }
         self.save_dfs(save_map)
 
