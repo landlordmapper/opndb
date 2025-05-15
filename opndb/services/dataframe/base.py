@@ -16,7 +16,9 @@ from rich.progress import (
     TotalFileSizeColumn,
 )
 from rich.console import Console
-
+from io import StringIO
+import certifi
+import requests as req
 from opndb.validator.df_model import OPNDFModel
 
 console = Console()
@@ -32,9 +34,9 @@ class DataFrameOpsBase(object):
     @classmethod
     def load_df(
         cls,
-        path: Path,
-        schema: Type[OPNDFModel] = None,
-        recursive_bools: bool = False,
+            path: Path | str,
+            schema: Type[OPNDFModel] = None,
+            recursive_bools: bool = False,
     ) -> pd.DataFrame | None:
         """
         Loads dataframes based on file format. Reads extension and loads dataframe using corresponding pd.read method.
@@ -53,6 +55,23 @@ class DataFrameOpsBase(object):
                     if pd.notnull(x) else False
                 )
             return df
+
+        is_url = isinstance(path, str) and path.startswith("http")
+
+        if is_url:
+            try:
+                console.print(f"[blue]Fetching remote CSV: {path}[/blue]")
+                response = req.get(path, verify=certifi.where())
+                response.raise_for_status()
+                df = pd.read_csv(StringIO(response.text), dtype=str)
+                if schema:
+                    df = coerce_booleans(df, schema.boolean_fields(recursive=recursive_bools))
+                return df
+            except Exception as e:
+                console.print(f"[red]Error loading remote CSV: {e}[/red]")
+                return None
+
+        path = Path(path)
 
         # no file found, return None
         if not path.exists():

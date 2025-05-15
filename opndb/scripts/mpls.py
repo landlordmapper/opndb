@@ -1,3 +1,4 @@
+from opndb.schema.base.process import AddressAnalysis, FrequentTaxNames, FixingTaxNames
 from opndb.services.config import ConfigManager
 from opndb.services.dataframe.base import DataFrameOpsBase as ops_df
 from opndb.utils import UtilsBase, PathGenerators as path_gen
@@ -12,11 +13,22 @@ if config_manager.exists:
 else:
     raise Exception("Config manager not found.")
 
-# fetch raw data
-taxpayers_city = ""
-taxpayers_county = ""
-mnsos_type1 = ""
-mnsos_type2 = ""
+# fetch raw data from assessors sites
+taxpayers_city_url = "https://hub.arcgis.com/api/v3/datasets/5f4b033b92724341810b832385d4f7c2_0/downloads/data?format=csv&spatialRefId=4326&where=1%3D1"
+taxpayers_county_url = "https://hub.arcgis.com/api/v3/datasets/7975aabf6e1e42998a40a4b085ffefdf_1/downloads/data?format=csv&spatialRefId=26915&where=1%3D1"
+rental_licenses = "https://hub.arcgis.com/api/v3/datasets/baf5f14d67704668884275686e3db867_0/downloads/data?format=csv&spatialRefId=3857&where=1%3D1"
+
+df_taxpayers_city = ops_df.load_df(taxpayers_city_url)
+df_taxpayers_county = ops_df.load_df(taxpayers_county_url)
+df_rental_licenses = ops_df.load_df(rental_licenses)
+
+# load business filings
+df_mnsos_type1 = ops_df.load_df(
+    path_gen.pre_process_business_filings_1(config_manager.configs)
+)
+df_mnsos_type3 = ops_df.load_df(
+    path_gen.pre_process_business_filings_3(config_manager.configs)
+)
 
 # fetch address dataframes
 df_gcd_validated_formatted = ops_df.load_df(
@@ -24,13 +36,20 @@ df_gcd_validated_formatted = ops_df.load_df(
 )
 
 # fetch analysis dataframes
-df_fixing_tax_names = ops_df.load_df(path_gen.analysis_fixing_tax_names(config_manager.configs))
-df_frequent_tax_names = ops_df.load_df(path_gen.analysis_frequent_tax_names(config_manager.configs))
-df_address_analysis = ops_df.load_df(path_gen.analysis_address_analysis(config_manager.configs))
-
-# fetch rental license data
-df_rental_licenses = ops_df.load_df(path_gen.pre_process_rental_licenses(config_manager.configs))
-
+df_fixing_tax_names = ops_df.load_df(
+    path_gen.analysis_fixing_tax_names(config_manager.configs),
+    FixingTaxNames
+)
+df_frequent_tax_names = ops_df.load_df(
+    path_gen.analysis_frequent_tax_names(config_manager.configs),
+    FrequentTaxNames,
+    True
+)
+df_address_analysis = ops_df.load_df(
+    path_gen.analysis_address_analysis(config_manager.configs),
+    AddressAnalysis,
+    True
+)
 
 # begin workflows
 raw_data_prep = WkflRawDataPrep(config_manager)
@@ -38,7 +57,7 @@ raw_data_prep.dfs_in = {
     "taxpayers_city": df_taxpayers_city,
     "taxpayers_county": df_taxpayers_county,
     "mnsos_type1": df_mnsos_type1,
-    "mnsos_type3": df_mnsos_type3
+    "mnsos_type3": df_mnsos_type1
 }
 raw_data_prep.validate()
 raw_data_prep.process()
