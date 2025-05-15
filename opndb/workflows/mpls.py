@@ -227,11 +227,6 @@ class WorkflowStandardBase(WorkflowBase):
         pass
 
     @abstractmethod
-    def load_from_dfs(self, load_map: dict[str, dict[str, Any]]) -> None:
-        """Loads data from load map passed as an argument directly"""
-        pass
-
-    @abstractmethod
     def validate(self):
         """Runs validators on each loaded dataframe based on schema map set in the function itself."""
         pass
@@ -2686,28 +2681,66 @@ class WkflStringMatch(WorkflowStandardBase):
         problem_suite_options: list[bool] = [False, True]
         address_suffix: list[str] = ["v1", "v2", "v3", "v4"]
         # loop through unique combinations of param matrix options
-        for i, params in enumerate(product(
-            taxpayer_name_col,
-            match_threshold_options,
-            unvalidated_options,
-            unresearched_options,
-            org_options,
-            missing_suite_options,
-            problem_suite_options,
-            address_suffix,
-        )):
-            self.params_matrix.append({
-                "name_col": params[0],
-                "match_threshold": params[1],
-                "include_unvalidated": params[2],
-                "include_unresearched": params[3],
-                "include_orgs": params[4],
-                "include_missing_suites": params[5],
-                "include_problem_suites": params[6],
-                "address": params[7],
+        # for i, params in enumerate(product(
+        #     taxpayer_name_col,
+        #     match_threshold_options,
+        #     unvalidated_options,
+        #     unresearched_options,
+        #     org_options,
+        #     missing_suite_options,
+        #     problem_suite_options,
+        #     address_suffix,
+        # )):
+        #     self.params_matrix.append({
+        #         "name_col": params[0],
+        #         "match_threshold": params[1],
+        #         "include_unvalidated": params[2],
+        #         "include_unresearched": params[3],
+        #         "include_orgs": params[4],
+        #         "include_missing_suites": params[5],
+        #         "include_problem_suites": params[6],
+        #         "address_suffix": params[7],
+        #         "nmslib_opts": self.DEFAULT_NMSLIB,
+        #         "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+        #     })
+        self.params_matrix = [
+            {
+                "name_col": "clean_name",
+                "match_threshold": 0.85,
+                "include_unvalidated": False,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v1",
                 "nmslib_opts": self.DEFAULT_NMSLIB,
                 "query_batch_opts": self.DEFAULT_QUERY_BATCH,
-            })
+            },
+            {
+                "name_col": "clean_name",
+                "match_threshold": 0.85,
+                "include_unvalidated": True,
+                "include_unresearched": True,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v2",
+                "nmslib_opts": self.DEFAULT_NMSLIB,
+                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+            },
+            {
+                "name_col": "clean_name",
+                "match_threshold": 0.85,
+                "include_unvalidated": True,
+                "include_unresearched": True,
+                "include_orgs": True,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v4",
+                "nmslib_opts": self.DEFAULT_NMSLIB,
+                "query_batch_opts": self.DEFAULT_QUERY_BATCH,
+            },
+        ]
 
     def execute_string_matching(self,df_taxpayers: pd.DataFrame) -> pd.DataFrame:
         """Returns final dataset to be outputted"""
@@ -2744,17 +2777,17 @@ class WkflStringMatch(WorkflowStandardBase):
             df_filtered: pd.DataFrame = df_taxpayers[df_taxpayers["include_address"] == True][[
                 "clean_name",
                 "core_name",
-                f"match_address_{params['address']}",
-                f"clean_name_address_{params['address']}",
-                f"core_name_address_{params['address']}"
+                f"match_address_{params['address_suffix']}",
+                f"clean_name_address_{params['address_suffix']}",
+                f"core_name_address_{params['address_suffix']}"
             ]]
             # set ref & query docs
             t.print_with_dots("Setting document objects for HNSW index")
             ref_docs: list[str] = list(
-                df_filtered[f"{params['name_col']}_address_{params['address']}"].dropna().unique()
+                df_filtered[f"{params['name_col']}_address_{params['address_suffix']}"].dropna().unique()
             )
             query_docs: list[str] = list(
-                df_filtered[f"{params['name_col']}_address_{params['address']}"].dropna().unique()
+                df_filtered[f"{params['name_col']}_address_{params['address_suffix']}"].dropna().unique()
             )
             # get string matches
             df_matches: pd.DataFrame = StringMatch.match_strings(
@@ -2769,7 +2802,7 @@ class WkflStringMatch(WorkflowStandardBase):
                 df_taxpayers,
                 df_matches_networked[["original_doc", "fuzzy_match_combo"]],
                 how="left",
-                left_on=f"{params['name_col']}_address_{params['address']}",
+                left_on=f"{params['name_col']}_address_{params['address_suffix']}",
                 right_on="original_doc"
             )
             gc.collect()
@@ -2874,92 +2907,92 @@ class WkflNetworkGraph(WorkflowStandardBase):
             "string_matched_name_106"
         ]
         # loop through unique combinations of param matrix options
-        for i, params in enumerate(product(
-            taxpayer_name_col,
-            unvalidated_options,
-            unresearched_options,
-            org_options,
-            missing_suite_options,
-            problem_suite_options,
-            address_suffix,
-            string_match_names
-        )):
-            if params[6] == "v2" and params[4] == False:
-                continue
-            if params[6] == "v4" and params[4] == False:
-                continue
-            self.params_matrix.append({
-                "taxpayer_name_col": params[0],
-                "include_unvalidated": params[1],
-                "include_unresearched": params[2],
-                "include_orgs": params[3],
-                "include_missing_suites": params[4],
-                "include_problem_suites": params[5],
-                "address_suffix": params[6],
-                "string_match_name": params[7],
-            })
-        # self.params_matrix = [
-        #     {
-        #         "taxpayer_name_col": "clean_name",
-        #         "include_unvalidated": False,
-        #         "include_unresearched": False,
-        #         "include_orgs": False,
-        #         "include_missing_suites": True,
-        #         "include_problem_suites": True,
-        #         "address_suffix": "v1",
-        #         "string_match_name": "string_matched_name_4",
-        #     },
-        #     {
-        #         "taxpayer_name_col": "clean_name",
-        #         "include_unvalidated": False,
-        #         "include_unresearched": False,
-        #         "include_orgs": False,
-        #         "include_missing_suites": True,
-        #         "include_problem_suites": True,
-        #         "address_suffix": "v2",
-        #         "string_match_name": "string_matched_name_4",
-        #     },
-        #     {
-        #         "taxpayer_name_col": "clean_name",
-        #         "include_unvalidated": False,
-        #         "include_unresearched": False,
-        #         "include_orgs": False,
-        #         "include_missing_suites": True,
-        #         "include_problem_suites": True,
-        #         "address_suffix": "v4",
-        #         "string_match_name": "string_matched_name_4",
-        #     },
-        #     {
-        #         "taxpayer_name_col": "clean_name",
-        #         "include_unvalidated": False,
-        #         "include_unresearched": True,
-        #         "include_orgs": False,
-        #         "include_missing_suites": True,
-        #         "include_problem_suites": True,
-        #         "address_suffix": "v1",
-        #         "string_match_name": "string_matched_name_4",
-        #     },
-        #     {
-        #         "taxpayer_name_col": "clean_name",
-        #         "include_unvalidated": False,
-        #         "include_unresearched": True,
-        #         "include_orgs": False,
-        #         "include_missing_suites": True,
-        #         "include_problem_suites": True,
-        #         "address_suffix": "v2",
-        #         "string_match_name": "string_matched_name_4",
-        #     },
-        #     {
-        #         "taxpayer_name_col": "clean_name",
-        #         "include_unvalidated": False,
-        #         "include_unresearched": True,
-        #         "include_orgs": False,
-        #         "include_missing_suites": True,
-        #         "include_problem_suites": True,
-        #         "address_suffix": "v4",
-        #         "string_match_name": "string_matched_name_4",
-        #     },
-        # ]
+        # for i, params in enumerate(product(
+        #     taxpayer_name_col,
+        #     unvalidated_options,
+        #     unresearched_options,
+        #     org_options,
+        #     missing_suite_options,
+        #     problem_suite_options,
+        #     address_suffix,
+        #     string_match_names
+        # )):
+            # if params[6] == "v2" and params[4] == False:
+            #     continue
+            # if params[6] == "v4" and params[4] == False:
+            #     continue
+            # self.params_matrix.append({
+            #     "taxpayer_name_col": params[0],
+            #     "include_unvalidated": params[1],
+            #     "include_unresearched": params[2],
+            #     "include_orgs": params[3],
+            #     "include_missing_suites": params[4],
+            #     "include_problem_suites": params[5],
+            #     "address_suffix": params[6],
+            #     "string_match_name": params[7],
+            # })
+        self.params_matrix = [
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v1",
+                "string_match_name": "string_matched_name_1",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v2",
+                "string_match_name": "string_matched_name_1",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v4",
+                "string_match_name": "string_matched_name_2",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": True,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v1",
+                "string_match_name": "string_matched_name_2",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": True,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v2",
+                "string_match_name": "string_matched_name_3",
+            },
+            {
+                "taxpayer_name_col": "clean_name",
+                "include_unvalidated": False,
+                "include_unresearched": True,
+                "include_orgs": False,
+                "include_missing_suites": True,
+                "include_problem_suites": True,
+                "address_suffix": "v4",
+                "string_match_name": "string_matched_name_3",
+            },
+        ]
 
     def execute_network_graph_generator(self, df_taxpayers: pd.DataFrame, df_bus: pd.DataFrame) -> pd.DataFrame:
         for i, params in enumerate(self.params_matrix):
@@ -3171,7 +3204,7 @@ class WkflFinalOutput(WorkflowStandardBase):
         return pd.DataFrame(rows_entities)
 
     def execute_validated_addresses(self, df_researched: pd.DataFrame) -> pd.DataFrame:
-        df_validated_addresses: pd.DataFrame = self.dfs_in["gcd_validated"][[
+        df_validated_addresses: pd.DataFrame = self.dfs_in["gcd_validated_formatted"][[
             "number",
             "predirectional",
             "prefix",
@@ -3236,22 +3269,22 @@ class WkflFinalOutput(WorkflowStandardBase):
         df_networks_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_networked"][[
             "network_1",
             "network_1_short",
-            "network_1_text",
+            # "network_1_text",
             "network_2",
             "network_2_short",
-            "network_2_text",
+            # "network_2_text",
             "network_3",
             "network_3_short",
-            "network_3_text",
+            # "network_3_text",
             "network_4",
             "network_4_short",
-            "network_4_text",
+            # "network_4_text",
             "network_5",
             "network_5_short",
-            "network_5_text",
+            # "network_5_text",
             "network_6",
             "network_6_short",
-            "network_6_text"
+            # "network_6_text"
         ]]
         rows_networks: list[dict[str, Any]] = []
         network_ids: list[str] = ["network_1", "network_2", "network_3", "network_4", "network_5", "network_6"]
@@ -3259,7 +3292,7 @@ class WkflFinalOutput(WorkflowStandardBase):
             df_network: pd.DataFrame = df_networks_taxpayers[[
                 ntwk,
                 f"{ntwk}_short",
-                f"{ntwk}_text"
+                # f"{ntwk}_text"
             ]]
             df_network.dropna(subset=[ntwk], inplace=True)
             df_network.drop_duplicates(subset=[ntwk], inplace=True)
@@ -3268,7 +3301,7 @@ class WkflFinalOutput(WorkflowStandardBase):
                     "name": row[ntwk],
                     "short_name": row[f"{ntwk}_short"],
                     "network_calc": ntwk,
-                    "nodes_edges": row[f"{ntwk}_text"]
+                    # "nodes_edges": row[f"{ntwk}_text"]
                 }
                 rows_networks.append(row)
         return pd.DataFrame(rows_networks)
@@ -3334,7 +3367,7 @@ class WkflFinalOutput(WorkflowStandardBase):
         schema_map = {
             "taxpayers_networked": TaxpayersNetworked,
             "bus_filings": BusinessFilings,
-            "bus_names_addrs": BusinessNamesAddrs,
+            "bus_names_addrs_subsetted": BusinessNamesAddrsSubsetted,
             "address_analysis": AddressAnalysis,
             "gcd_validated_formatted": GeocodioFormatted,
         }
@@ -3374,8 +3407,8 @@ class WkflFinalOutput(WorkflowStandardBase):
             "entity_types": path_gen.output_entity_types(configs),
             "entities": path_gen.output_entities(configs),
             "validated_addresses": path_gen.output_validated_addresses(configs),
-            "business_filings": path_gen.output_business_filings(configs),
-            "business_names_addrs": path_gen.output_business_names_addrs(configs),
+            "bus_filings": path_gen.output_bus_filings(configs),
+            "bus_names_addrs": path_gen.output_bus_names_addrs(configs),
             "networks": path_gen.output_networks(configs),
             "taxpayer_records": path_gen.output_taxpayer_records(configs),
         }

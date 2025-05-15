@@ -16,7 +16,7 @@ from rich.progress import (
     TotalFileSizeColumn,
 )
 from rich.console import Console
-from io import StringIO
+from io import BytesIO
 import certifi
 import requests as req
 from opndb.validator.df_model import OPNDFModel
@@ -34,13 +34,13 @@ class DataFrameOpsBase(object):
     @classmethod
     def load_df(
         cls,
-            path: Path | str,
-            schema: Type[OPNDFModel] = None,
-            recursive_bools: bool = False,
+        path: Path | str,
+        schema: Type[OPNDFModel] = None,
+        recursive_bools: bool = False,
     ) -> pd.DataFrame | None:
         """
         Loads dataframes based on file format. Reads extension and loads dataframe using corresponding pd.read method.
-        Returns None if the path doesn't exist.'
+        Returns None if the path doesn't exist.
 
         :param filepath: Complete path to data file to be loaded into dataframe (UtilsBase.generate_file_path())
         :param dtype: Specify data types for columns or entire dataset
@@ -63,7 +63,7 @@ class DataFrameOpsBase(object):
                 console.print(f"[blue]Fetching remote CSV: {path}[/blue]")
                 response = req.get(path, verify=certifi.where())
                 response.raise_for_status()
-                df = pd.read_csv(StringIO(response.text), dtype=str)
+                df = pd.read_csv(BytesIO(response.content), encoding="utf-8-sig", dtype=str)
                 if schema:
                     df = coerce_booleans(df, schema.boolean_fields(recursive=recursive_bools))
                 return df

@@ -96,8 +96,7 @@ class Output(FileNames):
     VALIDATED_ADDRESSES: str = "validated_addresses"
     LLCS: str = "llcs"
     CORPS: str = "corps"
-    BUSINESS_FILINGS: str = "business_filings"
-    BUSINESS_NAMES_ADDRS: str = "business_names_addrs"
+    BUS_FILINGS: str = "bus_filings"
+    BUS_NAMES_ADDRS: str = "bus_names_addrs"
     NETWORKS: str = "networks"
     TAXPAYER_RECORDS: str = "taxpayer_records"
-

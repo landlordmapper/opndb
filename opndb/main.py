@@ -7,6 +7,7 @@ from rich.table import Table
 from click.core import Context
 from opndb.constants.base import DATA_ROOT
 from opndb.constants.files import Dirs
+from opndb.scripts.mpls import execute_mpls
 from opndb.services.config import ConfigManager
 from opndb.services.terminal_printers import TerminalBase as t, TerminalInteract as ti
 from opndb.utils import UtilsBase as utils
@@ -60,6 +61,7 @@ def start(config_manager: ConfigManager):
     if not t.press_enter_to_continue("continue "):
         console.print("Exiting program...", style="yellow")
         return
+    # execute_mpls()
     t.print_with_dots("Searching for project settings...")
     if config_manager.exists:
         t.print_with_dots("Configs file located. Loading...")

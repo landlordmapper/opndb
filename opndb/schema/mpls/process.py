@@ -237,8 +237,8 @@ class TaxpayersBusMerged(TaxpayerRecords):
         description="Boolean representing whether or not an LLC string pattern is identified in the cleaned taxpayer name"
     )
     uid: str = pa.Field(
-        nullable=False,
-        unique=True,
+        nullable=True,
+        unique=False,
         title="UID",
         description="Unique identifier for MNSOS business record matched with taxpayer name",
     )
