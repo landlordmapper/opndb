@@ -474,9 +474,6 @@ class WkflRawDataPrep(WorkflowStandardBase):
         }
         self.load_dfs(load_map)
 
-    def load_from_dfs(self, load_map: dict[str, dict[str, Any]]) -> None:
-        self.dfs_in = load_map
-
     # -----------------
     # ----VALIDATOR----
     # -----------------
@@ -3214,11 +3211,11 @@ class WkflFinalOutput(WorkflowStandardBase):
         return df_validated_addresses
 
     def execute_business_filings(self) -> pd.DataFrame:
-        df_bus_filings: pd.DataFrame = self.dfs_in["business_filings"]
+        df_bus_filings: pd.DataFrame = self.dfs_in["bus_filings"]
         return df_bus_filings
 
     def execute_business_names_addrs(self) -> pd.DataFrame:
-        df_bus_names_addrs: pd.DataFrame = self.dfs_in["business_names_addrs"][[
+        df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs_subsetted"][[
             "uid",
             "name_type",
             "address_type",
@@ -3310,11 +3307,11 @@ class WkflFinalOutput(WorkflowStandardBase):
                 "path": path_gen.processed_taxpayers_networked(configs),
                 "schema": None,
             },
-            "business_filings": {
+            "bus_filings": {
                 "path": path_gen.processed_bus_filings(configs),
                 "schema": None,
             },
-            "business_names_addrs": {
+            "bus_names_addrs_subsetted": {
                 "path": path_gen.processed_bus_names_addrs_subsetted(configs),
                 "schema": None,
             },
@@ -3336,8 +3333,8 @@ class WkflFinalOutput(WorkflowStandardBase):
     def validate(self) -> None:
         schema_map = {
             "taxpayers_networked": TaxpayersNetworked,
-            "business_filings": BusinessFilings,
-            "business_names_addrs": BusinessNamesAddrs,
+            "bus_filings": BusinessFilings,
+            "bus_names_addrs": BusinessNamesAddrs,
             "address_analysis": AddressAnalysis,
             "gcd_validated_formatted": GeocodioFormatted,
         }
@@ -3356,8 +3353,8 @@ class WkflFinalOutput(WorkflowStandardBase):
         self.dfs_out["entity_types"] = self.execute_entity_types()
         self.dfs_out["entities"] = self.execute_entities(df_researched)
         self.dfs_out["validated_addresses"] = self.execute_validated_addresses(df_researched)
-        self.dfs_out["business_filings"] = self.execute_business_filings()
-        self.dfs_out["business_names_addrs"] = self.execute_business_names_addrs()
+        self.dfs_out["bus_filings"] = self.execute_business_filings()
+        self.dfs_out["bus_names_addrs"] = self.execute_business_names_addrs()
         self.dfs_out["networks"] = self.execute_networks()
         self.dfs_out["taxpayer_records"] = self.execute_taxpayer_records()
 
