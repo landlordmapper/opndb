@@ -21,7 +21,8 @@ from opndb.schema.base.process import UnvalidatedAddrs, Geocodio, UnvalidatedAdd
 from opndb.schema.mpls.process import TaxpayerRecords, Properties, \
     TaxpayersStringMatched, TaxpayersSubsetted, TaxpayersPrepped, TaxpayersNetworked, TaxpayersBusMerged, \
     TaxpayersAddrMerged, BusinessNamesAddrsMerged, TaxpayersFixed, BusinessNamesAddrsSubsetted
-from opndb.schema.mpls.raw import PropsTaxpayers, BusinessFilings, BusinessNamesAddrs, BusinessRecordsBase
+from opndb.schema.mpls.raw import PropsTaxpayers, BusinessFilings, BusinessNamesAddrs, BusinessRecordsBase, \
+    PropsAddresses
 from opndb.services.summary_stats import SummaryStatsBase as ss, \
     SSFixUnitsInitial, SSFixUnitsFinal, SSAddressMerge, SSNameAnalysisInitial, SSAddressAnalysisInitial, \
     SSAnalysisFinal, SSStringMatch, SSNetworkGraph
@@ -33,7 +34,7 @@ from opndb.types.base import (
     NmslibOptions,
     NetworkMatchParams,
     GeocodioReturnObject, GeocodioResultProcessed, GeocodioResultFlat, CleanAddress,
-    StringMatchParamsMN,
+    StringMatchParamsMN, GeocodioResultFinal,
 )
 
 # 5. Utils (these should only depend on constants and types)
@@ -391,7 +392,7 @@ class WkflRawDataPrep(WorkflowStandardBase):
             "business_filing_status",
             "filing_date",
             "expiration_date",
-            "home_jurisdiction",
+            "hom ee_jurisdiction",
             "home_business_name",
             "is_llc_non_profit",
             "is_lllp",
@@ -447,6 +448,42 @@ class WkflRawDataPrep(WorkflowStandardBase):
 
         return df_bus1, df_bus3
 
+    def execute_props_addresses_pre_processing(self, df_addrs: pd.DataFrame) -> pd.DataFrame:
+        # pull out relevant columns
+        df_addrs = df_addrs[[
+            "PID",
+            "ANUMBER",
+            "ANUMBERSUF",  # A, B, C, D etc.
+            "ST_PRE_DIR",
+            "ST_NAME",
+            "ST_POS_TYP",  # street, avenue, lane, etc.
+            "ST_POS_DIR",
+            "SUB_AD_TYP",  # secondary unit
+            "SUB_AD_ID",  # secondary number
+            "MUNI_NAME",
+            "ZIP",
+        ]]
+        # rename columns to match schema
+        df_addrs.rename(columns={
+            "PID": "pin",
+            "ANUMBER": "number",
+            "ANUMBERSUF": "number_suffix",
+            "ST_PRE_DIR": "predirectional",
+            "ST_NAME": "street",
+            "ST_POS_TYP": "suffix",
+            "ST_POS_DIR": "postdirectional",
+            "SUB_AD_TYP": "secondaryunit",
+            "SUB_AD_ID": "secondarynumber",
+            "MUNI_NAME": "city",
+            "ZIP": "zip_code",
+        }, inplace=True)
+        # add column for state
+        df_addrs["state"] = "MN"
+        # drop rows where PIN is missing
+        df_addrs.dropna(subset=["pin"], inplace=True)
+        df_addrs.dropna(subset=["number"], inplace=True)
+        return df_addrs
+
     # --------------
     # ----LOADER----
     # --------------
@@ -468,6 +505,10 @@ class WkflRawDataPrep(WorkflowStandardBase):
             "mnsos_type3": {
                 "path": path_gen.pre_process_business_filings_3(configs),
                 "schema": None  # BusinessNamesAddrs
+            },
+            "props_addresses": {
+                "path": path_gen.pre_process_props_addresses(configs),
+                "schema": None  # PropsAddresses
             }
         }
         self.load_dfs(load_map)
@@ -494,6 +535,10 @@ class WkflRawDataPrep(WorkflowStandardBase):
         self.dfs_out["bus_filings"] = df_bus_1_out
         self.dfs_out["bus_names_addrs"] = df_bus_3_out
 
+        df_addrs: pd.DataFrame = self.dfs_in["props_addresses"].copy()
+        df_addrs_out = self.execute_props_addresses_pre_processing(df_addrs)
+        self.dfs_out["props_addresses"] = df_addrs_out
+
     # -------------------------------
     # ----SUMMARY STATS GENERATOR----
     # -------------------------------
@@ -509,6 +554,7 @@ class WkflRawDataPrep(WorkflowStandardBase):
             "props_taxpayers": path_gen.raw_props_taxpayers(configs),
             "bus_filings": path_gen.raw_bus_filings(configs),
             "bus_names_addrs": path_gen.raw_bus_names_addrs(configs),
+            "props_addresses": path_gen.raw_props_addresses(configs),
         }
         self.save_dfs(save_map)
 
@@ -547,6 +593,12 @@ class WkflDataClean(WorkflowStandardBase):
         # basic cleaning
         t.print_equals(f"Executing basic operations (all data columns)")
         cols: list[str] = PropsTaxpayers.basic_clean()
+        t.print_with_dots("Making all text uppercase")
+        df = clean_df_base.make_upper(df, cols)
+        t.print_with_dots("Trimming whitespace")
+        df = clean_df_base.trim_whitespace(df, cols)
+        t.print_with_dots("Removing extra spaces")
+        df = clean_df_base.remove_extra_spaces(df, cols)
         t.print_with_dots("Removing symbols and punctuation")
         df = clean_df_base.remove_symbols_punctuation(df, cols)
         t.print_with_dots("Handling LLCs")
@@ -661,6 +713,19 @@ class WkflDataClean(WorkflowStandardBase):
 
         return df_bus1, df_bus3
 
+    def execute_property_addresses_cleaning(self, df_addrs: pd.DataFrame) -> pd.DataFrame:
+        t.print_with_dots("Making all text uppercase")
+        df_addrs = clean_df_base.make_upper(df_addrs)
+        t.print_with_dots("Trimming whitespace")
+        df_addrs = clean_df_base.trim_whitespace(df_addrs)
+        t.print_with_dots("Removing extra spaces")
+        df_addrs = clean_df_base.remove_extra_spaces(df_addrs)
+        t.print_with_dots("Setting directionals to abbreviations")
+        df_addrs = clean_df_addr.fix_directionals(df_addrs, ["predirectional", "postdirectional"])
+        t.print_with_dots("Setting formatted address")
+        df_addrs = cols_df.set_formatted_address_v0(df_addrs)
+        return df_addrs
+
     # --------------
     # ----LOADER----
     # --------------
@@ -679,6 +744,10 @@ class WkflDataClean(WorkflowStandardBase):
                 "path": path_gen.raw_bus_names_addrs(configs),
                 "schema": BusinessNamesAddrs,
                 "recursive_bools": True
+            },
+            "props_addresses": {
+                "path": path_gen.raw_props_addresses(configs),
+                "schema": PropsAddresses,
             }
         }
         self.load_dfs(load_map)
@@ -691,6 +760,7 @@ class WkflDataClean(WorkflowStandardBase):
             "props_taxpayers": PropsTaxpayers,
             "bus_filings": BusinessFilings,
             "bus_names_addrs": BusinessNamesAddrs,
+            "props_addresses": PropsAddresses
         }
         for id, df in self.dfs_in.items():
             self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
@@ -712,6 +782,11 @@ class WkflDataClean(WorkflowStandardBase):
         self.dfs_out["bus_filings"] = df_filings
         self.dfs_out["bus_names_addrs"] = df_names_addrs
 
+        # property addresses
+        df_addrs: pd.DataFrame = self.dfs_in["props_addresses"].copy()
+        df_addrs_out = self.execute_property_addresses_cleaning(df_addrs)
+        self.dfs_out["property_addresses"] = df_addrs_out
+
     # -------------------------------
     # ----SUMMARY STATS GENERATOR----
     # -------------------------------
@@ -728,6 +803,7 @@ class WkflDataClean(WorkflowStandardBase):
             "taxpayer_records": path_gen.processed_taxpayer_records(configs),
             "bus_filings": path_gen.processed_bus_filings(configs),
             "bus_names_addrs": path_gen.processed_bus_names_addrs(configs),
+            "property_addresses": path_gen.processed_property_addresses(configs),
         }
         self.save_dfs(save_map)
 
@@ -1121,6 +1197,175 @@ class WkflValidatedAddrs(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    def execute_geocodio_partial_concatenator(self) -> pd.DataFrame:
+        partials_path: Path = Path(self.config_manager.configs["data_root"]) / "geocodio" / "partials"
+        dfs: list[pd.DataFrame] = []
+        for file in partials_path.iterdir():
+            if file.is_file() and file.suffix == ".csv":
+                df = pd.read_csv(file, dtype=str)
+                dfs.append(df)
+        df_results = pd.concat(dfs, ignore_index=True)
+        return df_results
+
+    def execute_gcd_results_processor(self, df_results: pd.DataFrame) -> pd.DataFrame:
+        # fetch list of unique addresses to iterate over
+        clean_addrs: list[str] = list(df_results["clean_address"].unique())
+        grouped: DataFrameGroupBy = df_results.groupby("clean_address")
+        # run all geocodio partials through filters
+        validated: list[GeocodioResultFinal] = []
+        with Progress(
+            SpinnerColumn(), TextColumn("[bold blue]{task.description}"), BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%", "•", TimeElapsedColumn(), "•",
+            TimeRemainingColumn(), "•", TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+        ) as progress:
+            geocodio_task = progress.add_task(
+                "[yellow]Processing Geocodio API call results...", total=len(clean_addrs), processed=0,
+            )
+            processed_count = 0
+            for addr in clean_addrs:
+                group = grouped.get_group(addr).reset_index(drop=True)
+                flattened_results: list[GeocodioResultFlat] = []
+                clean_addr_row: pd.Series = self.dfs_in["unvalidated_addrs"].loc[
+                    self.dfs_in["unvalidated_addrs"]["clean_address"] == addr
+                ].iloc[0]
+                clean_address: CleanAddress = AddressBase.build_clean_address_object(clean_addr_row)
+                for i, row in group.iterrows():
+                    flattened_results.append(row.to_dict())
+                results_processed: GeocodioResultProcessed = AddressBase.process_geocodio_results(
+                    clean_address,
+                    flattened_results
+                )
+                if len(results_processed["results_parsed"]) == 1:
+                    new_validated = results_processed["results_parsed"][0]
+                    if pd.isnull(new_validated["number"]) or new_validated["number"] == "":
+                        continue
+                    else:
+                        new_validated["clean_address"] = row["clean_address"]
+                        validated.append(new_validated)
+                processed_count += 1
+                progress.update(
+                    geocodio_task, advance=1, processed=processed_count,
+                    description=f"[yellow]Processing address {processed_count}/{len(clean_addrs)}"
+                )
+        df_validated: pd.DataFrame = pd.DataFrame(validated)
+        return df_validated
+
+    def execute_gcd_results_string_match(self, df_results: pd.DataFrame, df_validated: pd.DataFrame) -> pd.DataFrame:
+        # run all non-filtered addresses through string matcher
+        t.print_with_dots("Executing string matching for geocodio results")
+        validated_addrs: list[str] = list(df_validated["clean_address"].unique())
+        df_unvalidated: pd.DataFrame = df_validated[~df_results["clean_address"].isin(validated_addrs)]
+        df_unvalidated = df_unvalidated.dropna(subset=["number"])
+        ref_docs: list[str] = list(df_unvalidated["formatted_address"].dropna().unique())
+        console.print("REF DOC COUNT:", len(ref_docs))
+        query_docs: list[str] = list(df_unvalidated["clean_address"].dropna().unique())
+        console.print("QUERY DOC COUNT:", len(query_docs))
+        df_string_matches: pd.DataFrame = StringMatch.match_strings(
+            ref_docs,
+            query_docs,
+            params={
+                "name_col": None,
+                "match_threshold": .7,
+                "include_unvalidated": True,
+                "include_unresearched": False,
+                "include_orgs": False,
+                "nmslib_opts": {
+                    "method": "hnsw",
+                    "space": "cosinesimil_sparse_fast",
+                    "data_type": nmslib.DataType.SPARSE_VECTOR
+                },
+                "query_batch_opts": {
+                    "num_threads": 8,
+                    "K": 1
+                }
+            }
+        )
+        df_merged: pd.DataFrame = pd.merge(
+            df_string_matches,
+            df_unvalidated,
+            how="left",
+            left_on="matched_doc",
+            right_on="formatted_address",
+        )
+        df_merged.drop_duplicates(subset=["original_doc"], inplace=True)
+        df_merged["is_good_match_street"] = df_merged.apply(lambda row: cols_df.is_match_street(row), axis=1)
+        df_merged["is_good_match_zip"] = df_merged.apply(lambda row: cols_df.is_match_zip(row), axis=1)
+        df_merged["is_good_match_sec_num"] = df_merged.apply(lambda row: cols_df.is_match_secondary(row), axis=1)
+        df_valid_string = df_merged[
+            (df_merged["is_good_match_street"] == True) &
+            (df_merged["is_good_match_zip"] == True) &
+            (df_merged["is_good_match_sec_num"] != False)
+        ]
+        df_valid_string.drop(columns=[
+            "formatted_address",
+            "clean_address",
+            "conf",
+            "conf1",
+            "ldist",
+            "is_good_match_street",
+            "is_good_match_zip",
+            "is_good_match_sec_num",
+        ], inplace=True)
+        df_valid_string.rename(columns={
+            "original_doc": "clean_address",
+            "matched_doc": "formatted_address"
+        }, inplace=True)
+        df_validated = pd.concat([df_validated, df_valid_string], ignore_index=True)
+        return df_validated
+
+    def execute_address_fixers(
+        self,
+        df_fixing_addrs: pd.DataFrame,
+        df_fixing_addrs_analysis: pd.DataFrame,
+        df_validated: pd.DataFrame,
+    ) -> pd.DataFrame:
+        # add fixes to addresses from fixing_addrs and fixing_addrs_analysis
+        t.print_equals("Adding missing unit numbers to validated addresses")
+        total_addresses = len(df_fixing_addrs["clean_address"])
+        # Set up Rich progress display
+        with Progress(
+            SpinnerColumn(), TextColumn("[bold blue]{task.description}"), BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%", "•", TimeElapsedColumn(), "•", TimeRemainingColumn(),
+            "•", TextColumn("[bold cyan]{task.fields[processed]}/{task.total} addresses"),
+        ) as progress:
+            task = progress.add_task(
+                "[yellow]Fixing validated addresses...", total=total_addresses, processed=0,
+            )
+            processed_count = 0
+            for _, row in df_fixing_addrs.iterrows():  # todo: add progress bar
+                address: str = row["clean_address"]
+                mask = df_validated["clean_address"] == address
+                matching_indices = df_validated.index[mask]
+                df_validated.loc[matching_indices, "secondarynumber"] = row["secondarynumber"]
+                for idx in matching_indices:
+                    row_to_fix = df_validated.loc[idx]
+                    df_validated.loc[idx, "formatted_address"] = AddressBase.fix_formatted_address_unit(row_to_fix)
+                processed_count += 1
+                progress.update(
+                    task,
+                    advance=1,
+                    processed=processed_count,
+                    description=f"[yellow]Processing address {processed_count}/{total_addresses}"
+                )
+        # remove manually fixed address rows from validated master list
+        addrs_to_drop: list[str] = list(df_fixing_addrs_analysis["clean_address"].unique())
+        df_valid_dropped = df_validated[~df_validated["clean_address"].isin(addrs_to_drop)]
+        # concatenate fixed addresses to master list
+        df_valid_out = pd.concat([df_valid_dropped, df_fixing_addrs_analysis], ignore_index=True)
+        return df_valid_out
+
+    def execute_formatted_address_generators(self, df_valid_fixed: pd.DataFrame) -> pd.DataFrame:
+        # generate formatted_address_v
+        t.print_with_dots("Setting formatted_address_v1")
+        df_valid_fixed = cols_df.set_formatted_address_v1(df_valid_fixed)
+        t.print_with_dots("Setting formatted_address_v2")
+        df_valid_fixed = cols_df.set_formatted_address_v2(df_valid_fixed)
+        t.print_with_dots("Setting formatted_address_v3")
+        df_valid_fixed = cols_df.set_formatted_address_v3(df_valid_fixed)
+        t.print_with_dots("Setting formatted_address_v4")
+        df_valid_fixed = cols_df.set_formatted_address_v4(df_valid_fixed)
+        return df_valid_fixed
+
     # --------------
     # ----LOADER----
     # --------------
@@ -1153,12 +1398,23 @@ class WkflValidatedAddrs(WorkflowStandardBase):
     # ----PROCESSOR----
     # -----------------
     def process(self) -> None:
-        # run all geocodio partials through filters
-        # run all non-filtered addresses through string matcher
-        # add fixes to addresses from fixing_addrs and fixing_addrs_analysis
-        # generate formatted address columns v1-v4
-        # set output df
-        pass
+        # copy dfs
+        df_fixing_addrs: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
+        df_fixing_addrs_analysis: pd.DataFrame = self.dfs_in["fixing_addrs_analysis"].copy()
+        # set df containing all geocodio results
+        df_results: pd.DataFrame = self.execute_geocodio_partial_concatenator()
+        # get initial validated df
+        df_validated: pd.DataFrame = self.execute_gcd_results_processor(df_results)
+        # get string matches and concatenate
+        df_validated_string: pd.DataFrame = self.execute_gcd_results_string_match(df_results, df_validated)
+        # manually fixed addresses
+        df_valid_fixed: pd.DataFrame = self.execute_address_fixers(
+            df_fixing_addrs, df_fixing_addrs_analysis, df_validated_string
+        )
+        # set formatted addresses
+        df_valid_out = self.execute_formatted_address_generators(df_valid_fixed)
+        # set out dfs
+        self.dfs_out["validated_addrs"] = df_valid_out
 
     # -------------------------------
     # ----SUMMARY STATS GENERATOR----
@@ -1405,33 +1661,61 @@ class WkflRentalSubset(WorkflowStandardBase):
         "2 UNIT RESIDENTIAL",
         "3 UNIT RESIDENTIAL",
         "APARTMENT",
-        "COMMERCIAL",
-        "VACANT LAND - RESIDENTIAL"
+        "VACANT LAND - RESIDENTIAL",
+        "CONDOMINIUM",
+        "COOPERATIVE",
+        "RES - ZERO LOT LINE",
+        "RESIDENTIAL",  # filter out property address == taxpayer address
+        "RESIDENTIAL LAKE SHORE",
+        "RESIDENTIAL MISC",
+        "TOWNHOUSE",
+        "VACANT LAND - APARTMENT",
+        "VACANT LAND - COMMERCIAL",
+        "VACANT LAND - INDUSTRIAL",
+        "VACANT LAND - LAKESHORE",
+        "VACANT LAND - RESIDENTIAL",
     ]
     LAND_USES: list[str] = [
+        "1 UNIT RESIDENTIAL - CARRIAGE HOUSE",
+        "1 UNIT RESIDENTIAL - CONDOMINIUM",
+        "1 UNIT RESIDENTIAL - SINGLE FAMILY HOUSE",
+        "1 UNIT RESIDENTIAL - TOWNHOUSE",
+        "1 UNIT RESIDENTIAL - ZERO LOT LINE",
+        "2 UNIT RESIDENTIAL - CONDOMINIUM",
         "2 UNIT RESIDENTIAL - DUPLEX",
         "2 UNIT RESIDENTIAL - SF HOUSE AND ADU",
         "2 UNIT RESIDENTIAL - SF HOUSE AND CARRIAGE HOUSE",
         "2 UNIT RESIDENTIAL - TWO HOUSES",
         "3 UNIT RESIDENTIAL - DUPLEX AND ADU",
+        "3 UNIT RESIDENTIAL - DUPLEX AND CARRIAGE HOUSE",
         "3 UNIT RESIDENTIAL - DUPLEX AND SF HOUSE",
         "3 UNIT RESIDENTIAL - TRIPLEX",
-        "MIXED OFFICE, RETAIL, RESIDENTIAL, ETC",
         "MULTI - FAMILY APARTMENT",
         "MULTI - FAMILY RESIDENTIAL",
-        "OFFICE STRUCTURE",
         "VACANT"
     ]
     BUILDING_USES: list[str] = [
         "APARTMENT 4 OR 5 UNIT",
+        "APARTMENT 6+ UNIT",
         "APARTMENT CONVERTED",
         "BAR / FOOD / REST.W RES",
         "BOARDING OR LODGING",
-        "COMMERCIAL",
+        "COM CONV W 1 - 3 UNIT RES",
+        "COM CONV W 4UP APTS",
+        "COM ORIG W 1 - 3 UNIT RES",
+        "COM ORIG W 4UP APTS",
+        "DBL DWLG IN STOREFRONT",
+        "INDUSTRIAL CONDO.",
+        "OFFICES & APTS.",
+        "SINGLE FAM.DWLG.",
+        "SINGLE FAMILY HOUSE",
+        "ROW HOUSE",
+        "TENEMENT",
         "DUPLEX",
         "DUPLEX W / ADU",
         "GROUP HOME",
-        "TRIPLEX"
+        "TRIPLEX",
+        "SECOND RES BUILDING"
     ]
 
     def __init__(self, config_manager: ConfigManager):
@@ -1955,92 +2239,92 @@ class WkflNetworkGraph(WorkflowStandardBase):
             "string_matched_name_106"
         ]
         # loop through unique combinations of param matrix options
-        # for i, params in enumerate(product(
-        #     taxpayer_name_col,
-        #     unvalidated_options,
-        #     unresearched_options,
-        #     org_options,
-        #     missing_suite_options,
-        #     problem_suite_options,
-        #     address_suffix,
-        #     string_match_names
-        # )):
-            # if params[6] == "v2" and params[4] == False:
-            #     continue
-            # if params[6] == "v4" and params[4] == False:
-            #     continue
-            # self.params_matrix.append({
-            #     "taxpayer_name_col": params[0],
-            #     "include_unvalidated": params[1],
-            #     "include_unresearched": params[2],
-            #     "include_orgs": params[3],
-            #     "include_missing_suites": params[4],
-            #     "include_problem_suites": params[5],
-            #     "address_suffix": params[6],
-            #     "string_match_name": params[7],
-            # })
-        self.params_matrix = [
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v1",
-                "string_match_name": "string_matched_name_1",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v2",
-                "string_match_name": "string_matched_name_1",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": False,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v4",
-                "string_match_name": "string_matched_name_2",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v1",
-                "string_match_name": "string_matched_name_2",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v2",
-                "string_match_name": "string_matched_name_3",
-            },
-            {
-                "taxpayer_name_col": "clean_name",
-                "include_unvalidated": False,
-                "include_unresearched": True,
-                "include_orgs": False,
-                "include_missing_suites": True,
-                "include_problem_suites": True,
-                "address_suffix": "v4",
-                "string_match_name": "string_matched_name_3",
-            },
-        ]
+        for i, params in enumerate(product(
+            taxpayer_name_col,
+            unvalidated_options,
+            unresearched_options,
+            org_options,
+            missing_suite_options,
+            problem_suite_options,
+            address_suffix,
+            string_match_names
+        )):
+            if params[6] == "v2" and params[4] == False:
+                continue
+            if params[6] == "v4" and params[4] == False:
+                continue
+            self.params_matrix.append({
+                "taxpayer_name_col": params[0],
+                "include_unvalidated": params[1],
+                "include_unresearched": params[2],
+                "include_orgs": params[3],
+                "include_missing_suites": params[4],
+                "include_problem_suites": params[5],
+                "address_suffix": params[6],
+                "string_match_name": params[7],
+            })
+        # self.params_matrix = [
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v1",
+        #         "string_match_name": "string_matched_name_1",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v2",
+        #         "string_match_name": "string_matched_name_1",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": False,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v4",
+        #         "string_match_name": "string_matched_name_2",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": True,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v1",
+        #         "string_match_name": "string_matched_name_2",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": True,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v2",
+        #         "string_match_name": "string_matched_name_3",
+        #     },
+        #     {
+        #         "taxpayer_name_col": "clean_name",
+        #         "include_unvalidated": False,
+        #         "include_unresearched": True,
+        #         "include_orgs": False,
+        #         "include_missing_suites": True,
+        #         "include_problem_suites": True,
+        #         "address_suffix": "v4",
+        #         "string_match_name": "string_matched_name_3",
+        #     },
+        # ]
 
     def execute_network_graph_generator(self, df_taxpayers: pd.DataFrame, df_bus: pd.DataFrame) -> pd.DataFrame:
         for i, params in enumerate(self.params_matrix):

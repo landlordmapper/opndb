@@ -29,10 +29,12 @@ class PreProcess(FileNames):
     BUSINESS_FILINGS_1: str = "mnsosdat_type1"
     BUSINESS_FILINGS_3: str = "mnsosdat_type3"
     RENTAL_LICENSES: str = "Active_Rental_Licenses"
+    PROPS_ADDRESSES: str = "Address_Points"
 
 class Raw(FileNames):
     """Raw input files, saved after running initial validation checks."""
     PROPS_TAXPAYERS: str = "props_taxpayers"
+    PROPS_ADDRESSES: str = "props_addresses"
     CORPS: str = "corps"
     LLCS: str = "llcs"
     CLASS_CODES: str = "class_codes"
@@ -60,6 +62,7 @@ class Processed(FileNames):
     PROPERTIES_RENTALS: str = "properties_rentals"
     BUS_FILINGS: str = "bus_filings"
     BUS_NAMES_ADDRS: str = "bus_names_addrs"
+    PROPERTY_ADDRESSES: str = "property_addresses"
     CORPS: str = "corps"
     LLCS: str = "llcs"
     CLASS_CODES: str = "class_codes"

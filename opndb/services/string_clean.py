@@ -407,6 +407,21 @@ class CleanStringName(CleanStringBase):
 
 class CleanStringAddress(CleanStringBase):
 
+    DIRECTIONAL_MAP: dict[str, str] = {
+        "NORTH": "N",
+        "SOUTH": "S",
+        "WEST": "W",
+        "EAST": "E",
+        "NORTHEAST": "NE",
+        "NORTHWEST": "NW",
+        "SOUTHEAST": "SE",
+        "SOUTHWEST": "SW",
+        "NORTH EAST": "NE",
+        "NORTH WEST": "NW",
+        "SOUTH EAST": "SE",
+        "SOUTH WEST": "SW",
+    }
+
     @classmethod
     @safe_string_cleaner
     def convert_nsew(cls, text: str) -> str:
@@ -530,6 +545,12 @@ class CleanStringAddress(CleanStringBase):
     def fix_mpls(cls, text: str) -> str:
         return text.replace("MPLS", "MINNEAPOLIS").replace("MNPLS", "MINNEAPOLIS")
 
+    @classmethod
+    @safe_string_cleaner
+    def fix_directionals(cls, text: str) -> str:
+        if text in cls.DIRECTIONAL_MAP.keys():
+            return cls.DIRECTIONAL_MAP[text]
+        return text
 
 
 class CleanStringAccuracy(CleanStringBase):

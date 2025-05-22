@@ -316,6 +316,10 @@ class DataFrameAddressCleaners(DataFrameCleaners):
     def fix_mpls(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
         return cls.apply_string_cleaner(df, clean_addr.fix_mpls, cols)
 
+    @classmethod
+    def fix_directionals(cls, df: pd.DataFrame, cols: list[str] | None = None) -> pd.DataFrame:
+        return cls.apply_string_cleaner(df, clean_addr.fix_directionals, cols)
+
 
 
 class DataFrameCleanersAccuracy(DataFrameCleaners):

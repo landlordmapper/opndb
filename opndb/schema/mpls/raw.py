@@ -148,6 +148,81 @@ class PropsTaxpayers(OPNDFModel):
     )
 
 
+class PropsAddresses(OPNDFModel):
+    pin: str = pa.Field(
+        title="PIN",
+        description="Unique tax identifier for property",
+        nullable=False,
+        unique=False,
+    )
+    number: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Number",
+        description="",
+    )
+    number_suffix: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Number Suffix",
+        description="",
+    )
+    predirectional: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Predirectional",
+        description="",
+    )
+    street: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Street Name",
+        description="",
+    )
+    suffix: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Street Suffix",
+        description="",
+    )
+    postdirectional: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Postdirectional",
+        description="",
+    )
+    secondaryunit: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Secondary Unit",
+        description="",
+    )
+    secondarynumber: str = pa.Field(
+        nullable=True,
+        unique=False,
+        title="Secondary Number",
+        description="",
+    )
+    city: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="City",
+        description="",
+    )
+    state: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="State",
+        description="",
+    )
+    zip_code: str = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Zip Code",
+        description="",
+    )
+
+
 class BusinessRecordsBase(OPNDFModel):
 
     _MN_STATE_FIXER: dict[str, str] = {

@@ -200,6 +200,15 @@ class PathGenerators(UtilsBase):
             PreProcess.RENTAL_LICENSES,
             configs["load_ext"]
         )
+    @classmethod
+    def pre_process_props_addresses(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/pre_process/taxpayers_city[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PRE_PROCESS,
+            PreProcess.PROPS_ADDRESSES,
+            configs["load_ext"]
+        )
 
     # -----------
     # ----RAW----
@@ -258,6 +267,15 @@ class PathGenerators(UtilsBase):
             Raw.BUS_NAMES_ADDRS,
             configs["load_ext"]
         )
+    @classmethod
+    def raw_props_addresses(cls, configs: WorkflowConfigs) -> Path:
+        """:returns: ROOT/raw/business_filings_1[ext]"""
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.RAW,
+            Raw.PROPS_ADDRESSES,
+            configs["load_ext"]
+        )
 
     # -----------------
     # ----PROCESSED----
@@ -303,6 +321,14 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.PROCESSED,
             Processed.BUS_NAMES_ADDRS,
+            configs["load_ext"]
+        )
+    @classmethod
+    def processed_property_addresses(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.PROCESSED,
+            Processed.PROPERTY_ADDRESSES,
             configs["load_ext"]
         )
     @classmethod

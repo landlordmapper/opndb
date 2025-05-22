@@ -45,7 +45,7 @@ class ValidatedAddresses(OPNDFModel):
     city: str = pa.Field()
     county: str = pa.Field()
     state: str = pa.Field()
-    zip: str = pa.Field()
+    zip_code: str = pa.Field()
     country: str = pa.Field()
     lng: str = pa.Field()
     lat: str = pa.Field()

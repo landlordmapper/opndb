@@ -307,6 +307,11 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
         return df[df["is_pobox"] == False]
 
     @classmethod
+    def set_formatted_address_v0(cls, df: pd.DataFrame) -> pd.DataFrame:
+        df["formatted_address"] = df.apply(lambda row: addr.get_formatted_address_v0(row), axis=1)
+        return df
+
+    @classmethod
     def set_formatted_address_v1(cls, df: pd.DataFrame) -> pd.DataFrame:
         df["formatted_address_v1"] = df.apply(lambda row: addr.get_formatted_address_v1(row), axis=1)
         return df
@@ -575,7 +580,6 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
             return False
         df["is_unit_gte_1"] = df["num_units"].apply(lambda unit: is_gte_1(unit))
         return df
-
 
 
 class DataFrameColumnManipulators(DataFrameOpsBase):

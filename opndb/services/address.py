@@ -830,6 +830,29 @@ class AddressBase:
                 return raw_addr_fixed
 
     @classmethod
+    def get_formatted_address_v0(cls, row: pd.Series) -> str:
+        """Returns complete formatted address with no omissions"""
+        addr_out: str = row["number"]
+        if pd.notna(row["number_suffix"]):
+            addr_out += f" {row['number_suffix']}"
+        if pd.notna(row["predirectional"]):
+            addr_out += f" {row['predirectional']}"
+        addr_out += f" {row['street']}"
+        if pd.notna(row["suffix"]):
+            addr_out += f" {row['suffix']}"
+        if pd.notna(row["postdirectional"]):
+            addr_out += f" {row['postdirectional']}"
+        addr_out += ","
+        if pd.notna(row["secondaryunit"]) and pd.notna(row["secondarynumber"]):
+            addr_out += f" {row['secondaryunit']} {row['secondarynumber']},"
+        elif pd.notna(row["secondarynumber"]):
+            addr_out += f" {row['secondarynumber']},"
+        addr_out += f" {row['city']}"
+        addr_out += ","
+        addr_out += f" {row['state']} {row['zip_code']}"
+        return addr_out
+
+    @classmethod
     def get_formatted_address_v1(cls, row: pd.Series) -> str:
         """
         Returns complete formatted address, omitting only suite number prefixes (STE, APT, UNIT, etc.)
@@ -858,7 +881,7 @@ class AddressBase:
 
         addr_out += f" {row['city']}"
         addr_out += ","
-        addr_out += f" {row['state']} {row['zip']}"
+        addr_out += f" {row['state']} {row['zip_code']}"
 
         return addr_out.replace("  ", " ")
 
@@ -889,7 +912,7 @@ class AddressBase:
 
         addr_out += f" {row['city']}"
         addr_out += ","
-        addr_out += f" {row['state']} {row['zip']}"
+        addr_out += f" {row['state']} {row['zip_code']}"
 
         return addr_out.replace("  ", " ")
 
@@ -918,7 +941,7 @@ class AddressBase:
 
         addr_out += f" {row['city']}"
         addr_out += ","
-        addr_out += f" {row['state']} {row['zip']}"
+        addr_out += f" {row['state']} {row['zip_code']}"
 
         return addr_out.replace("  ", " ")
 
@@ -945,7 +968,7 @@ class AddressBase:
 
         addr_out += f" {row['city']}"
         addr_out += ","
-        addr_out += f" {row['state']} {row['zip']}"
+        addr_out += f" {row['state']} {row['zip_code']}"
 
         return addr_out.replace("  ", " ")
 
