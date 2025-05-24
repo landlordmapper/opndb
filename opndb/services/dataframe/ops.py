@@ -15,7 +15,7 @@ from opndb.constants.columns import (
 )
 from opndb.services.address import AddressBase as addr, AddressBase
 from opndb.services.dataframe.base import DataFrameOpsBase
-from opndb.services.match import MatchBase
+from opndb.services.match import MatchBase, StringMatch
 from opndb.services.string_clean import (
     CleanStringBase as clean_base,
     CleanStringName as clean_name,
@@ -96,6 +96,26 @@ class DataFrameMergers(DataFrameOpsBase):
             "formatted_address_v4": f"{addr_col}_v4",
         }, inplace=True)
         return df_merged
+
+    @classmethod
+    def merge_proptax_match(
+        cls,
+        df_taxpayers: pd.DataFrame,
+        df_props: pd.DataFrame,
+        df_prop_addrs: pd.DataFrame,
+        df_valid_addrs: pd.DataFrame,
+    ) -> pd.DataFrame:
+        df_props_addrs = pd.merge(df_props, df_prop_addrs, how="left", on="pin")
+        df_props_addrs_taxpayers = pd.merge(df_props_addrs, df_taxpayers, how="left", on="raw_name_address")
+        df_merge_final = pd.merge(
+            df_props_addrs_taxpayers,
+            df_valid_addrs,
+            how="left",
+            left_on="clean_address",
+            right_on="clean_address_validated"
+        )
+        df_merge_final.drop_duplicates(subset="pin", inplace=True)
+        return df_merge_final
 
 
 class DataFrameColumnGenerators(DataFrameOpsBase):
@@ -579,6 +599,84 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
                 return val_int > 1
             return False
         df["is_unit_gte_1"] = df["num_units"].apply(lambda unit: is_gte_1(unit))
+        return df
+
+    @classmethod
+    def set_is_match_number_street_zip(cls, df: pd.DataFrame) -> pd.DataFrame:
+        def get_is_match_number_street_zip(row: pd.Series) -> bool:
+            prop_number = row["number"]
+            prop_street = row["street"]
+            prop_zip = row["zip_code"]
+            if pd.notnull(row["clean_address_v1"]):
+                tax_number = row["number_validated"]
+                tax_street = row["street_validated"]
+                tax_zip = row["zip_code_validated"]
+            else:
+                tax_addr = row["clean_address"].split()
+                tax_number = tax_addr[0]
+                tax_street = tax_addr[1]
+                tax_zip = tax_addr[-1]
+            if prop_number != tax_number:
+                return False
+            elif prop_street != tax_street:
+                return False
+            elif tax_zip != prop_zip:
+                return False
+            else:
+                return True
+        df["is_match_number_street_zip"] = df.apply(lambda row: get_is_match_number_street_zip(row), axis=1)
+        return df
+
+    @classmethod
+    def set_is_match_number_zip(cls, df: pd.DataFrame) -> pd.DataFrame:
+        def get_is_match_number_zip(row: pd.Series) -> bool | float:
+            if row["is_match_number_street_zip"] == True:
+                return np.nan
+            prop_number = row["number"]
+            prop_zip = row["zip_code"]
+            if pd.notnull(row["clean_address_v1"]):
+                tax_number = row["number_validated"]
+                tax_zip = row["zip_validated"]
+            else:
+                tax_addr = row["clean_address"].split()
+                tax_number = tax_addr[0]
+                tax_zip = tax_addr[-1]
+            if prop_number != tax_number:
+                return False
+            elif tax_zip != prop_zip:
+                return False
+            else:
+                return True
+        df["is_match_number_zip"] = df.apply(lambda row: get_is_match_number_zip(row), axis=1)
+        return df
+
+    @classmethod
+    def set_match_conf(cls, df: pd.DataFrame) -> pd.DataFrame:
+        def get_match_conf(row: pd.Series) -> str | float:
+            if row["is_match_number_street_zip"] == True:
+                return np.nan
+            # address missing for that property - can't check similarity with tax address
+            if pd.isnull(row["formatted_address"]):
+                return np.nan
+            # if it's not a number or zip match, it's definitively not a match
+            if row["is_match_number_zip"] == False:
+                return np.nan
+            if pd.notnull(row["clean_address_v1"]):
+                return StringMatch.test_string_similarity(row["clean_address_v1"], row["formatted_address"])
+            else:
+                return StringMatch.test_string_similarity(row["clean_address"], row["formatted_address"])
+        df["match_conf"] = df.apply(lambda row: get_match_conf(row), axis=1)
+        return df
+
+    @classmethod
+    def set_is_match(cls, df: pd.DataFrame) -> pd.DataFrame:
+        def get_is_match(row: pd.Series) -> bool:
+            if row["is_match_number_street_zip"] == True:
+                return True
+            if row["is_match_number_zip"] == True and row["match_conf"] > .9:
+                return True
+            return False
+        df["is_match"] = df.apply(lambda row: get_is_match(row), axis=1)
         return df
 
 

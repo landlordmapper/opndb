@@ -20,7 +20,7 @@ from opndb.schema.base.process import UnvalidatedAddrs, Geocodio, UnvalidatedAdd
     AddressAnalysis, FrequentTaxNames, GeocodioFormatted
 from opndb.schema.mpls.process import TaxpayerRecords, Properties, \
     TaxpayersStringMatched, TaxpayersSubsetted, TaxpayersPrepped, TaxpayersNetworked, TaxpayersBusMerged, \
-    TaxpayersAddrMerged, BusinessNamesAddrsMerged, TaxpayersFixed, BusinessNamesAddrsSubsetted
+    TaxpayersAddrMerged, BusinessNamesAddrsMerged, TaxpayersFixed, BusinessNamesAddrsSubsetted, PropertyAddresses
 from opndb.schema.mpls.raw import PropsTaxpayers, BusinessFilings, BusinessNamesAddrs, BusinessRecordsBase, \
     PropsAddresses
 from opndb.services.summary_stats import SummaryStatsBase as ss, \
@@ -1722,6 +1722,27 @@ class WkflRentalSubset(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    def execute_proptax_address_matcher(
+        self,
+        df_taxpayers: pd.DataFrame,
+        df_props: pd.DataFrame,
+        df_prop_addrs: pd.DataFrame,
+        df_valid_addrs: pd.DataFrame,
+    ) -> pd.DataFrame:
+        # rename validated address columns
+        for col in df_valid_addrs.columns:
+            df_valid_addrs.rename(columns={col: f"{col}_validated"}, inplace=True)
+        # execute merges
+        df_merged: pd.DataFrame = merge_df.merge_proptax_match(df_taxpayers, df_props, df_prop_addrs, df_valid_addrs)
+        # add boolean cols
+        df_merged = cols_df.set_is_match_number_street_zip(df_merged)
+        df_merged = cols_df.set_is_match_number_zip(df_merged)
+        df_merged = cols_df.set_match_conf(df_merged)
+        df_merged = cols_df.set_is_match(df_merged)
+        df_props_out = pd.merge(df_props, df_merged[["pin", "is_match"]], how="left", on="pin")
+        df_props_out.drop_duplicates(subset=["pin"], inplace=True)
+        return df_props_out
+
     # --------------
     # ----LOADER----
     # --------------
@@ -1744,6 +1765,10 @@ class WkflRentalSubset(WorkflowStandardBase):
             "address_analysis": {
                 "path": path_gen.analysis_address_analysis(configs),
                 "schema": AddressAnalysis,
+            },
+            "property_addresses": {
+                "path": path_gen.processed_property_addresses(configs),
+                "schema": PropertyAddresses,
             }
         }
         self.load_dfs(load_map)
@@ -1771,6 +1796,12 @@ class WkflRentalSubset(WorkflowStandardBase):
         df_props: pd.DataFrame = self.dfs_in["properties"].copy()
         df_lic: pd.DataFrame = self.dfs_in["rental_licenses"].copy()
         df_analysis: pd.DataFrame = self.dfs_in["address_analysis"].copy()
+        df_prop_addrs: pd.DataFrame = self.dfs_in["property_addresses"].copy()
+        df_valid_addrs: pd.DataFrame = self.dfs_in["validated_addrs"].copy()
+
+        t.print_with_dots("Adding taxpayer/property address simliarty boolean column")
+        df_props = self.execute_proptax_address_matcher(df_taxpayers, df_props, df_prop_addrs, df_valid_addrs)
+
         t.print_with_dots("Fetching property pins for rental property subset of taxpayer data")
         # 1. subset by rental licenses
         license_pins: list[str] = list(df_lic["apn"].dropna().unique())

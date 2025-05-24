@@ -184,31 +184,38 @@ class StringMatch(MatchBase):
         return [''.join(ngram) for ngram in ngrams]
 
     @classmethod
-    def match_entities(cls):
-        return
-
-    @classmethod
-    def match_strings(cls, ref_docs: list[str], query_docs: list[str], params: StringMatchParams):
+    def match_strings(
+        cls,
+        ref_docs: list[str],
+        query_docs: list[str],
+        params: StringMatchParams,
+        log_progress: bool = True
+    ):
         """
         Executes string matching for documents passed as parameters. Returns dataframe of 'good matches', i.e. matches
         that fall within the threshold set in the params object.
         """
-        t.print_with_dots("Initializing vectorizer")
+        if log_progress:
+            t.print_with_dots("Initializing vectorizer")
         vectorizer = TfidfVectorizer(min_df=1, analyzer=cls.ngrams)
-        t.print_with_dots("Generating matrix")
+        if log_progress:
+            t.print_with_dots("Generating matrix")
         tf_idf_matrix = vectorizer.fit_transform(ref_docs)
         messy_tf_idf_matrix = vectorizer.transform(query_docs)
         data_matrix = tf_idf_matrix
-        t.print_with_dots("Initializing HNSW index")
+        if log_progress:
+            t.print_with_dots("Initializing HNSW index")
         index = nmslib.init(
             method=params["nmslib_opts"]["method"],
             space=params["nmslib_opts"]["space"],
             data_type=params["nmslib_opts"]["data_type"]
         )
-        t.print_with_dots("Adding data to index")
+        if log_progress:
+            t.print_with_dots("Adding data to index")
         index.addDataPointBatch(data_matrix)
         index.createIndex()
-        t.print_with_dots("Executing query")
+        if log_progress:
+            t.print_with_dots("Executing query")
         query_matrix = messy_tf_idf_matrix
         nbrs = index.knnQueryBatch(
             query_matrix,
@@ -228,16 +235,67 @@ class StringMatch(MatchBase):
                 mts.append([original_nm, matched_nm, conf])
         df_matches = pd.DataFrame(mts,columns=["original_doc", "matched_doc", "conf"])
         df_matches["ldist"] = df_matches[["matched_doc", "original_doc"]].apply(
-            lambda x: lev.distance(x[0], x[1]), axis=1
+            lambda x: lev.distance(x.iloc[0], x.iloc[1]), axis=1
         )
         df_matches["conf1"] = 1 - df_matches["conf"]
         if params["match_threshold"] is not None:
             df_good_matches = df_matches[(df_matches["ldist"] > 0) & (df_matches["conf1"] > params["match_threshold"]) & (df_matches["conf1"] < 1)].sort_values(by=["conf1"])
-            console.print("String matching complete ✅")
+            if log_progress:
+                console.print("String matching complete ✅")
             return df_good_matches  # does this return duplicates? like if there are multiple matches above the threshhold it needs to pick the highest one, NOT include all of them
         else:
-            console.print("String matching complete ✅")
+            if log_progress:
+                console.print("String matching complete ✅")
             return df_matches
+
+    @classmethod
+    def test_string_similarity(
+        cls,
+        str1: str,
+        str2: str,
+        ngram_size: int = 3,
+        nmslib_method: str = "hnsw",
+        nmslib_space: str = "cosinesimil_sparse_fast",
+        match_threshold: float = 0.0
+    ) -> float:
+        """
+        Computes the ldist and conf1 similarity metrics between two strings.
+
+        Args:
+            str1 (str): First string.
+            str2 (str): Second string.
+            ngram_size (int): Size of the n-grams to use.
+            nmslib_method (str): Method for nmslib index.
+            nmslib_space (str): Space type for nmslib index.
+            match_threshold (float): Threshold for minimum confidence. Optional, default returns all matches.
+
+        Returns:
+            dict: Dictionary with keys 'ldist' and 'conf1'.
+        """
+        params = {
+            "name_col": None,
+            "match_threshold": match_threshold,
+            "include_unvalidated": True,
+            "include_unresearched": False,
+            "include_orgs": False,
+            "nmslib_opts": {
+                "method": nmslib_method,
+                "space": nmslib_space,
+                "data_type": nmslib.DataType.SPARSE_VECTOR
+            },
+            "query_batch_opts": {
+                "num_threads": 1,
+                "K": 1
+            }
+        }
+
+        result_df = cls.match_strings([str1], [str2], params)
+
+        if result_df.empty:
+            return np.nan
+
+        row = result_df.iloc[0]
+        return row["conf1"]
 
 
 class NetworkMatchBase(MatchBase):

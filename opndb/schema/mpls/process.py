@@ -89,6 +89,22 @@ class PropertiesRentals(Properties):
     )
 
 
+class PropertyAddresses(OPNDFModel):
+    pin: str = pa.Field()
+    number: str = pa.Field()
+    number_suffix: str = pa.Field()
+    predirectional: str = pa.Field()
+    street: str = pa.Field()
+    suffix: str = pa.Field()
+    postdirectional: str = pa.Field()
+    secondaryunit: str = pa.Field()
+    secondarynumber: str = pa.Field()
+    city: str = pa.Field()
+    state: str = pa.Field()
+    zip_code: str = pa.Field()
+    formatted_address: str = pa.Field()
+
+
 class TaxpayerRecords(OPNDFModel):
 
     _OUT: list[str] = [
