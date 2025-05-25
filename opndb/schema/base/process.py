@@ -22,7 +22,7 @@ class UnvalidatedAddrs(OPNDFModel):
         unique=False,
         title="Raw State",
     )
-    raw_zip: str = pa.Field(
+    raw_zip_code: str = pa.Field(
         nullable=True,
         unique=False,
         title="Raw Zip Code",
@@ -49,7 +49,7 @@ class UnvalidatedAddrs(OPNDFModel):
         unique=False,
         title="Clean State",
     )
-    clean_zip: str = pa.Field(
+    clean_zip_code: str = pa.Field(
         nullable=True,
         unique=False,
         title="Clean Zip Code",
@@ -183,13 +183,13 @@ class Geocodio(OPNDFModel):
         title="Street Postdirectional",
         description="Postdirectional value for street address (Ex: 'N' in '123 OAK ST N')"
     )
-    secondaryunit: str = pa.Field(
+    secondary_unit: str = pa.Field(
         nullable=True,
         unique=False,
         title="Street Secondary Unit",
         description="Descriptor for secondary address (Ex: 'SUITE' in 'SUITE 101')"
     )
-    secondarynumber: str = pa.Field(
+    secondary_number: str = pa.Field(
         nullable=True,
         unique=False,
         title="Street Secondary Number",
@@ -210,7 +210,7 @@ class Geocodio(OPNDFModel):
         unique=False,
         title="State",
     )
-    zip: str = pa.Field(
+    zip_code: str = pa.Field(
         nullable=False,
         unique=False,
         title="Zip Code",

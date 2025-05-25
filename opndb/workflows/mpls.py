@@ -175,6 +175,8 @@ class WorkflowBase(ABC):
             return WkflGeocodioStringMatch(config_manager)
         elif wkfl_id == "fix_units_initial":
             return WkflFixUnitsInitial(config_manager)
+        elif wkfl_id == "validated_addrs":
+            return WkflValidatedAddrs(config_manager)
         elif wkfl_id == "fix_units_final":
             return WkflFixUnitsFinal(config_manager)
         elif wkfl_id == "fix_addrs_initial":
@@ -1035,6 +1037,7 @@ class WkflAddressValidation(WorkflowStandardBase):
         df_taxpayers: pd.DataFrame,
         df_bus_names_addrs: pd.DataFrame
     ) -> pd.DataFrame:
+        # todo: create address workflow base class and include this as a method that can be called in subclasses
         # fetch unique business entities matched with taxpayer records
         unique_entities: list[str] = list(df_taxpayers["uid"].dropna().unique())
         t.print_with_dots("Fetching unique addresses from taxpayer records")
@@ -1197,6 +1200,33 @@ class WkflValidatedAddrs(WorkflowStandardBase):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
 
+    def execute_unique_address_generator(
+        self,
+        df_taxpayers: pd.DataFrame,
+        df_bus_names_addrs: pd.DataFrame
+    ) -> pd.DataFrame:
+        # todo: create address workflow base class and include this as a method that can be called in subclasses
+        # fetch unique business entities matched with taxpayer records
+        unique_entities: list[str] = list(df_taxpayers["uid"].dropna().unique())
+        t.print_with_dots("Fetching unique addresses from taxpayer records")
+        df_tax_u: pd.DataFrame = df_taxpayers[
+            ["clean_street", "clean_city", "clean_state", "clean_zip_code", "clean_address"]]
+        df_tax_u.drop_duplicates(subset=["clean_address"], inplace=True)
+        df_tax_u.rename(columns={"clean_street": "clean_street_1"}, inplace=True)
+        # fetch all unique clean addresses from business records for matching orgs
+        t.print_with_dots("Fetching unique addresses from business records")
+        df_bus_u: pd.DataFrame = df_bus_names_addrs[df_bus_names_addrs["uid"].isin(unique_entities)]
+        df_bus_u = df_bus_u[
+            ["clean_street_1", "clean_street_2", "clean_city", "clean_state", "clean_zip_code", "clean_country",
+             "clean_address"]]
+        df_bus_u.dropna(subset=["clean_address"], inplace=True)
+        df_bus_u.drop_duplicates(subset=["clean_address"], inplace=True)
+        # generate final unvalidated address file
+        t.print_with_dots("Generating master unvalidated dataset")
+        df_unique: pd.DataFrame = pd.concat([df_tax_u, df_bus_u], ignore_index=True)
+        df_unique.drop_duplicates(subset=["clean_address"], inplace=True)
+        return df_unique
+
     def execute_geocodio_partial_concatenator(self) -> pd.DataFrame:
         partials_path: Path = Path(self.config_manager.configs["data_root"]) / "geocodio" / "partials"
         dfs: list[pd.DataFrame] = []
@@ -1207,7 +1237,7 @@ class WkflValidatedAddrs(WorkflowStandardBase):
         df_results = pd.concat(dfs, ignore_index=True)
         return df_results
 
-    def execute_gcd_results_processor(self, df_results: pd.DataFrame) -> pd.DataFrame:
+    def execute_gcd_results_processor(self, df_results: pd.DataFrame, df_unvalidated: pd.DataFrame) -> pd.DataFrame:
         # fetch list of unique addresses to iterate over
         clean_addrs: list[str] = list(df_results["clean_address"].unique())
         grouped: DataFrameGroupBy = df_results.groupby("clean_address")
@@ -1225,9 +1255,11 @@ class WkflValidatedAddrs(WorkflowStandardBase):
             for addr in clean_addrs:
                 group = grouped.get_group(addr).reset_index(drop=True)
                 flattened_results: list[GeocodioResultFlat] = []
-                clean_addr_row: pd.Series = self.dfs_in["unvalidated_addrs"].loc[
-                    self.dfs_in["unvalidated_addrs"]["clean_address"] == addr
-                ].iloc[0]
+                try:
+                    clean_addr_row: pd.Series = df_unvalidated.loc[df_unvalidated["clean_address"] == addr].iloc[0]
+                except IndexError:
+                    console.print("ADDRESS NOT FOUND IN GEOCODIO RESULTS:", addr)
+                    continue
                 clean_address: CleanAddress = AddressBase.build_clean_address_object(clean_addr_row)
                 for i, row in group.iterrows():
                     flattened_results.append(row.to_dict())
@@ -1380,6 +1412,14 @@ class WkflValidatedAddrs(WorkflowStandardBase):
                 "path": path_gen.analysis_fixing_addrs_analysis(configs),
                 "schema": Geocodio,
             },
+            "taxpayers_bus_merged": {
+                "path": path_gen.processed_taxpayers_bus_merged(configs),
+                "schema": TaxpayersBusMerged,
+            },
+            "bus_names_addrs": {
+                "path": path_gen.processed_bus_names_addrs(configs),
+                "schema": BusinessNamesAddrs
+            }
         }
         self.load_dfs(load_map)
 
@@ -1390,6 +1430,8 @@ class WkflValidatedAddrs(WorkflowStandardBase):
         schema_map = {
             "fixing_addrs": FixingAddrs,
             "fixing_addrs_analysis": Geocodio,
+            "taxpayers_bus_merged": TaxpayersBusMerged,
+            "bus_names_addrs": BusinessNamesAddrs
         }
         for id, df in self.dfs_in.items():
             self.run_validator(id, df, self.config_manager.configs, self.WKFL_NAME, schema_map[id])
@@ -1401,10 +1443,15 @@ class WkflValidatedAddrs(WorkflowStandardBase):
         # copy dfs
         df_fixing_addrs: pd.DataFrame = self.dfs_in["fixing_addrs"].copy()
         df_fixing_addrs_analysis: pd.DataFrame = self.dfs_in["fixing_addrs_analysis"].copy()
+        df_taxpayers: pd.DataFrame = self.dfs_in["taxpayers_bus_merged"].copy()
+        df_bus_names_addrs: pd.DataFrame = self.dfs_in["bus_names_addrs"].copy()
+
+        # get unvalidated addrs df
+        df_unvalidated: pd.DataFrame = self.execute_unique_address_generator(df_taxpayers, df_bus_names_addrs)
         # set df containing all geocodio results
         df_results: pd.DataFrame = self.execute_geocodio_partial_concatenator()
         # get initial validated df
-        df_validated: pd.DataFrame = self.execute_gcd_results_processor(df_results)
+        df_validated: pd.DataFrame = self.execute_gcd_results_processor(df_results, df_unvalidated)
         # get string matches and concatenate
         df_validated_string: pd.DataFrame = self.execute_gcd_results_string_match(df_results, df_validated)
         # manually fixed addresses
@@ -1657,67 +1704,6 @@ class WkflRentalSubset(WorkflowStandardBase):
     WKFL_NAME: str = "RENTAL SUBSET WORKFLOW"
     WKFL_DESC: str = "Subsets property and taxpayer record datasets for rental properties only."
 
-    PROP_TYPES: list[str] = [  # todo: move to schema class
-        "2 UNIT RESIDENTIAL",
-        "3 UNIT RESIDENTIAL",
-        "APARTMENT",
-        "VACANT LAND - RESIDENTIAL",
-        "CONDOMINIUM",
-        "COOPERATIVE",
-        "RES - ZERO LOT LINE",
-        "RESIDENTIAL",  # filter out property address == taxpayer address
-        "RESIDENTIAL LAKE SHORE",
-        "RESIDENTIAL MISC",
-        "TOWNHOUSE",
-        "VACANT LAND - APARTMENT",
-        "VACANT LAND - COMMERCIAL",
-        "VACANT LAND - INDUSTRIAL",
-        "VACANT LAND - LAKESHORE",
-        "VACANT LAND - RESIDENTIAL",
-    ]
-    LAND_USES: list[str] = [
-        "1 UNIT RESIDENTIAL - CARRIAGE HOUSE",
-        "1 UNIT RESIDENTIAL - CONDOMINIUM",
-        "1 UNIT RESIDENTIAL - SINGLE FAMILY HOUSE",
-        "1 UNIT RESIDENTIAL - TOWNHOUSE",
-        "1 UNIT RESIDENTIAL - ZERO LOT LINE",
-        "2 UNIT RESIDENTIAL - CONDOMINIUM",
-        "2 UNIT RESIDENTIAL - DUPLEX",
-        "2 UNIT RESIDENTIAL - SF HOUSE AND ADU",
-        "2 UNIT RESIDENTIAL - SF HOUSE AND CARRIAGE HOUSE",
-        "2 UNIT RESIDENTIAL - TWO HOUSES",
-        "3 UNIT RESIDENTIAL - DUPLEX AND ADU",
-        "3 UNIT RESIDENTIAL - DUPLEX AND CARRIAGE HOUSE",
-        "3 UNIT RESIDENTIAL - DUPLEX AND SF HOUSE",
-        "3 UNIT RESIDENTIAL - TRIPLEX",
-        "MULTI - FAMILY APARTMENT",
-        "MULTI - FAMILY RESIDENTIAL",
-        "VACANT"
-    ]
-    BUILDING_USES: list[str] = [
-        "APARTMENT 4 OR 5 UNIT",
-        "APARTMENT 6+ UNIT",
-        "APARTMENT CONVERTED",
-        "BAR / FOOD / REST.W RES",
-        "BOARDING OR LODGING",
-        "COM CONV W 1 - 3 UNIT RES",
-        "COM CONV W 4UP APTS",
-        "COM ORIG W 1 - 3 UNIT RES",
-        "COM ORIG W 4UP APTS",
-        "DBL DWLG IN STOREFRONT",
-        "INDUSTRIAL CONDO.",
-        "OFFICES & APTS.",
-        "SINGLE FAM.DWLG.",
-        "SINGLE FAMILY HOUSE",
-        "ROW HOUSE",
-        "TENEMENT",
-        "DUPLEX",
-        "DUPLEX W / ADU",
-        "GROUP HOME",
-        "TRIPLEX",
-        "SECOND RES BUILDING"
-    ]
-
     def __init__(self, config_manager: ConfigManager):
         super().__init__(config_manager)
         t.print_workflow_name(self.WKFL_NAME, self.WKFL_DESC)
@@ -1742,6 +1728,73 @@ class WkflRentalSubset(WorkflowStandardBase):
         df_props_out = pd.merge(df_props, df_merged[["pin", "is_match"]], how="left", on="pin")
         df_props_out.drop_duplicates(subset=["pin"], inplace=True)
         return df_props_out
+
+    def execute_pin_subset(self, df_props: pd.DataFrame, df_lic: pd.DataFrame) -> pd.DataFrame:
+        # 1. subset by rental licenses
+        license: list[str] = list(df_lic["apn"].dropna().unique())
+        # 2. subset by non-homesteaded
+        is_homestead: list[str] = list(
+            df_props[
+                (df_props["is_homestead"] == "NON-HOMESTEADED") &
+                (df_props["is_match"] == False)
+            ]["pin"]
+        )
+        prop_type: list[str] = list(df_props[df_props["prop_type"].isin(Properties.prop_types_rental())]["pin"])
+        prop_type_proptax: list[str] = list(
+            df_props[
+                (df_props["prop_type"].isin(Properties.prop_types_rental_proptax())) &
+                (df_props["is_match"] == False)
+            ]["pin"]
+        )
+        land_use: list[str] = list(df_props[df_props["land_use"].isin(Properties.land_uses_rental())]["pin"])
+        land_use_proptax: list[str] = list(
+            df_props[
+                (df_props["land_use"].isin(Properties.land_uses_rental_proptax())) &
+                (df_props["is_match"] == False)
+            ]["pin"]
+        )
+        bldg_use: list[str] = list(df_props[df_props["building_use"].isin(Properties.building_uses_rental())]["pin"])
+        bldg_use_proptax: list[str] = list(
+            df_props[
+                (df_props["building_use"].isin(Properties.building_uses_rental_proptax())) &
+                (df_props["is_match"] == False)
+            ]["pin"]
+        )
+        # 6. subset by num_units
+        df_props = cols_df.set_is_unit_gte_1(df_props)
+        num_units: list[str] = list(df_props[df_props["is_unit_gte_1"] == True]["pin"])
+        # use set of pins to subset original props df
+        rental_pins: set[str] = set(license + is_homestead + prop_type + prop_type_proptax + land_use + land_use_proptax + bldg_use + bldg_use_proptax + num_units)
+        df_rentals: pd.DataFrame = df_props[df_props["pin"].isin(rental_pins)]
+        return df_rentals
+
+    def execute_nonrental_subset(
+        self,
+        df_rentals: pd.DataFrame,
+        df_analysis: pd.DataFrame,
+        df_taxpayers: pd.DataFrame
+    ) -> pd.DataFrame:
+        # 7. subset by rental addresses - pull in remaining properties based on matching addresses from rental subset
+        rental_taxpayers: list[str] = list(df_rentals["raw_name_address"].unique())
+        t.print_with_dots("Executing sub-subset on properties excluded from initial subset")
+        # get addrs to exclude
+        registered_agent_addrs: list[str] = list(df_analysis[df_analysis["is_virtual_office_agent"] == True]["value"])
+        financial_services_addrs: list[str] = list(df_analysis[df_analysis["is_financial_services"] == True]["value"])
+        law_firm_addrs: list[str] = list(df_analysis[df_analysis["is_lawfirm"] == True]["value"])
+        exclude_addrs: set[str] = set(registered_agent_addrs + financial_services_addrs + law_firm_addrs)
+        # subset taxpayers for rentals only
+        df_taxpayers_r: pd.DataFrame = df_taxpayers[df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
+        df_taxpayers_nr: pd.DataFrame = df_taxpayers[~df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
+        # fetch taxpayer addresses to execute final subset
+        addrs_to_subset: list[str] = list(df_taxpayers_r[~df_taxpayers_r["clean_address_v1"].isin(exclude_addrs)])
+        df_nonrentals_r: pd.DataFrame = df_taxpayers_nr[df_taxpayers_nr["clean_address_v1"].isin(addrs_to_subset)]
+        df_subset_final: pd.DataFrame = pd.concat([df_taxpayers_r, df_nonrentals_r], ignore_index=True)
+        return df_subset_final
+
+    def execute_rental_props_generator(self, df_subset_final: pd.DataFrame, df_props: pd.DataFrame) -> pd.DataFrame:
+        taxpayers_final: list[str] = list(df_subset_final["raw_name_address"].unique())
+        df_rentals_final: pd.DataFrame = df_props[df_props["raw_name_address"].isin(taxpayers_final)]
+        return df_rentals_final
 
     # --------------
     # ----LOADER----
@@ -1769,6 +1822,10 @@ class WkflRentalSubset(WorkflowStandardBase):
             "property_addresses": {
                 "path": path_gen.processed_property_addresses(configs),
                 "schema": PropertyAddresses,
+            },
+            "validated_addrs": {
+                "path": path_gen.processed_validated_addrs(configs),
+                "schema": Geocodio
             }
         }
         self.load_dfs(load_map)
@@ -1781,6 +1838,8 @@ class WkflRentalSubset(WorkflowStandardBase):
             "taxpayers_fixed": TaxpayersFixed,
             "properties": Properties,
             "address_analysis": AddressAnalysis,
+            "property_addresses": PropertyAddresses,
+            "validated_addrs": Geocodio
         }
         for id, df in self.dfs_in.items():
             if id == "rental_licenses":
@@ -1803,40 +1862,13 @@ class WkflRentalSubset(WorkflowStandardBase):
         df_props = self.execute_proptax_address_matcher(df_taxpayers, df_props, df_prop_addrs, df_valid_addrs)
 
         t.print_with_dots("Fetching property pins for rental property subset of taxpayer data")
-        # 1. subset by rental licenses
-        license_pins: list[str] = list(df_lic["apn"].dropna().unique())
-        # 2. subset by non-homesteaded
-        is_homestead_pins: list[str] = list(df_props[df_props["is_homestead"] == "NON-HOMESTEADED"]["pin"])
-        # 3. subset by prop_type
-        type_pins: list[str] = list(df_props[df_props["prop_type"].isin(self.PROP_TYPES)]["pin"])
-        # 4. subset by land_use
-        land_use_pins: list[str] = list(df_props[df_props["land_use"].isin(self.LAND_USES)]["pin"])
-        # 5. subset by building_use
-        bldg_use_pins: list[str] = list(df_props[df_props["building_use"].isin(self.BUILDING_USES)]["pin"])
-        # 6. subset by num_units
-        df_props = cols_df.set_is_unit_gte_1(df_props)
-        num_units_pins: list[str] = list(df_props[df_props["is_unit_gte_1"] == True]["pin"])
-        # use set of pins to subset original props df
-        rental_pins: set[str] = set(license_pins + is_homestead_pins + type_pins + land_use_pins + bldg_use_pins + num_units_pins)
-        df_rentals: pd.DataFrame = df_props[df_props["pin"].isin(rental_pins)]
-        # 7. subset by rental addresses - pull in remaining properties based on matching addresses from rental subset
-        # 7a. get taxpayer addresses
-        rental_taxpayers: list[str] = list(df_rentals["raw_name_address"].unique())
-        t.print_with_dots("Executing sub-subset on properties excluded from initial subset")
-        # get addrs to exclude
-        registered_agent_addrs: list[str] = list(df_analysis[df_analysis["is_virtual_office_agent"] == True]["value"])
-        financial_services_addrs: list[str] = list(df_analysis[df_analysis["is_financial_services"] == True]["value"])
-        law_firm_addrs: list[str] = list(df_analysis[df_analysis["is_lawfirm"] == True]["value"])
-        exclude_addrs: set[str] = set(registered_agent_addrs + financial_services_addrs + law_firm_addrs)
-        # subset taxpayers for rentals only
-        df_taxpayers_r: pd.DataFrame = df_taxpayers[df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
-        df_taxpayers_nr: pd.DataFrame = df_taxpayers[~df_taxpayers["raw_name_address"].isin(rental_taxpayers)]
-        # fetch taxpayer addresses to execute final subset
-        addrs_to_subset: list[str] = list(df_taxpayers_r[~df_taxpayers_r["clean_address_v1"].isin(exclude_addrs)])
-        df_nonrentals_r: pd.DataFrame = df_taxpayers_nr[df_taxpayers_nr["clean_address_v1"].isin(addrs_to_subset)]
-        df_subset_final: pd.DataFrame = pd.concat([df_taxpayers_r, df_nonrentals_r], ignore_index=True)
+        df_rentals = self.execute_pin_subset(df_props, df_lic)
 
-        self.dfs_out["properties_rentals"] = df_rentals
+        t.print_with_dots("Pulling in rentals from nonrental subset based on address similarity")
+        df_subset_final = self.execute_nonrental_subset(df_rentals, df_analysis, df_taxpayers)
+        df_rentals_final = self.execute_rental_props_generator(df_subset_final, df_props)
+
+        self.dfs_out["properties_rentals"] = df_rentals_final
         self.dfs_out["taxpayers_subsetted"] = df_subset_final
 
     # -------------------------------
@@ -2574,12 +2606,12 @@ class WkflFinalOutput(WorkflowStandardBase):
             "street",
             "suffix",
             "postdirectional",
-            "secondaryunit",
-            "secondarynumber",
+            "secondary_unit",
+            "secondary_number",
             "city",
             "county",
             "state",
-            "zip",
+            "zip_code",
             "country",
             "lng",
             "lat",

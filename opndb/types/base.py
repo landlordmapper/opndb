@@ -57,7 +57,7 @@ class CleanAddress(TypedDict, total=False):
     street: str | None
     city: str | None
     state: str | None
-    zip: str | None
+    zip_code: str | None
     is_pobox: bool
 
 

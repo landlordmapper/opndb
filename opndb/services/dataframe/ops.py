@@ -553,9 +553,9 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def is_match_secondary(cls, row: pd.Series) -> bool | float:
-        if pd.isnull(row["secondarynumber"]):
+        if pd.isnull(row["secondary_number"]):
             return np.nan
-        sec_num = row["secondarynumber"].strip()
+        sec_num = row["secondary_number"].strip()
         clean_addr_split = row["original_doc"].split(",")[0]
         street_split = clean_addr_split.split()
         return sec_num in street_split

@@ -19,10 +19,100 @@ class Properties(OPNDFModel):
         "clean_name_address",
         "num_units"
     ]
+    _PROP_TYPES_RENTAL: list[str] = [
+        "2 UNIT RESIDENTIAL",
+        "3 UNIT RESIDENTIAL",
+        "APARTMENT",
+        "VACANT LAND - RESIDENTIAL",
+        "CONDOMINIUM",
+        "COOPERATIVE",
+        "TOWNHOUSE",
+        "VACANT LAND - APARTMENT",
+        "VACANT LAND - COMMERCIAL",
+        "VACANT LAND - INDUSTRIAL",
+        "VACANT LAND - LAKESHORE",
+    ]
+    _PROP_TYPES_RENTAL_PROPTAX: list[str] = [
+        "RES - ZERO LOT LINE",
+        "RESIDENTIAL",  # filter out property address == taxpayer address
+        "RESIDENTIAL LAKE SHORE",
+        "RESIDENTIAL MISC",
+        "VACANT LAND - RESIDENTIAL",
+    ]
+    _LAND_USES_RENTAL: list[str] = [
+        "2 UNIT RESIDENTIAL - CONDOMINIUM",
+        "2 UNIT RESIDENTIAL - DUPLEX",
+        "2 UNIT RESIDENTIAL - SF HOUSE AND ADU",
+        "2 UNIT RESIDENTIAL - SF HOUSE AND CARRIAGE HOUSE",
+        "2 UNIT RESIDENTIAL - TWO HOUSES",
+        "3 UNIT RESIDENTIAL - DUPLEX AND ADU",
+        "3 UNIT RESIDENTIAL - DUPLEX AND CARRIAGE HOUSE",
+        "3 UNIT RESIDENTIAL - DUPLEX AND SF HOUSE",
+        "3 UNIT RESIDENTIAL - TRIPLEX",
+        "MULTI - FAMILY APARTMENT",
+        "MULTI - FAMILY RESIDENTIAL",
+        "VACANT"
+    ]
+    _LAND_USES_RENTAL_PROPTAX: list[str] = [
+        "1 UNIT RESIDENTIAL - CARRIAGE HOUSE",
+        "1 UNIT RESIDENTIAL - CONDOMINIUM",
+        "1 UNIT RESIDENTIAL - SINGLE FAMILY HOUSE",
+        "1 UNIT RESIDENTIAL - TOWNHOUSE",
+        "1 UNIT RESIDENTIAL - ZERO LOT LINE",
+    ]
+    _BUILDING_USES_RENTAL: list[str] = [
+        "APARTMENT 4 OR 5 UNIT",
+        "APARTMENT 6+ UNIT",
+        "APARTMENT CONVERTED",
+        "BAR / FOOD / REST.W RES",
+        "BOARDING OR LODGING",
+        "COM CONV W 4UP APTS",
+        "COM ORIG W 4UP APTS",
+        "DBL DWLG IN STOREFRONT",
+        "INDUSTRIAL CONDO.",
+        "OFFICES & APTS.",
+        "ROW HOUSE",
+        "TENEMENT",
+        "DUPLEX",
+        "DUPLEX W / ADU",
+        "GROUP HOME",
+        "TRIPLEX",
+        "SECOND RES BUILDING"
+    ]
+    _BUILDING_USES_RENTAL_PROPTAX: list[str] = [
+        "SINGLE FAM.DWLG.",
+        "SINGLE FAMILY HOUSE",
+        "COM CONV W 1 - 3 UNIT RES",
+        "COM ORIG W 1 - 3 UNIT RES",
+    ]
 
     @classmethod
     def out(cls) -> list[str]:
         return cls._OUT
+
+    @classmethod
+    def prop_types_rental(cls) -> list[str]:
+        return cls._PROP_TYPES_RENTAL
+
+    @classmethod
+    def prop_types_rental_proptax(cls) -> list[str]:
+        return cls._PROP_TYPES_RENTAL_PROPTAX
+
+    @classmethod
+    def land_uses_rental(cls) -> list[str]:
+        return cls._LAND_USES_RENTAL
+
+    @classmethod
+    def land_uses_rental_proptax(cls) -> list[str]:
+        return cls._LAND_USES_RENTAL_PROPTAX
+
+    @classmethod
+    def building_uses_rental(cls) -> list[str]:
+        return cls._BUILDING_USES_RENTAL
+
+    @classmethod
+    def building_uses_rental_proptax(cls) -> list[str]:
+        return cls._BUILDING_USES_RENTAL_PROPTAX
 
     pin: str = pa.Field(
         nullable=False,
@@ -327,7 +417,12 @@ class TaxpayersFixed(TaxpayersAddrMerged):
 
 
 class TaxpayersSubsetted(TaxpayersFixed):
-    pass
+    is_match: bool = pa.Field(
+        nullable=False,
+        unique=False,
+        title="Is Match?",
+        description="Boolean representing whether the taxpayer address matches the property address"
+    )
 
 
 class TaxpayersPrepped(TaxpayersSubsetted):

@@ -131,11 +131,11 @@ class AddressBase:
         missing initially.
         """
         gcd_formatted_split = row["formatted_address"].split(",")
-        gcd_sec_unit = row[f"secondaryunit"]
-        gcd_sec_number = row[f"secondarynumber"]
+        gcd_sec_unit = row[f"secondary_unit"]
+        gcd_sec_number = row[f"secondary_number"]
         gcd_city = row["city"]
         gcd_state = row["state"]
-        gcd_zip = row["zip"]
+        gcd_zip = row["zip_code"]
 
         if pd.notnull(gcd_sec_unit):
             unit_number = f"{gcd_sec_unit.strip()} {gcd_sec_number.strip()}"
@@ -242,7 +242,7 @@ class AddressBase:
             "street": row["clean_street_1"],
             "city": row["clean_city"],
             "state": row["clean_state"],
-            "zip": row["clean_zip_code"],
+            "zip_code": row["clean_zip_code"],
         }
 
     @classmethod
@@ -275,40 +275,18 @@ class AddressBase:
             "street": address_components.get("street", ""),
             "suffix": address_components.get("suffix", ""),
             "postdirectional": address_components.get("postdirectional", ""),
-            "secondaryunit": address_components.get("secondaryunit", ""),
-            "secondarynumber": address_components.get("secondarynumber", ""),
+            "secondary_unit": address_components.get("secondaryunit", ""),
+            "secondary_number": address_components.get("secondarynumber", ""),
             "city": address_components.get("city", ""),
             "county": address_components.get("county", ""),
             "state": address_components.get("state", ""),
-            "zip": address_components.get("zip", ""),
+            "zip_code": address_components.get("zip", ""),
             "country": address_components.get("country", ""),
             "lng": location.get("lng", ""),
             "lat": location.get("lat", ""),
             "accuracy": result.get("accuracy", ""),
             "formatted_address": result.get("formatted_address", "")
         }
-
-    # @classmethod
-    # def get_flatted_geocodio_result_from_df(cls, row: pd.Series) -> GeocodioResultFlat:
-    #     return {
-    #         "number": row["number"],
-    #         "predirectional": row["predirectional"],
-    #         "prefix": row["prefix"],
-    #         "street": row["street"],
-    #         "suffix": row["suffix"],
-    #         "postdirectional": row["postdirectional"],
-    #         "secondaryunit": row["secondaryunit"],
-    #         "secondarynumber": row["secondarynumber"],
-    #         "city": row["city"],
-    #         "county": row["county"],
-    #         "state": row["state"],
-    #         "zip": row["zip"],
-    #         "country": row["country"],
-    #         "lng": row["lng"],
-    #         "lat": row["lat"],
-    #         "accuracy": row["accuracy"],
-    #         "formatted_address": row["formatted_address"],
-    #     }
 
     @classmethod
     def apply_filters(cls, clean_address: CleanAddress, df: pd.DataFrame) -> pd.DataFrame | None:
@@ -323,8 +301,8 @@ class AddressBase:
         else:
             number_raw = addr_raw_split[0].split()[0]
 
-        if "zip" in clean_address.keys():
-            zip_raw: str = clean_address["zip"]
+        if "zip_code" in clean_address.keys():
+            zip_raw: str = clean_address["zip_code"]
         else:
             zip_raw = addr_raw_split[-1]
 
@@ -346,7 +324,7 @@ class AddressBase:
 
         # FILTER 3: zip code
         # print("filtering zip code...")
-        df_zip = df_number[df_number["zip"] == zip_raw]
+        df_zip = df_number[df_number["zip_code"] == zip_raw]
         if df_zip.empty:
             return df_number
         if len(df_zip) == 1 or cls.check_matching_addrs(df_zip):
@@ -843,10 +821,10 @@ class AddressBase:
         if pd.notna(row["postdirectional"]):
             addr_out += f" {row['postdirectional']}"
         addr_out += ","
-        if pd.notna(row["secondaryunit"]) and pd.notna(row["secondarynumber"]):
-            addr_out += f" {row['secondaryunit']} {row['secondarynumber']},"
-        elif pd.notna(row["secondarynumber"]):
-            addr_out += f" {row['secondarynumber']},"
+        if pd.notna(row["secondary_unit"]) and pd.notna(row["secondary_number"]):
+            addr_out += f" {row['secondary_unit']} {row['secondary_number']},"
+        elif pd.notna(row["secondary_number"]):
+            addr_out += f" {row['secondary_number']},"
         addr_out += f" {row['city']}"
         addr_out += ","
         addr_out += f" {row['state']} {row['zip_code']}"
@@ -876,8 +854,8 @@ class AddressBase:
             if pd.notna(row["postdirectional"]):
                 addr_out += f" {row['postdirectional']}"
             addr_out += ","
-            if pd.notna(row["secondarynumber"]):
-                addr_out += f" {row['secondarynumber']},"
+            if pd.notna(row["secondary_number"]):
+                addr_out += f" {row['secondary_number']},"
 
         addr_out += f" {row['city']}"
         addr_out += ","
@@ -936,8 +914,8 @@ class AddressBase:
             if pd.notna(row["suffix"]):
                 addr_out += f" {row['suffix']}"
             addr_out += ","
-            if pd.notna(row["secondarynumber"]):
-                addr_out += f" {row['secondarynumber']},"
+            if pd.notna(row["secondary_number"]):
+                addr_out += f" {row['secondary_number']},"
 
         addr_out += f" {row['city']}"
         addr_out += ","
