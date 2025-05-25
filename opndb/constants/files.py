@@ -103,3 +103,4 @@ class Output(FileNames):
     BUS_NAMES_ADDRS: str = "bus_names_addrs"
     NETWORKS: str = "networks"
     TAXPAYER_RECORDS: str = "taxpayer_records"
+    PROPERTIES: str = "properties"

@@ -700,6 +700,14 @@ class PathGenerators(UtilsBase):
             Output.TAXPAYER_RECORDS,
             configs["load_ext"]
         )
+    @classmethod
+    def output_properties(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.PROPERTIES,
+            configs["load_ext"]
+        )
     # -------------------------
     # ----VALIDATION ERRORS----
     # -------------------------
