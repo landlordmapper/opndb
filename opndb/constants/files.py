@@ -104,3 +104,4 @@ class Output(FileNames):
     NETWORKS: str = "networks"
     TAXPAYER_RECORDS: str = "taxpayer_records"
     PROPERTIES: str = "properties"
+    PROPERTY_ADDRESSES: str = "property_addresses"

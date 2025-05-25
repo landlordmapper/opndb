@@ -708,6 +708,14 @@ class PathGenerators(UtilsBase):
             Output.PROPERTIES,
             configs["load_ext"]
         )
+    @classmethod
+    def output_property_addresses(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.PROPERTIES,
+            configs["load_ext"]
+        )
     # -------------------------
     # ----VALIDATION ERRORS----
     # -------------------------
