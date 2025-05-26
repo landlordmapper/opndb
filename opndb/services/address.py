@@ -258,6 +258,8 @@ class AddressBase:
             data: GeocodioResponse = res.json()
             return data["results"]
         else:
+            console.print("URL FOR GEOCODIO CALL")
+            console.print(res.status_code)
             return None
 
     @classmethod
