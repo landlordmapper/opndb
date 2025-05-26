@@ -19,8 +19,8 @@ dependencies = [
     "nmslib-metabrainz==2.1.3"
 ]
 
-[tool.setuptools]
-packages = ["opndb"]
+[tool.setuptools.packages.find]
+include = ["opndb*"]
 
 [dependency-groups]
 dev = [
