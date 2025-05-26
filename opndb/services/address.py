@@ -5,6 +5,7 @@ import time
 import traceback
 from operator import itemgetter
 from pprint import pprint
+from typing import Any
 
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 
@@ -89,6 +90,28 @@ class AddressBase:
 
     def __init__(self):
         self.geocodio_api_key = ""
+
+    @classmethod
+    def get_short_address(cls, row: pd.Series | dict[str, Any]) -> str:
+        """
+        Return street name, house number secondary units and predirectional from an object with precise address components.
+        """
+        addr_out: str = row["number"]
+        if pd.notna(row["number_suffix"]):
+            addr_out += f" {row['number_suffix']}"
+        if pd.notna(row["predirectional"]):
+            addr_out += f" {row['predirectional']}"
+        addr_out += f" {row['street']}"
+        if pd.notna(row["suffix"]):
+            addr_out += f" {row['suffix']}"
+        if pd.notna(row["postdirectional"]):
+            addr_out += f" {row['postdirectional']}"
+        addr_out += ","
+        if pd.notna(row["secondary_unit"]) and pd.notna(row["secondary_number"]):
+            addr_out += f" {row['secondary_unit']} {row['secondary_number']},"
+        elif pd.notna(row["secondary_number"]):
+            addr_out += f" {row['secondary_number']},"
+        return addr_out
 
     @classmethod
     def is_irregular_zip(cls, val: str) -> bool:

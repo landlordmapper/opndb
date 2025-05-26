@@ -94,8 +94,8 @@ class SummaryStats(FileNames):
 class Output(FileNames):
     """Final datasets."""
     NETWORK_CALCS: str = "network_calcs"
-    ENTITY_TYPES: str = "entity_types"
-    ENTITIES: str = "entities"
+    RESEARCH_ENTITY_TYPES: str = "research_entity_types"
+    RESEARCH_ENTITIES: str = "research_entities"
     VALIDATED_ADDRESSES: str = "validated_addresses"
     LLCS: str = "llcs"
     CORPS: str = "corps"

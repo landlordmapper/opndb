@@ -629,19 +629,19 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
-    def output_entity_types(cls, configs: WorkflowConfigs) -> Path:
+    def output_research_entity_types(cls, configs: WorkflowConfigs) -> Path:
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
-            Output.ENTITY_TYPES,
+            Output.RESEARCH_ENTITY_TYPES,
             configs["load_ext"]
         )
     @classmethod
-    def output_entities(cls, configs: WorkflowConfigs) -> Path:
+    def output_research_entities(cls, configs: WorkflowConfigs) -> Path:
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
-            Output.ENTITIES,
+            Output.RESEARCH_ENTITIES,
             configs["load_ext"]
         )
     @classmethod
@@ -710,6 +710,30 @@ class PathGenerators(UtilsBase):
         )
     @classmethod
     def output_property_addresses(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.PROPERTIES,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_entity_types(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.PROPERTIES,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_entity_name_types(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.PROPERTIES,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_entity_address_types(cls, configs: WorkflowConfigs) -> Path:
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
