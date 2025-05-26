@@ -40,7 +40,8 @@ SECONDARY_KEYWORDS: set[str] = {
     "SUITE",
     "STE",
     "APT",
-    "ROOM"
+    "ROOM",
+    "AAYYYYYYYEEE"
 }
 
 CORE_NAME_KEYS = [
