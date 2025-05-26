@@ -726,10 +726,13 @@ class AddressBase:
                                 for result in flattened_results:
                                     gcd_results.append({**clean_address, **result})
                             # save geocodio partial and empty out gcd_results
+                            console.print("GCD_RESULTS LENGTH:", len(gcd_results))
                             if interval is not None and len(gcd_results) >= interval:
                                 progress.update(geocodio_task, description="[magenta]Saving partial results...")
+                                console.print("SAVING GEOCODIO PARTIAL FROM WITHIN run_geocodio_new()")
                                 cls.save_geocodio_partial(gcd_results, configs)
                                 gcd_results = []
+                                console.print("SAVE COMPLETE. GCD RESULTS EMPTIED")
                             # Update progress
                             processed_count += 1
                             progress.update(
@@ -739,8 +742,10 @@ class AddressBase:
                         except Exception as e:
                             progress.console.print(f"[red]Error: {e}[/red]")
                             progress.console.print(traceback.format_exc())
+                    console.print("GCD_RESULTS LENGTH:", len(gcd_results))
                     if interval is not None and gcd_results:
                         progress.update(geocodio_task, description="[magenta]Saving final batch...")
+                        console.print("SAVING GEOCODIO PARTIAL FROM WITHIN run_geocodio_new()")
                         cls.save_geocodio_partial(gcd_results, configs)
                 if interval is None:
                     cls.save_geocodio_partial(gcd_results, configs)
