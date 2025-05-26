@@ -142,7 +142,6 @@ class DataFrameOpsBase(object):
         :return: Path to saved dataframe
         """
         df.to_csv(str(path), index=False)
-        console.print("Successfully saved dataframe to file: {}".format(path))
         # format = path.suffix[1:].lower()
         # if format == "csv":
         #     df.to_csv(str(path), index=False)

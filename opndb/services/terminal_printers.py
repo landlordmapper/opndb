@@ -69,6 +69,7 @@ class TerminalBase:
         panel = Panel("Select a workflow to execute.", title="[bold cyan]Workflow Selection[/bold cyan]",
                       border_style="cyan")
         console.print(panel)
+        console.print("TEST 123 TEST")
 
         # Ask if user wants to start from the beginning
         start_from_beginning = questionary.select(

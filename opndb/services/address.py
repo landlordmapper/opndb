@@ -6,7 +6,6 @@ import traceback
 from operator import itemgetter
 from pprint import pprint
 from typing import Any
-from rich.console import Console
 
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TaskID
 
@@ -27,7 +26,6 @@ from opndb.services.dataframe.base import (
 )
 from opndb.utils import (UtilsBase as utils, PathGenerators as utils_path, UtilsBase)
 
-console = Console()
 
 class AddressBase:
 
@@ -274,7 +272,6 @@ class AddressBase:
     def save_geocodio_partial(cls, results: list[dict], configs: WorkflowConfigs):
         timestamp = utils.get_timestamp()
         df_partial = pd.DataFrame(results)
-        console.print(utils_path.geocodio_partial(configs, f"gcd_partial_({timestamp})"))
         ops_df.save_df(df_partial, utils_path.geocodio_partial(configs, f"gcd_partial_({timestamp})"))
 
     @classmethod
