@@ -80,7 +80,7 @@ class DataFrameMergers(DataFrameOpsBase):
             df,
             df_addrs[[
                 "clean_address",
-                "formatted_address"
+                "formatted_address",
                 "formatted_address_v1",
                 "formatted_address_v2",
                 "formatted_address_v3",
