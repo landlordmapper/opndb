@@ -80,6 +80,7 @@ class DataFrameMergers(DataFrameOpsBase):
             df,
             df_addrs[[
                 "clean_address",
+                "formatted_address"
                 "formatted_address_v1",
                 "formatted_address_v2",
                 "formatted_address_v3",
@@ -90,6 +91,7 @@ class DataFrameMergers(DataFrameOpsBase):
             right_on="clean_address"
         )
         df_merged.rename(columns={
+            "formatted_address": f"{addr_col}_v0",
             "formatted_address_v1": f"{addr_col}_v1",
             "formatted_address_v2": f"{addr_col}_v2",
             "formatted_address_v3": f"{addr_col}_v3",
