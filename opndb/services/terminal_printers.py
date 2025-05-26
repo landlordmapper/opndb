@@ -101,28 +101,32 @@ class TerminalBase:
         ]
 
         workflow_choices = [
+            # automatically run
             {"name": "Raw Data Preparation", "value": "raw_prep"},
             {"name": "Data Cleaning", "value": "data_clean"},
             {"name": "Business/Tax Record Matching", "value": "bus_merge"},
-            {"name": "Unvalidated Address Dataset Generator", "value": "unvalidated_addrs"},
-            {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
-            {"name": "Geocodio Fix", "value": "geocodio_fix"},
-            {"name": "Geocodio String Match", "value": "gcd_string_match"},
+            {"name": "Address Validation (Geocodio)", "value": "address_validation"},
             {"name": "Validated Address Generator", "value": "validated_addrs"},
-            {"name": "Fix Units (Initial)", "value": "fix_units_initial"},
-            {"name": "Fix Units (Final)", "value": "fix_units_final"},
-            {"name": "Fix Addresses (Initial)", "value": "fix_addrs_initial"},
-            {"name": "Fix Addresses (Final)", "value": "fix_addrs_final"},
-            {"name": "Set Address Columns", "value": "set_address_columns"},
             {"name": "Address Merge", "value": "address_merge"},
-            {"name": "Name Analysis Initial", "value": "name_analysis_initial"},
-            {"name": "Address Analysis Initial", "value": "address_analysis_initial"},
             {"name": "Analysis Final", "value": "analysis_final"},
             {"name": "Subset Rentals", "value": "rental_subset"},
             {"name": "Match Address & Boolean Identifiers", "value": "match_addr_cols"},
             {"name": "Taxpayer Record String Matching", "value": "string_match"},
             {"name": "Taxpayer Record Network Graph Generator", "value": "network_graph"},
             {"name": "Final Output Dataset Generator", "value": "final_output"},
+            # # manually run
+            # {"name": "Fix Units (Initial)", "value": "fix_units_initial"},
+            # {"name": "Fix Units (Final)", "value": "fix_units_final"},
+            # {"name": "Fix Addresses (Initial)", "value": "fix_addrs_initial"},
+            # {"name": "Fix Addresses (Final)", "value": "fix_addrs_final"},
+            # {"name": "Set Address Columns", "value": "set_address_columns"},
+            # {"name": "Name Analysis Initial", "value": "name_analysis_initial"},
+            # {"name": "Address Analysis Initial", "value": "address_analysis_initial"},
+            # # old address workflows
+            # {"name": "Unvalidated Address Dataset Generator", "value": "unvalidated_addrs"},
+            # {"name": "Address Validation (Geocodio)", "value": "address_geocodio"},
+            # {"name": "Geocodio Fix", "value": "geocodio_fix"},
+            # {"name": "Geocodio String Match", "value": "gcd_string_match"},
         ]
 
         # Let user select a workflow
