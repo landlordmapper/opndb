@@ -658,15 +658,15 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
             if row["is_match_number_street_zip"] == True:
                 return np.nan
             # address missing for that property - can't check similarity with tax address
-            if pd.isnull(row["formatted_address"]):
+            if pd.isnull(row["formatted_address_prop"]):
                 return np.nan
             # if it's not a number or zip match, it's definitively not a match
             if row["is_match_number_zip"] == False:
                 return np.nan
             if pd.notnull(row["clean_address_v1"]):
-                return StringMatch.test_string_similarity(row["clean_address_v1"], row["formatted_address"])
+                return StringMatch.test_string_similarity(row["clean_address_v1"], row["formatted_address_prop"])
             else:
-                return StringMatch.test_string_similarity(row["clean_address"], row["formatted_address"])
+                return StringMatch.test_string_similarity(row["clean_address"], row["formatted_address_prop"])
         df["match_conf"] = df.apply(lambda row: get_match_conf(row), axis=1)
         return df
 
