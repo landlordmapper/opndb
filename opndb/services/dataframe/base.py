@@ -50,6 +50,8 @@ class DataFrameOpsBase(object):
         # Set boolean columns
         def coerce_booleans(df: pd.DataFrame, bool_cols: list[str]) -> pd.DataFrame:
             for col in bool_cols:
+                if col not in df.columns:
+                    continue
                 df[col] = df[col].map(
                     lambda x: str(x).strip().lower() in {"true", "1", "t", "yes"}
                     if pd.notnull(x) else False

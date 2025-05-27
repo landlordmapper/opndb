@@ -721,7 +721,7 @@ class PathGenerators(UtilsBase):
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
-            Output.PROPERTIES,
+            Output.ENTITY_TYPES,
             configs["load_ext"]
         )
     @classmethod
@@ -729,7 +729,7 @@ class PathGenerators(UtilsBase):
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
-            Output.PROPERTIES,
+            Output.ENTITY_NAME_TYPES,
             configs["load_ext"]
         )
     @classmethod
@@ -737,7 +737,7 @@ class PathGenerators(UtilsBase):
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
-            Output.PROPERTIES,
+            Output.ENTITY_ADDRESS_TYPES,
             configs["load_ext"]
         )
     # -------------------------
