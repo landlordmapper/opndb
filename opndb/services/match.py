@@ -289,7 +289,7 @@ class StringMatch(MatchBase):
             }
         }
 
-        result_df = cls.match_strings([str1], [str2], params)
+        result_df = cls.match_strings([str1], [str2], params, False)
 
         if result_df.empty:
             return np.nan
