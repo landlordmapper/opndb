@@ -834,7 +834,7 @@ class AddressBase:
     def get_formatted_address_v0(cls, row: pd.Series) -> str:
         """Returns complete formatted address with no omissions"""
         addr_out: str = row["number"]
-        if pd.notna(row["number_suffix"]):
+        if "number_suffix" in row.keys() and pd.notna(row["number_suffix"]):
             addr_out += f" {row['number_suffix']}"
         if pd.notna(row["predirectional"]):
             addr_out += f" {row['predirectional']}"

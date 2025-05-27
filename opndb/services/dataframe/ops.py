@@ -80,7 +80,7 @@ class DataFrameMergers(DataFrameOpsBase):
             df,
             df_addrs[[
                 "clean_address",
-                "formatted_address",
+                "formatted_address_v0",
                 "formatted_address_v1",
                 "formatted_address_v2",
                 "formatted_address_v3",
@@ -91,7 +91,7 @@ class DataFrameMergers(DataFrameOpsBase):
             right_on="clean_address"
         )
         df_merged.rename(columns={
-            "formatted_address": f"{addr_col}_v0",
+            "formatted_address_v0": f"{addr_col}_v0",
             "formatted_address_v1": f"{addr_col}_v1",
             "formatted_address_v2": f"{addr_col}_v2",
             "formatted_address_v3": f"{addr_col}_v3",
@@ -330,7 +330,7 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def set_formatted_address_v0(cls, df: pd.DataFrame) -> pd.DataFrame:
-        df["formatted_address"] = df.apply(lambda row: addr.get_formatted_address_v0(row), axis=1)
+        df["formatted_address_v0"] = df.apply(lambda row: addr.get_formatted_address_v0(row), axis=1)
         return df
 
     @classmethod
