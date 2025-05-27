@@ -713,7 +713,7 @@ class PathGenerators(UtilsBase):
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
-            Output.PROPERTIES,
+            Output.PROPERTY_ADDRESSES,
             configs["load_ext"]
         )
     @classmethod
