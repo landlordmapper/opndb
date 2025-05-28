@@ -1,8 +1,4 @@
-import abc
 from enum import StrEnum
-from typing import Any
-
-import pandas as pd
 import pandera as pa
 from pandas import CategoricalDtype
 

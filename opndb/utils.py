@@ -669,19 +669,19 @@ class PathGenerators(UtilsBase):
             configs["load_ext"]
         )
     @classmethod
-    def output_bus_filings(cls, configs: WorkflowConfigs) -> Path:
+    def output_entity_filings(cls, configs: WorkflowConfigs) -> Path:
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
-            Output.BUS_FILINGS,
+            Output.ENTITY_FILINGS,
             configs["load_ext"]
         )
     @classmethod
-    def output_bus_names_addrs(cls, configs: WorkflowConfigs) -> Path:
+    def output_entity_names_addresses(cls, configs: WorkflowConfigs) -> Path:
         return cls.generate_path(
             configs["data_root"],
             Dirs.OUTPUT,
-            Output.BUS_NAMES_ADDRS,
+            Output.ENTITY_NAMES_ADDRESSES,
             configs["load_ext"]
         )
     @classmethod
@@ -738,6 +738,14 @@ class PathGenerators(UtilsBase):
             configs["data_root"],
             Dirs.OUTPUT,
             Output.ENTITY_ADDRESS_TYPES,
+            configs["load_ext"]
+        )
+    @classmethod
+    def output_datasets(cls, configs: WorkflowConfigs) -> Path:
+        return cls.generate_path(
+            configs["data_root"],
+            Dirs.OUTPUT,
+            Output.DATASETS,
             configs["load_ext"]
         )
     # -------------------------
