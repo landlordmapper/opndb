@@ -330,28 +330,47 @@ class DataFrameColumnGenerators(DataFrameOpsBase):
 
     @classmethod
     def set_formatted_address_v0(cls, df: pd.DataFrame) -> pd.DataFrame:
-        df["formatted_address_v0"] = df.apply(lambda row: addr.get_formatted_address_v0(row), axis=1)
+        # All fields included (full address)
+        df["formatted_address_v0"] = df.apply(lambda row: addr.format_address(row), axis=1)
         return df
 
     @classmethod
     def set_formatted_address_v1(cls, df: pd.DataFrame) -> pd.DataFrame:
-        df["formatted_address_v1"] = df.apply(lambda row: addr.get_formatted_address_v1(row), axis=1)
+        # Omit suite prefixes only (e.g. keep "403" but drop "APT")
+        df["formatted_address_v1"] = df.apply(
+            lambda row: addr.format_address(
+                row,
+                include_suite_prefix=False
+            ),
+            axis=1
+        )
         return df
 
     @classmethod
     def set_formatted_address_v2(cls, df: pd.DataFrame) -> pd.DataFrame:
-        df["formatted_address_v2"] = df.apply(lambda row: addr.get_formatted_address_v2(row), axis=1)
+        # Omit all suite info
+        df["formatted_address_v2"] = df.apply(
+            lambda row: addr.format_address(
+                row,
+                include_suite_prefix=False,
+                include_suite_number=False
+            ),
+            axis=1)
         return df
 
     @classmethod
     def set_formatted_address_v3(cls, df: pd.DataFrame) -> pd.DataFrame:
-        df["formatted_address_v3"] = df.apply(lambda row: addr.get_formatted_address_v3(row), axis=1)
+        # Omit directionals, keep suite info
+        df["formatted_address_v3"] = df.apply(
+            lambda row: addr.format_address(row, include_directionals=False), axis=1)
         return df
 
     @classmethod
     def set_formatted_address_v4(cls, df: pd.DataFrame) -> pd.DataFrame:
-        df["formatted_address_v4"] = df.apply(lambda row: addr.get_formatted_address_v4(row), axis=1)
+        # Omit directionals and suite info
+        df["formatted_address_v4"] = df.apply(lambda row: addr.format_address(row, include_directionals=False, include_suite_prefix=False, include_suite_number=False), axis=1)
         return df
+
 
     @classmethod
     def concatenate_name_addr(cls, df: pd.DataFrame, name_col: str, addr_col: str, suffix: str = "") -> pd.DataFrame:

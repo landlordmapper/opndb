@@ -831,12 +831,77 @@ class AddressBase:
                 return raw_addr_fixed
 
     @classmethod
+    def format_address(
+        cls, row: pd.Series,
+        *,
+        include_directionals=True,
+        include_suite_prefix=True,
+        include_suite_number=True
+    ) -> str:
+        """
+        Returns a cleanly formatted address string based on field inclusion flags.
+        Removes extra whitespace and dangling commas.
+        """
+        parts = []
+
+        # PO BOX case
+        if str(row.get("street")).upper() == "PO BOX":
+            parts.append(f"PO BOX {row.get('number')}")
+        else:
+            # Street number
+            number = row.get("number")
+            if pd.notna(number):
+                parts.append(str(number).strip())
+
+            # Optional directionals
+            if include_directionals and pd.notna(row.get("predirectional")):
+                parts.append(row["predirectional"].strip())
+
+            if pd.notna(row.get("prefix")):
+                parts.append(row["prefix"].strip())
+
+            # Street name
+            if pd.notna(row.get("street")):
+                parts.append(row["street"].strip())
+
+            if pd.notna(row.get("suffix")):
+                parts.append(row["suffix"].strip())
+
+            if include_directionals and pd.notna(row.get("postdirectional")):
+                parts.append(row["postdirectional"].strip())
+
+        # Street line
+        street_line = " ".join(parts)
+
+        # Optional suite/secondary info
+        suite_parts = []
+        if include_suite_number and pd.notna(row.get("secondary_number")):
+            if include_suite_prefix and pd.notna(row.get("secondary_unit")):
+                suite_parts.append(f"{row['secondary_unit']} {row['secondary_number']}")
+            else:
+                suite_parts.append(str(row["secondary_number"]))
+
+        # Combine street + suite (if present)
+        if suite_parts:
+            full_line = f"{street_line}, {' '.join(suite_parts)}"
+        else:
+            full_line = street_line
+
+        # City, state, zip
+        city_state_zip = ", ".join(
+            filter(None, [str(row.get("city", "")).strip(),
+                          f"{row.get('state', '').strip()} {row.get('zip_code', '').strip()}"])
+        )
+
+        return f"{full_line}, {city_state_zip}".replace("  ", " ").strip()
+
+    @classmethod
     def get_formatted_address_v0(cls, row: pd.Series) -> str:
         """Returns complete formatted address with no omissions"""
         addr_out: str = row["number"]
         if "number_suffix" in row.keys() and pd.notna(row["number_suffix"]):
             addr_out += f" {row['number_suffix']}"
-        if pd.notna(row["predirectional"]):
+        if pd.notnull(row["predirectional"]):
             addr_out += f" {row['predirectional']}"
         addr_out += f" {row['street']}"
         if pd.notna(row["suffix"]):
