@@ -106,11 +106,10 @@ class AddressBase:
             addr_out += f" {row['suffix']}"
         if pd.notna(row["postdirectional"]):
             addr_out += f" {row['postdirectional']}"
-        addr_out += ","
         if pd.notna(row["secondary_unit"]) and pd.notna(row["secondary_number"]):
-            addr_out += f" {row['secondary_unit']} {row['secondary_number']},"
+            addr_out += f" {row['secondary_unit']} {row['secondary_number']}"
         elif pd.notna(row["secondary_number"]):
-            addr_out += f" {row['secondary_number']},"
+            addr_out += f" {row['secondary_number']}"
         return addr_out
 
     @classmethod
